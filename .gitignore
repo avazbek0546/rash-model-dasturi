@@ -1,0 +1,35 @@
+# --- Muhit va sozlamalar ---
+.env
+.venv/
+venv/
+env/
+
+# --- Ma'lumotlar bazasi ---
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# --- Loglar va vaqtinchalik fayllar ---
+*.log
+
+# --- Muharrir / OS ---
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# --- Tashqi binariy vositalar (repoga tushmasligi kerak) ---
+# cloudflared.exe (~52 MB) — Cloudflare Tunnel tunneli; har kim o'zi yuklab oladi:
+# https://github.com/cloudflare/cloudflared/releases
+cloudflared.exe
+cloudflared
+*.exe
+*.msi
+*.zip

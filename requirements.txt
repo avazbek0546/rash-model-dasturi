@@ -1,0 +1,19 @@
+# Telegram bot uchun asosiy kutubxona (aiogram 3.x)
+aiogram>=3.13.0,<4.0.0
+
+# SQLite bilan asinxron ishlash (aiogram event loop'ini bloklamaydi)
+aiosqlite>=0.20.0
+
+# .env faylidan sozlamalarni o'qish
+python-dotenv>=1.0.1
+
+# Web App (Mini App) HTTP serveri aiogram bilan birga keladi, lekin versiyani
+# aniq belgilab qo'yamiz (aiohttp.web ishlatiladi).
+aiohttp>=3.9.0
+
+# IANA vaqt zonasi bazasi (TIMEZONE=Asia/Tashkent uchun). Windows'da tizim
+# bazasi bo'lmaydi — bu paket bo'lmasa kod avtomatik UTC+5 ga o'tadi.
+tzdata>=2024.1
+
+# Eslatma: Rasch modeli (IRT) hisob-kitoblari sof Python "math" modulida
+# bajariladi, shu sababli numpy/scipy kerak emas.

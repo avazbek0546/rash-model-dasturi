@@ -1,0 +1,430 @@
+/* ---------------------------------------------------------------------------
+   Rasch imtihon platformasi — Mini App uslublari.
+   Ranglar Telegram `themeParams` dan olinadi (telegram-web-app.js ularni
+   --tg-theme-* CSS o'zgaruvchilari ko'rinishida beradi); zaxira qiymatlar bor.
+--------------------------------------------------------------------------- */
+:root {
+  --bg: var(--tg-theme-bg-color, #ffffff);
+  --secondary-bg: var(--tg-theme-secondary-bg-color, #f3f4f6);
+  --text: var(--tg-theme-text-color, #10151c);
+  --hint: var(--tg-theme-hint-color, #8b9099);
+  --link: var(--tg-theme-link-color, #2f7ce0);
+  --button: var(--tg-theme-button-color, #2f7ce0);
+  --button-text: var(--tg-theme-button-text-color, #ffffff);
+  --danger: var(--tg-theme-destructive-text-color, #e04b4b);
+  --card: var(--tg-theme-secondary-bg-color, #f3f4f6);
+  --radius: 14px;
+  --nav-height: 62px;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* --- Sarlavha ------------------------------------------------------------ */
+.app-header {
+  padding: 14px 16px 10px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.app-header .subtitle {
+  margin-top: 2px;
+  color: var(--hint);
+  font-size: 12.5px;
+}
+
+/* --- Kontent ------------------------------------------------------------- */
+main {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 14px calc(var(--nav-height) + 18px);
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+  animation: fade-in 0.18s ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 15.5px;
+  font-weight: 650;
+}
+
+.muted {
+  color: var(--hint);
+  font-size: 12.5px;
+}
+
+/* --- Shakllar ------------------------------------------------------------ */
+label.field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+label.field span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12.5px;
+  color: var(--hint);
+}
+
+input[type="text"],
+textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 11px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15.5px;
+  font-family: inherit;
+}
+
+input.code-input {
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  font-weight: 650;
+  text-align: center;
+  font-size: 18px;
+}
+
+textarea {
+  min-height: 76px;
+  resize: vertical;
+  letter-spacing: 1px;
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--button);
+}
+
+button {
+  appearance: none;
+  border: none;
+  border-radius: 11px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 600;
+  background: var(--button);
+  color: var(--button-text);
+  cursor: pointer;
+  width: 100%;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--button);
+  border: 1px solid var(--button);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* --- Holat belgilari ----------------------------------------------------- */
+.badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.badge.active {
+  background: rgba(52, 168, 83, 0.16);
+  color: #2e9e50;
+}
+
+.badge.upcoming {
+  background: rgba(47, 124, 224, 0.16);
+  color: var(--link);
+}
+
+.badge.closed {
+  background: rgba(240, 173, 78, 0.2);
+  color: #b87514;
+}
+
+.badge.published {
+  background: rgba(128, 128, 128, 0.18);
+  color: var(--hint);
+}
+
+/* --- Ro'yxatlar ---------------------------------------------------------- */
+.exam-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.14);
+}
+
+.exam-item:last-child {
+  border-bottom: none;
+}
+
+.exam-item .title {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.exam-item .meta {
+  color: var(--hint);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.score-pill {
+  min-width: 62px;
+  text-align: center;
+  padding: 8px 6px;
+  border-radius: 11px;
+  background: var(--bg);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.score-pill small {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--hint);
+}
+
+/* --- Diagramma ----------------------------------------------------------- */
+.chart-wrap {
+  position: relative;
+  height: 210px;
+  padding: 4px 0;
+}
+
+/* --- Navigatsiya --------------------------------------------------------- */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--nav-height);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--bg);
+  border-top: 1px solid rgba(128, 128, 128, 0.18);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.bottom-nav button {
+  background: transparent;
+  color: var(--hint);
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 550;
+  padding: 6px 2px;
+}
+
+.bottom-nav button .icon {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.bottom-nav button.active {
+  color: var(--button);
+}
+
+/* --- Xabarlar / yuklanish ------------------------------------------------ */
+.notice {
+  padding: 10px 12px;
+  border-radius: 11px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.notice.error {
+  background: rgba(224, 75, 75, 0.14);
+  color: var(--danger);
+}
+
+.notice.success {
+  background: rgba(52, 168, 83, 0.14);
+  color: #2e9e50;
+}
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  margin: 18px auto;
+  border: 3px solid rgba(128, 128, 128, 0.25);
+  border-top-color: var(--button);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.hidden {
+  display: none !important;
+}
+
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.14);
+  font-size: 14px;
+}
+
+.profile-row:last-child {
+  border-bottom: none;
+}
+
+.profile-row .label {
+  color: var(--hint);
+}
+
+.countdown {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+/* --- Modal --------------------------------------------------------------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  z-index: 50;
+}
+
+.modal {
+  background: var(--bg);
+  border-radius: 16px 16px 0 0;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+}
+
+.modal .modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.modal .modal-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.modal .close {
+  background: transparent;
+  color: var(--hint);
+  width: auto;
+  padding: 4px 8px;
+  font-size: 20px;
+}
+
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.item-cell {
+  border-radius: 9px;
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 12px;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.item-cell.ok {
+  background: rgba(52, 168, 83, 0.18);
+}
+
+.item-cell.bad {
+  background: rgba(224, 75, 75, 0.16);
+}
+
+.item-cell b {
+  display: block;
+  font-size: 13.5px;
+}
+
+.item-cell small {
+  color: var(--hint);
+  font-size: 10px;
+}

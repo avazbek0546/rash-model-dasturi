@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="uz">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Rasch imtihon platformasi</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+    <!-- Telegram Web App SDK — Telegram faqat HTTPS sahifalarda beradi. -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <h1 id="header-title">Imtihonlar</h1>
+      <div class="subtitle" id="header-subtitle">Rasch modeli asosida baholash</div>
+    </header>
+
+    <div id="global-notice" class="hidden"></div>
+
+    <main>
+      <!-- ================= 1. NAVBAT ================= -->
+      <section id="tab-queue" class="tab-panel active">
+        <div class="card">
+          <h2>Test kodini kiritish</h2>
+          <label class="field">
+            <span>O'qituvchi bergan test kodi</span>
+            <input id="test-code" class="code-input" type="text" inputmode="text"
+                   autocomplete="off" autocapitalize="characters" spellcheck="false"
+                   placeholder="MASALAN: MATH2026" />
+          </label>
+          <button id="find-exam">Kodni tekshirish</button>
+          <p class="muted" style="margin-top:8px">
+            Kod faqat javob qabul qilish oynasida ishlaydi. Har bir imtihonga
+            javob <b>bir marta</b> yuboriladi.
+          </p>
+        </div>
+
+        <div class="card hidden" id="answer-card">
+          <h2 id="answer-title">Javoblarni kiritish</h2>
+          <p class="muted" id="answer-meta"></p>
+          <label class="field">
+            <span>Javoblar varag'i — savol raqami va variant, masalan: <code>1A2B3C4D</code></span>
+            <textarea id="answer-input" placeholder="1A2B3C4D..."
+                      autocapitalize="characters" spellcheck="false"></textarea>
+          </label>
+          <div class="btn-row">
+            <button id="submit-answers">Yuborish</button>
+            <button id="cancel-answers" class="ghost">Bekor qilish</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Navbatdagi imtihonlar</h2>
+          <div id="exams-list"><div class="spinner"></div></div>
+        </div>
+      </section>
+
+      <!-- ================= 2. NATIJALAR ================= -->
+      <section id="tab-results" class="tab-panel">
+        <div class="card">
+          <h2>Natijalar dinamikasi</h2>
+          <div class="chart-wrap"><canvas id="results-chart"></canvas></div>
+          <div id="chart-fallback" class="hidden"></div>
+          <p class="muted" id="summary-line"></p>
+        </div>
+        <div class="card">
+          <h2>Topshirilgan imtihonlar</h2>
+          <div id="results-list"><div class="spinner"></div></div>
+        </div>
+      </section>
+
+      <!-- ================= 3. OFFLINE IMtIHON ================= -->
+      <section id="tab-offline" class="tab-panel">
+        <div class="card">
+          <h2>Offline imtihon</h2>
+          <p class="muted" id="offline-note">Yuklanmoqda…</p>
+          <div id="offline-list"></div>
+        </div>
+      </section>
+
+      <!-- ================= 4. PROFIL ================= -->
+      <section id="tab-profile" class="tab-panel">
+        <div class="card">
+          <h2>Profil</h2>
+          <label class="field">
+            <span>Ism-familiya (tahrirlash mumkin)</span>
+            <input id="profile-name" type="text" autocomplete="name" />
+          </label>
+          <button id="save-profile">Saqlash</button>
+          <div style="margin-top:12px">
+            <div class="profile-row"><span class="label">Telegram ID</span><b id="profile-id">—</b></div>
+            <div class="profile-row"><span class="label">Ishlangan testlar</span><b id="profile-tests">—</b></div>
+            <div class="profile-row"><span class="label">Vaqt zonasi</span><b id="profile-tz">—</b></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Rasch modeli qanday baholaydi?</h2>
+          <p class="muted">
+            Har bir savolning <b>qiyinchiligi (b, logit)</b> va sizning
+            <b>bilim darajangiz (θ, logit)</b> bitta o'lchovda ifodalanadi.
+            To'g'ri javob ehtimoli <code>P(θ) = 1 / (1 + e^−(θ − b))</code>.
+            Shu sababli bir xil sonda to'g'ri javob qiyin to'plamda yuqoriroq θ
+            beradi. Yakuniy natija 0–100 shkalaga o'tkaziladi va ishonch
+            oralig'i bilan ko'rsatiladi.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" id="bottom-nav">
+      <button type="button" data-tab="queue" class="active"><span class="icon">📝</span>Navbat</button>
+      <button type="button" data-tab="results"><span class="icon">📊</span>Natijalar</button>
+      <button type="button" data-tab="offline"><span class="icon">🏫</span>Offline imtihon</button>
+      <button type="button" data-tab="profile"><span class="icon">👤</span>Profil</button>
+    </nav>
+
+    <div id="modal-root"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/queue.js"></script>
+    <script src="/static/js/results.js"></script>
+    <script src="/static/js/profile.js"></script>
+    <script src="/static/js/offline.js"></script>
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>
