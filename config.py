@@ -81,10 +81,6 @@ IS_CLOUD: bool = bool(
 # Telegram
 # ---------------------------------------------------------------------------
 BOT_TOKEN: str = _get_str("BOT_TOKEN")
-# ---------------------------------------------------------------------------
-# Telegram
-# ---------------------------------------------------------------------------
-BOT_TOKEN: str = _get_str("BOT_TOKEN")
 ADMIN_ID: int | None = _get_int("ADMIN_ID")
 
 # Qo'shimcha administratorlar: ADMIN_IDS="111,222" (vergul bilan ajratiladi).
