@@ -111,6 +111,23 @@ Service → **Settings**:
 * **Healthcheck Path: `/api/health`** (autentifikatsiyasiz, 200 qaytaradi).
 * Memory limit: `512 MB` yetarli.
 
+### 3.7. CLI bilan deploy (muqobil yo'l)
+
+Agar GitHub integratsiyasi o'rniga lokal papkadan deploy qilish kerak bo'lsa
+(CLI bu kompyuterga o'rnatilgan: `%LOCALAPPDATA%\Programs\railway\railway.exe`,
+PATH'ga qo'shilgan — yangi terminalda `railway` ishlaydi):
+
+```powershell
+railway login          # brauzer ochiladi — Railway akkauntiga kirasiz
+railway init           # loyiha nomi: rash-model-dasturi
+railway up             # joriy papkadagi kodni yuklaydi va build qiladi
+railway variables --set "BOT_TOKEN=..." --set "ADMIN_ID=..." --set "WEBAPP_DEV_MODE=0"
+railway domain         # HTTPS domen generatsiya qiladi
+```
+
+Keyin volume va replicas sozlamalari baribir dashboard'da bajariladi
+(3.3 va 3.6-bandlar).
+
 ---
 
 ## 4. Tekshirish
