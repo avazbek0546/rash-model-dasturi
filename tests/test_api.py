@@ -219,6 +219,8 @@ async def check_exam_flow(client: TestClient, active_exam_id: int, upcoming_exam
     assert payload["published"] == [] and len(payload["pending"]) == 1, payload
     assert payload["summary"]["attempts"] == 1
     pending = payload["pending"][0]
+    # Web App countdown'i uchun aniq (UTC ISO) natija vaqti ham beriladi.
+    assert pending["result_time"], pending
     print(f"[OK] Natija hali yopiq: «{pending['title']}» (e'lon: {pending['result_time_local']})")
 
 
@@ -255,6 +257,9 @@ async def check_published_results(repos: Repositories, client: TestClient, exam_
     published = payload["published"][0]
     assert payload["chart"]["scaled"] == [published["scaled_score"]]
     assert payload["summary"]["best_scaled"] == published["scaled_score"]
+    # Daraja (NC … A+) ro'yxatda ham keladi — Web App chipi shu maydondan oladi.
+    assert published["level"] in {"NC", "C", "C+", "B", "B+", "A", "A+"}, published
+    assert published["result_time"], published
     print(
         f"[OK] Grafik/tarix: {payload['chart']['labels']} → {payload['chart']['scaled']} ball "
         f"(o'rtacha {payload['summary']['average_scaled']})"

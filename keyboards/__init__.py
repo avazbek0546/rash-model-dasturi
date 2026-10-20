@@ -8,6 +8,7 @@ from keyboards.inline import (
     analysis_exams_kb,
     analysis_home_kb,
     analysis_questions_kb,
+    analysis_solution_kb,
     answer_kb,
     back_kb,
     menu_kb,
@@ -16,7 +17,6 @@ from keyboards.reply import (
     ANALYSIS_BUTTON,
     HOME_BUTTON,
     UPLOAD_SOLUTION_BUTTON,
-    main_reply_kb,
 )
 
 __all__ = [
@@ -30,8 +30,8 @@ __all__ = [
     "analysis_exams_kb",
     "analysis_home_kb",
     "analysis_questions_kb",
+    "analysis_solution_kb",
     "answer_kb",
     "back_kb",
-    "main_reply_kb",
     "menu_kb",
 ]

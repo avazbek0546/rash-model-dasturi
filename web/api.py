@@ -16,6 +16,8 @@ Endpoint'lar
     POST /api/me                — ism-familiyani tahrirlash
     GET  /api/exams             — navbat: faol/kutilayotgan/tugagan imtihonlar
     POST /api/submit            — {test_code, answers} ni qabul qilish
+                                  (`answers` — MVP kartochkalari uchun
+                                  {pozitsiya: qiymat} yoki eski '1A2B3C' satri)
     GET  /api/results           — natijalar tarixi + grafik ma'lumotlari
     GET  /api/results/{exam_id} — bitta imtihon bo'yicha batafsil hisobot
     GET  /api/offline           — hududlar bo'yicha imtihonlar (statik)
@@ -29,9 +31,10 @@ from typing import Any
 from aiohttp import web
 
 import config
-from database.models import SKIPPED, ExamStatus, User
+import notify
+from database.models import SKIPPED, Exam, ExamStatus, User
 from database.repository import AlreadySubmittedError, Repositories
-from services import answer_key, exam_service, grading, webapp_auth
+from services import answer_key, exam_service, form_layout, grading, rasch, webapp_auth
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +79,11 @@ def error_response(status: int, message: str) -> web.Response:
 def repositories(request: web.Request) -> Repositories:
     """Ilovaga biriktirilgan repository konteynerini qaytaradi."""
     return request.app["repos"]
+
+
+def get_bot(request: web.Request) -> Any:
+    """Ilovaga biriktirilgan Telegram bot (sozlanmagan bo'lsa — `None`)."""
+    return request.app.get("bot")
 
 
 async def read_json(request: web.Request) -> dict[str, Any]:
@@ -246,11 +254,51 @@ async def list_exams(request: web.Request) -> web.Response:
     )
 
 
+async def _send_submission_ack(
+    request: web.Request,
+    repos: Repositories,
+    user: dict[str, Any],
+    exam: Exam,
+    answered: int,
+) -> None:
+    """Javob qabul qilinganini bot chatiga tasdiqlaydi.
+
+    Ataylab **faqat qabul xabari**: to'g'ri/xato sanoq natija `result_time`
+    kelguncha oshkor qilinmaydi (imtihon tozaligi). Natija xabarini alohida
+    fon vazifasi yuboradi (`notify.result_notification_loop`).
+    """
+    bot = get_bot(request)
+    if bot is None:
+        return
+    try:
+        saved = await repos.users.get(user["user_id"])
+        full_name = saved.full_name if saved and saved.full_name else user["full_name"]
+        await notify.send_submission_accepted(
+            bot,
+            user_id=user["user_id"],
+            full_name=full_name,
+            exam=exam,
+            answered=answered,
+        )
+    except Exception:  # xabar xatosi javobni buzmasligi kerak
+        logger.exception(
+            "Qabul xabarini yuborishda xatolik: user_id=%s, exam_id=%s",
+            user["user_id"],
+            exam.exam_id,
+        )
+
+
 # ---------------------------------------------------------------------------
 # POST /api/submit — javoblarni qabul qilish
 # ---------------------------------------------------------------------------
 async def submit_answers(request: web.Request) -> web.Response:
-    """Test kodi va javoblar varag'ini qabul qiladi (faqat faol oynada)."""
+    """Test kodi va javoblar varag'ini qabul qiladi (faqat faol oynada).
+
+    `answers` ikki ko'rinishda bo'lishi mumkin:
+      * MVP kartochkalari: `{pozitsiya: qiymat}` (1–32 → "A"…"D",
+        33–35 → "A"…"F", 36–45 → sonli matn);
+      * eski (zaxira) usul: `"1A2B3C"` ko'rinishidagi satr.
+    """
     user = await ensure_user(request)
     repos = repositories(request)
     data = await read_json(request)
@@ -260,7 +308,7 @@ async def submit_answers(request: web.Request) -> web.Response:
         code = exam_service.validate_test_code(code)
     except ValueError as exc:
         raise ApiError(400, str(exc)) from exc
-    raw_answers = str(data.get("answers", ""))
+    raw_answers = data.get("answers")
 
     exam = await repos.exams.get_by_code(code)
     if exam is None:
@@ -273,13 +321,25 @@ async def submit_answers(request: web.Request) -> web.Response:
     if await repos.answers.get(user["user_id"], exam.exam_id) is not None:
         raise ApiError(409, "Siz bu imtihonga allaqachon javob yuborgansiz.")
 
-    letters = answer_key.parse_submitted(raw_answers, exam.total_questions)
-    answered = sum(1 for letter in letters if letter != SKIPPED)
+    if isinstance(raw_answers, dict):
+        # MVP kartochkalari: {pozitsiya: qiymat} (yopiq + sonli savollar).
+        try:
+            letters, numeric = form_layout.parse_structured_answers(
+                raw_answers, exam.total_questions
+            )
+        except ValueError as exc:
+            raise ApiError(400, str(exc)) from exc
+        answered = sum(1 for letter in letters if letter != SKIPPED) + len(numeric)
+        canonical = form_layout.build_canonical(letters, numeric)
+    else:
+        # Eski (zaxira) usul: "1A2B3C" satri.
+        letters = answer_key.parse_submitted(str(raw_answers or ""), exam.total_questions)
+        answered = sum(1 for letter in letters if letter != SKIPPED)
+        canonical = answer_key.format_compact(letters)
+
     if answered == 0:
         raise ApiError(400, "Javoblar bo'sh — kamida bitta savolga variant belgilang.")
 
-    # Javoblar kanonik ko'rinishda saqlanadi ("1A2B3X4D") — keyin bir xilda tahlil qilinadi.
-    canonical = answer_key.format_compact(letters)
     submission_id = await repos.answers.submit(
         user_id=user["user_id"], exam_id=exam.exam_id, submitted_answers=canonical
     )
@@ -290,6 +350,10 @@ async def submit_answers(request: web.Request) -> web.Response:
         answered,
         exam.total_questions,
     )
+
+    # O'quvchiga faqat "qabul qilindi" xabari (natija sanoqlarisiz) yuboriladi.
+    await _send_submission_ack(request, repos, user, exam, answered)
+
     return web.json_response(
         {
             "ok": True,
@@ -326,6 +390,9 @@ async def list_results(request: web.Request) -> web.Response:
             "title": submission.exam_title or f"Imtihon #{submission.exam_id}",
             "total_questions": submission.total_questions or 0,
             "submitted_at": (submission.submitted_at or "")[:16],
+            # Aniq (UTC ISO) natija vaqti — Web App'da jonli countdown uchun
+            # (`result_time_local` faqat ko'rsatish uchun formatlangan matn).
+            "result_time": submission.result_time,
             "published": is_published,
             "result_time_local": (
                 exam_service.format_local(submission.result_time)
@@ -339,6 +406,9 @@ async def list_results(request: web.Request) -> web.Response:
                     "theta": submission.theta,
                     "scaled_score": submission.scaled_score,
                     "raw_score": submission.raw_score,
+                    # Sertifikat darajasi (NC … A+) — ro'yxat va "hero" kartada
+                    # rangli chip sifatida ko'rsatiladi. Chegaralar `services.rasch`.
+                    "level": rasch.ability_level(float(submission.scaled_score or 0.0)),
                 }
             )
             published.append(entry)
@@ -448,6 +518,10 @@ async def verify_code(request: web.Request) -> web.Response:
             "exam_id": exam.exam_id,
             "title": exam.title,
             "total_questions": exam.total_questions,
+            "layout": form_layout.layout_with_parts(
+                exam.total_questions,
+                form_layout.part_labels(exam.answer_key, exam.total_questions),
+            ),
             "status": status.value,
             "status_title": exam_service.status_title(status),
             "can_submit": allowed and submission is None,

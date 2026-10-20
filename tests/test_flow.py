@@ -133,6 +133,8 @@ async def check_session(repos: Repositories, questions: list) -> None:
     assert "&lt;b&gt;hacker&lt;/b&gt;" in escaped, "ism HTML-escape qilinmagan"
 
     check_html("help", texts.help_text())
+    assert "/new_exam" not in texts.help_text(), "o'quvchiga admin komandalari ko'rinyapti"
+    assert "/new_exam" in texts.help_text(is_admin=True), "admin yordamida komandalar yo'q"
     check_html("about", texts.about())
     check_html("question", texts.question(1, 10, questions[0], session.progress_bar(), 0))
     check_html("summary", texts.result_summary(estimate, questions, session.answers))
@@ -267,11 +269,25 @@ def check_handlers(questions: list) -> None:
     assert deleted.action == "delete" and deleted.exam_id == 12
     assert ExamAdminCallback(action="confirm").pack() == "exam:confirm:0"
 
-    # Klaviaturalar: Web App menyusi (admin va oddiy o'quvchi uchun farq qiladi)
+    # Klaviaturalar: asosiy inline menyu (admin va oddiy o'quvchi uchun farq qiladi).
+    # Pastdagi reply klaviatura yo'q — bo'limlar inline menyuga ko'chirilgan.
     admin_markup = webapp_kb(is_admin=True)
-    assert len(admin_markup.inline_keyboard) == 4, len(admin_markup.inline_keyboard)
+    admin_rows = [row[0].text for row in admin_markup.inline_keyboard]
+    assert len(admin_markup.inline_keyboard) == 7, admin_rows
+    assert admin_rows[0].startswith("📝 Javoblarni belgilash"), admin_rows
+    assert admin_rows[1] == "📊 Natijalarim", admin_rows
+    assert admin_rows[2:4] == ["🔍 Test tahlili", "🏡 Asosiy menyu"], admin_rows
+    assert admin_rows[-1] == "ℹ️ Yordam", admin_rows
+    assert all("Yangi imtihon" not in label for label in admin_rows), admin_rows
+
     user_markup = webapp_kb(is_admin=False)
-    assert len(user_markup.inline_keyboard) == 2, len(user_markup.inline_keyboard)
+    user_rows = [row[0].text for row in user_markup.inline_keyboard]
+    assert len(user_markup.inline_keyboard) == 5, user_rows
+    assert user_rows[0].startswith("📝 Javoblarni belgilash"), user_rows
+    assert user_rows[1] == "📊 Natijalarim", user_rows
+    assert user_rows[2:4] == ["🔍 Test tahlili", "🏡 Asosiy menyu"], user_rows
+    assert user_rows[-1] == "ℹ️ Yordam", user_rows
+    assert all("Yechim yuklash" not in label for label in user_rows), user_rows
 
     confirm = exam_confirm_kb()
     assert len(confirm.inline_keyboard[0]) == 2

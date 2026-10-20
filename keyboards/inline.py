@@ -88,9 +88,13 @@ def back_kb() -> InlineKeyboardMarkup:
 # Imtihon platformasi tugmalari (Web App + o'qituvchi boshqaruvi)
 # ---------------------------------------------------------------------------
 class AppCallback(CallbackData, prefix="app"):
-    """Web App bo'limlari uchun tugmalar.
+    """Asosiy menyu va Web App bo'limlari tugmalari.
 
-    action: help | missing
+    action:
+        analysis — «🔍 Test tahlili» (natijasi e'lon qilingan imtihonlar);
+        upload   — «🎬 Yechim yuklash» (faqat admin uchun yo'riqnoma);
+        help     — «ℹ️ Yordam»;
+        missing  — Web App manzili sozlanmagan.
     """
 
     action: str
@@ -99,31 +103,63 @@ class AppCallback(CallbackData, prefix="app"):
 class ExamAdminCallback(CallbackData, prefix="exam"):
     """O'qituvchi panelidagi tugmalar.
 
-    action: new | list | confirm | cancel | delete
-    exam_id: o'chirish uchun imtihon ID si (kerak bo'lmasa 0).
+    action: new | list | confirm | cancel | delete | delete_confirm | regrade
+    exam_id: o'chirish/qayta baholash uchun imtihon ID si (kerak bo'lmasa 0).
     """
 
     action: str
     exam_id: int = 0
 
 
+#: Web App tugmasining nomi — o'quvchi uchun asosiy amal (birinchi turadi).
+WEBAPP_BUTTON_TEXT = "📝 Javoblarni belgilash"
+
+
 def webapp_kb(*, is_admin: bool) -> InlineKeyboardMarkup:
-    """Bosh menyu: Web App tugmasi (+ admin uchun boshqaruv tugmalari)."""
+    """Bosh menyu: ilova birinchi, so'ng bo'limlar (+ admin boshqaruvi).
+
+    Tartib:
+        1. «📝 Javoblarni belgilash» (Mini App);
+        2. «📊 Natijalarim» (Mini App, to'g'ridan-to'g'ri Natijalar bo'limi);
+        3. «🔍 Test tahlili»;
+        4. «🏡 Asosiy menyu»;
+        5. admin uchun: «📋 Imtihonlar ro'yxati», «🎬 Yechim yuklash»;
+        6. «ℹ️ Yordam» — doim eng oxirida.
+
+    «➕ Yangi imtihon» tugmasi olib tashlangan: imtihon Mini App'dagi
+    «⚙️ Test yaratish» panelida yoki `/new_exam` buyrug'i bilan yaratiladi.
+
+    Pastdagi (reply) klaviatura ishlatilmaydi.
+    """
     builder = InlineKeyboardBuilder()
+
     if config.WEBAPP_URL:
         builder.button(
-            text="🚀 Imtihonlar ilovasi",
-            web_app=WebAppInfo(url=f"{config.WEBAPP_URL}/"),
+            text=WEBAPP_BUTTON_TEXT,
+            web_app=WebAppInfo(url=config.webapp_url()),
+        )
+        builder.button(
+            text="📊 Natijalarim",
+            web_app=WebAppInfo(url=config.webapp_url(tab="results")),
+            style="success",
         )
     else:
         builder.button(
-            text="🚀 Imtihonlar ilovasi (manzil sozlanmagan)",
+            text=f"{WEBAPP_BUTTON_TEXT} (manzil sozlanmagan)",
             callback_data=AppCallback(action="missing"),
         )
+        builder.button(
+            text="📊 Natijalarim",
+            callback_data=AppCallback(action="missing"),
+            style="success",
+        )
+
+    builder.button(text="🔍 Test tahlili", callback_data=AppCallback(action="analysis"))
+    builder.button(text="🏡 Asosiy menyu", callback_data=MenuCallback(action="back"))
 
     if is_admin:
-        builder.button(text="➕ Yangi imtihon", callback_data=ExamAdminCallback(action="new"))
         builder.button(text="📋 Imtihonlar ro'yxati", callback_data=ExamAdminCallback(action="list"))
+        builder.button(text="🎬 Yechim yuklash", callback_data=AppCallback(action="upload"))
 
     builder.button(text="ℹ️ Yordam", callback_data=AppCallback(action="help"))
     builder.adjust(1)
@@ -140,23 +176,31 @@ def exam_confirm_kb() -> InlineKeyboardMarkup:
 
 
 def exam_admin_kb(exams: list[Exam], *, status_titles: dict[int, str] | None = None) -> InlineKeyboardMarkup:
-    """Admin ro'yxati: har bir imtihon uchun o'chirish tugmasi.
+    """Admin ro'yxati: har bir imtihon uchun o'chirish va qayta baholash tugmalari.
 
-    Tugma matni: "🗑 #12 Matematika — Faol". `status_titles` — holat nomlari.
+    Har bir imtihon — bitta qatorda ikki tugma: "🗑 #12 Nom — Holat" (o'chirish)
+    va "🔄 Baholash" (qayta baholash). `status_titles` — holat nomlari.
+
+    «➕ Yangi imtihon» tugmasi bu yerda ham ko'rsatilmaydi — yangi imtihon
+    Mini App panelidan yoki `/new_exam` buyrug'i bilan yaratiladi.
     """
     titles = status_titles or {}
     builder = InlineKeyboardBuilder()
-    for exam in exams[:10]:  # tugmalar sonini cheklaymiz
+    shown = exams[:10]  # tugmalar sonini cheklaymiz
+    for exam in shown:
         status = titles.get(exam.exam_id)
-        label = f"🗑 #{exam.exam_id} {_short(exam.title, 22)}"
+        label = f"🗑 #{exam.exam_id} {_short(exam.title, 20)}"
         if status:
-            label += f" — {_short(status, 14)}"
+            label += f" — {_short(status, 12)}"
         builder.button(
             text=label,
             callback_data=ExamAdminCallback(action="delete", exam_id=exam.exam_id),
         )
-    builder.button(text="➕ Yangi imtihon", callback_data=ExamAdminCallback(action="new"))
-    builder.adjust(1)
+        builder.button(
+            text="🔄 Baholash",
+            callback_data=ExamAdminCallback(action="regrade", exam_id=exam.exam_id),
+        )
+    builder.adjust(*([2] * len(shown)))
     return builder.as_markup()
 
 
@@ -164,6 +208,19 @@ def cancel_kb() -> InlineKeyboardMarkup:
     """Usta davomida bekor qilish tugmasi."""
     builder = InlineKeyboardBuilder()
     builder.button(text="❌ Bekor qilish", callback_data=ExamAdminCallback(action="cancel"))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def exam_delete_confirm_kb(exam_id: int) -> InlineKeyboardMarkup:
+    """Imtihonni o'chirishni tasdiqlash: «Ha» / «Bekor» (tasodifiy bosishdan himoya)."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="✅ Ha, o'chirish",
+        callback_data=ExamAdminCallback(action="delete_confirm", exam_id=exam_id),
+        style="danger",
+    )
+    builder.button(text="⬅️ Bekor qilish", callback_data=ExamAdminCallback(action="list"))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -225,14 +282,17 @@ def analysis_exams_kb(window: Any) -> InlineKeyboardMarkup:
 def analysis_questions_kb(
     units: Sequence[solutions.QuestionUnit], *, exam_id: int, page: int = 1
 ) -> InlineKeyboardMarkup:
-    """Savollar gridi (✅/❌ belgilari bilan) + ro'yxatga qaytish va asosiy menyu.
+    """Savollar gridi (✅/❌ belgilari va rang bilan) + ro'yxatga qaytish.
 
-    Grid CHAPDAN O'NGGA to'ldiriladi: bir qatorda `QUESTION_GRID` ta tugma.
+    Tugma rangi (`unit.style`): to'g'ri javob — yashil («success»), xato
+    javob — qizil («danger»). Grid CHAPDAN O'NGGA to'ldiriladi: bir qatorda
+    `QUESTION_GRID` ta tugma.
     """
     builder = InlineKeyboardBuilder()
     for unit in units:
         builder.button(
             text=unit.label,
+            style=unit.style,
             callback_data=AnalysisCallback(
                 action="question",
                 exam_id=exam_id,
@@ -249,4 +309,21 @@ def analysis_questions_kb(
     # Diqqat: aiogram'da `adjust` tugmalar qo'shilgandan KEYIN chaqirilishi kerak
     # (u shu paytdagi tugmalar bo'yicha qatorlarni darhol tuzadi).
     builder.adjust(*solutions.grid_pattern(len(units)))
+    return builder.as_markup()
+
+
+def analysis_solution_kb(*, exam_id: int, page: int = 1) -> InlineKeyboardMarkup:
+    """Yechim posti ostidagi klaviatura: savollar ro'yxatiga qaytish + menyu.
+
+    «⬅️ Savollar ro'yxati» — o'sha imtihonning savollar gridiga qaytaradi
+    (`action="exam"` → `show_questions` handler'i gridni qayta chizadi). Shu
+    tufayli o'quvchi har safar tahlil oqimini boshidan boshlamaydi.
+    """
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="⬅️ Savollar ro'yxati",
+        callback_data=AnalysisCallback(action="exam", exam_id=exam_id, page=page),
+    )
+    builder.button(text=HOME_BUTTON, callback_data=AnalysisCallback(action="home"))
+    builder.adjust(1)
     return builder.as_markup()

@@ -9,6 +9,7 @@ tozalanadi (aks holda Telegram HTML xatosi beradi).
 from __future__ import annotations
 
 from html import escape
+from typing import Mapping, Sequence
 
 from database.models import SKIPPED, Exam, Question, TestResult, UserStats
 from services import rasch, solutions
@@ -49,22 +50,37 @@ def welcome(full_name: str, questions_per_test: int) -> str:
     )
 
 
-def help_text() -> str:
-    """`/help` komandasi matni."""
-    return (
-        "🤖 <b>Mavjud komandalar</b>\n\n"
-        "/start — asosiy menyu va Web App tugmasi\n"
-        "/app — imtihon ilovasini ochish\n"
-        "/help — shu yordam xabari\n\n"
-        "👨‍🏫 <b>O'qituvchi uchun</b>\n"
-        "/new_exam — yangi imtihon yaratish (usta yordamida)\n"
-        "/exams — imtihonlar ro'yxati (o'chirish mumkin)\n"
-        "/stats — umumiy statistika\n\n"
-        "ℹ️ Javoblar faqat <b>Web App</b> orqali va faqat belgilangan vaqt\n"
-        "oralig'ida qabul qilinadi. Har bir imtihonga javob <b>bir marta</b>\n"
-        "yuboriladi — natija Rasch modeli bo'yicha θ va 0–100 ball ko'rinishida\n"
-        "e'lon qilinadi."
-    )
+def help_text(is_admin: bool = False) -> str:
+    """`/help` komandasi matni (rolga mos — o'quvchiga admin komandalari ko'rinmaydi)."""
+    lines = [
+        "🤖 <b>Mavjud komandalar</b>",
+        "",
+        "/start — asosiy menyu va ilova tugmasi",
+        "/app — imtihon ilovasini ochish",
+        "/tahlil — test tahlili va yechimlar",
+        "/help — shu yordam xabari",
+    ]
+    if is_admin:
+        lines += [
+            "",
+            "👨‍🏫 <b>O'qituvchi uchun</b>",
+            "/new_exam — yangi imtihon yaratish",
+            "/exams — imtihonlar ro'yxati (o'chirish)",
+            "/stats — umumiy statistika",
+            "/report TEST_KODI — natijalar PDF hisoboti",
+            "/add_solution — video/rasm yechim yuklash",
+            "/itemstats TEST_KODI — savollar statistikasi",
+        ]
+    lines += [
+        "",
+        "📊 Natijalar, ball va batafsil tahlil — <b>Mini App</b> ning "
+        "«Natijalar» bo'limida.",
+        "",
+        "ℹ️ Javoblar faqat <b>Web App</b> orqali va belgilangan vaqt oralig'ida "
+        "qabul qilinadi. Har bir imtihonga javob <b>bir marta</b> yuboriladi. "
+        "Natija Rasch modeli bo'yicha θ va 0–100 ball ko'rinishida e'lon qilinadi.",
+    ]
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -79,28 +95,27 @@ def _safe(value: object) -> str:
 # Imtihon platformasi (Web App) matnlari
 # ---------------------------------------------------------------------------
 def webapp_welcome(full_name: str, *, webapp_ready: bool) -> str:
-    """`/start` matni (yangi imtihon platformasi)."""
+    """`/start` matni — qisqa, ruhlantiruvchi kirish (yo'riqnomasiz)."""
     head = (
         f"👋 <b>Assalomu alaykum, {_safe(full_name)}!</b>\n\n"
-        "Bu <b>Rasch modeli (IRT)</b> asosida ishlaydigan imtihon platformasi.\n"
-        "Imtihonni o'qituvchi yaratadi, javoblar esa Telegram <b>Web App</b>\n"
-        "(Mini App) orqali topshiriladi.\n"
+        "🎯 <b>Bilimingizni sinash va o'sish uchun to'g'ri joydasiz.</b>\n"
+        "Har bir test — o'zingizni yaxshiroq tanish va keyingi safar yanada "
+        "kuchli chiqish imkoniyati.\n\n"
+        "📊 Natijalar <b>Rasch modeli</b> asosida adolatli baholanadi — har bir "
+        "savolning qiyinchiligi hisobga olinadi, shu sababli ballingiz haqiqiy "
+        "bilimingizni ko'rsatadi.\n"
+        "🎬 Har bir savol uchun o'qituvchi <b>video yoki rasm yechim</b> "
+        "tayyorlaydi — xatoni tushunib, uni boshqa takrorlamaysiz.\n"
+        "📈 Natijalar tarixini kuzatib, o'sishingizni o'zingiz ko'rasiz.\n\n"
+        "Boshlash uchun quyidagi bo'limlardan birini tanlang 👇"
     )
     if not webapp_ready:
         return head + (
-            "\n⚠️ <b>Web App manzili hali sozlanmagan.</b>\n"
+            "\n\n⚠️ <b>Web App manzili hali sozlanmagan.</b>\n"
             "Administrator <code>WEBAPP_URL</code> ni <code>.env</code> faylida\n"
             "ko'rsatishi kerak (Telegram faqat HTTPS manzilni qabul qiladi)."
         )
-    return head + (
-        "\n<b>Qanday ishlaydi?</b>\n"
-        "1️⃣ O'qituvchi <b>test kodini</b> beradi;\n"
-        "2️⃣ ilovadagi «Navbat» bo'limida kodni kiritib, javoblar varag'ini\n"
-        "   (masalan <code>1A2B3C</code>) yuborasiz;\n"
-        "3️⃣ natijalar e'lon qilingan vaqtda <b>θ (logit)</b> va\n"
-        "   <b>0–100 ball</b> ko'rinishida chiqadi.\n\n"
-        "Ilovani ochish uchun quyidagi tugmani bosing 👇"
-    )
+    return head
 
 
 def webapp_button_missing() -> str:
@@ -147,7 +162,22 @@ def ask_total_questions() -> str:
 
 
 def ask_answer_key(total_questions: int) -> str:
-    """Javoblar kaliti so'raladi."""
+    """Javoblar kaliti so'raladi.
+
+    36+ savolli (MVP formasi) imtihonda 33–35 uchun A–F va 36–45 uchun sonli
+    javoblar tushuntiriladi. Kichik imtihonlarda matn avvalgidek qoladi.
+    """
+    if total_questions >= 36:
+        return (
+            "4️⃣ <b>Javoblar kalitini</b> kiriting.\n\n"
+            "• <b>1–32</b> — <code>A</code>…<code>D</code>;\n"
+            "• <b>33–35</b> — <code>A</code>…<code>F</code>;\n"
+            "• <b>36–45</b> — sonli javob (kalit oxirida, <code>|</code> dan keyin).\n\n"
+            f"Format: <code>1A2B…35F|36:12.5,37:3</code> ({total_questions} ta javob).\n"
+            "Qismli (a/b) savollar ham mumkin: "
+            "<code>1A2B…35F|36a:√5,36b:3/7</code>\n"
+            "Eski A–D kaliti ham qabul qilinadi: <code>1A2B3C…</code>"
+        )
     return (
         "4️⃣ <b>Javoblar kalitini</b> kiriting — har bir savol uchun to'g'ri variant.\n\n"
         f"Format: <code>1A2B3C…</code> ({total_questions} ta javob bo'lishi shart).\n"
@@ -157,16 +187,24 @@ def ask_answer_key(total_questions: int) -> str:
 
 
 def ask_difficulties(total_questions: int) -> str:
-    """Qiyinchilik logitlari so'raladi."""
+    """Qiyinchilik **foizda** so'raladi (logit avtomatik hisoblanadi)."""
     return (
-        "5️⃣ <b>Qiyinchilik darajalari (logit)</b> — ixtiyoriy qadam.\n\n"
+        "5️⃣ <b>Qiyinchilik darajalari (foizda)</b> — ixtiyoriy qadam.\n\n"
+        "Har bir savolga <b>to'g'ri javob beradigan o'quvchilarning taxminiy "
+        "ulushini</b> foizda yozing (sizning bahosingiz):\n\n"
         f"• Bo'sh qoldirsangiz yoki <code>-</code> yozsangiz: barcha "
-        f"{total_questions} savol uchun <b>0.0</b>;\n"
-        "• bitta son yozsangiz (masalan <code>0.5</code>) — u hamma savolga "
+        f"{total_questions} savol uchun <b>0.0</b> (ma'lumot yo'q);\n"
+        "• bitta foiz yozsangiz (masalan <code>75</code>) — u hamma savolga "
         "qo'llanadi;\n"
-        f"• yoki {total_questions} ta sonni vergul bilan ajratib yozing:\n"
-        "<code>-1.2, 0, 0.5, 1.4</code>\n\n"
-        "ℹ️ b katta bo'lsa savol qiyin, manfiy bo'lsa oson hisoblanadi."
+        f"• yoki {total_questions} ta foizni vergul bilan ajratib yozing:\n"
+        "<code>90, 75, 50, 25</code>\n\n"
+        "⚙️ Foiz qiyinchilikka <b>avtomatik</b> o'tkaziladi "
+        "(<code>b = ln((1−p)/p)</code>):\n"
+        "<code>90% → -2.20 · 75% → -1.10 · 50% → 0.00 · 25% → +1.10</code>\n\n"
+        "ℹ️ b katta bo'lsa savol qiyin, manfiy bo'lsa oson hisoblanadi.\n"
+        "Ilg'or: logitni to'g'ridan-to'g'ri ham yozishingiz mumkin "
+        "(<code>-1.1, 0, 1.1</code>), yoki foizni <code>%</code> bilan "
+        "belgilang (<code>75%</code>)."
     )
 
 
@@ -213,7 +251,7 @@ def exam_summary(
         f"🔑 Test kodi: <code>{_safe(test_code)}</code>\n"
         f"❓ Savollar: <b>{total_questions}</b>\n"
         f"🗝 Kalit: <code>{_safe(answer_key)}</code>\n"
-        f"📈 Logitlar: <code>{_safe(difficulties)}</code>\n"
+        f"📈 Qiyinchilik (foiz → logit): <code>{_safe(difficulties)}</code>\n"
         f"▶️ Boshlanish: {_safe(start_local)}\n"
         f"⏹ Tugash: {_safe(end_local)}\n"
         f"📢 Natija: {_safe(result_local)}\n"
@@ -245,6 +283,53 @@ def exam_created(
         "🔗 <b>Test kodini o'quvchilarga yetkazing.</b> Ular /app orqali\n"
         "ilovani ochib, kodni «Navbat» bo'limida kiritadi.\n\n"
         "📋 Imtihonlar ro'yxati: /exams"
+    )
+
+
+def form_created(
+    *,
+    form_id: int,
+    form_version_id: int,
+    version_no: int,
+    total_questions: int,
+    kinds: dict[str, int],
+    session_id: int | None = None,
+) -> str:
+    """MVP kalit bilan item-level forma yaratilganda qo'shimcha xulosa.
+
+    Ko'rsatiladi: `form_id`, versiya raqami (`version_no`), savollar soni va
+    savol turlari statistikasi (`mcq4` / `mcq6` / `numeric`) — form_builder
+    `FormBuildResult.kinds` bilan bir xil tartibda.
+    """
+    stats = " · ".join(
+        f"{name}: <b>{int(kinds.get(name, 0))}</b>"
+        for name in ("mcq4", "mcq6", "numeric")
+    )
+    lines = [
+        "🧩 <b>Item-level forma yaratildi</b>",
+        SEP,
+        f"🆔 Forma: <code>{int(form_id)}</code> · versiya: <b>{int(version_no)}</b> "
+        f"(<code>{int(form_version_id)}</code>)",
+        f"❓ Savollar: <b>{int(total_questions)}</b>",
+        f"📊 Turlar: {stats}",
+    ]
+    if session_id is not None:
+        lines.append(f"🗓 Sessiya: <code>{int(session_id)}</code> (exam_sessions)")
+    return "\n".join(lines)
+
+
+def form_build_error(reason: str) -> str:
+    """`services.form_builder.FormBuildError` — o'qituvchiga o'zbekcha izoh.
+
+    Matn `texts` da saqlanadi (handler ichida uzun matn yozilmaydi).
+    """
+    return (
+        "⚠️ <b>Item-level formani yaratib bo'lmadi.</b>\n"
+        f"{SEP}\n"
+        f"{_safe(reason)}\n"
+        f"{SEP}\n"
+        "Imtihon saqlanmadi. Ma'lumotlarni tuzatib, /new_exam bilan qaytadan "
+        "urinib ko'ring."
     )
 
 
@@ -289,6 +374,21 @@ def exam_deleted(title: str) -> str:
     return (
         f"🗑 <b>«{_safe(title)}»</b> imtihoni va unga tegishli barcha javoblar\n"
         "o'chirildi."
+    )
+
+
+def exam_delete_confirm(*, title: str, test_code: str, submissions: int) -> str:
+    """O'chirishdan oldin tasdiqlash (tasodifiy bosishdan himoya)."""
+    return (
+        "⚠️ <b>Imtihonni o'chirish</b>\n"
+        f"{SEP}\n"
+        f"📌 {_safe(title)}\n"
+        f"🔑 Kod: <code>{_safe(test_code)}</code>\n"
+        f"📝 Javoblar: <b>{submissions}</b> ta\n"
+        f"{SEP}\n"
+        "Bu amal <b>qaytarilmaydi</b> — imtihon va unga tegishli barcha "
+        "javoblar o'chadi.\n\n"
+        "Davom etishni tasdiqlaysizmi?"
     )
 
 
@@ -603,7 +703,9 @@ def admin_stats(
         f"📥 Imtihonlarga yuborilgan javoblar: <b>{submissions}</b>\n" if submissions else ""
     )
     solutions_line = (
-        f"🎬 Yuklangan video yechimlar: <b>{solution_files}</b>\n" if solution_files else ""
+        f"🎬 Yuklangan yechimlar (video/rasm): <b>{solution_files}</b>\n"
+        if solution_files
+        else ""
     )
     return (
         "🛠 <b>Bot statistikasi</b>\n"
@@ -646,27 +748,6 @@ def stale_button() -> str:
 # ---------------------------------------------------------------------------
 # «🔍 Test tahlili» bo'limi (o'quvchi) va yechim yuklash (o'qituvchi)
 # ---------------------------------------------------------------------------
-MEDIA_CAPTION_LIMIT = 900  # media izohi 1024 belgidan oshmasligi kerak
-TEXT_MESSAGE_LIMIT = 3600  # oddiy xabar 4096 belgidan oshmasligi kerak
-
-
-def _truncate(text: str, limit: int) -> str:
-    """Matnni `limit` belgiga qisqartiradi (oxiriga «…» qo'shiladi)."""
-    clean = (text or "").strip()
-    if len(clean) <= limit:
-        return clean
-    return clean[: limit - 1].rstrip() + "…"
-
-
-def reply_menu_hint() -> str:
-    """Pastdagi (reply) menyu ko'rsatilganda yuboriladigan qisqa izoh."""
-    return (
-        "🧭 <b>Bo'limlar menyusi</b>\n"
-        f"{SEP}\n"
-        "Pastdagi tugmalar orqali kerakli bo'limni tanlang:\n"
-        "🔍 <b>Test tahlili</b> — topshirgan imtihoningiz savollarini "
-        "video yechimlari bilan ko'rish."
-    )
 
 
 def analysis_list(window: solutions.PageWindow, full_name: str) -> str:
@@ -711,7 +792,7 @@ def analysis_no_solution(*, label: str) -> str:
     """Tanlangan savol uchun yechim hali yuklanmagan."""
     return (
         f"⚠️ <b>{_safe(label)}</b>-savol uchun yechim hali yuklanmagan.\n\n"
-        "O'qituvchi video yechimni yuklagach, u shu yerda ko'rinadi."
+        "O'qituvchi video yoki rasm yechimni yuklagach, u shu yerda ko'rinadi."
     )
 
 
@@ -719,36 +800,61 @@ def solution_post(
     *,
     label: str,
     kind: str,
-    solution_text: str,
     hashtag: str,
-    limit: int = MEDIA_CAPTION_LIMIT,
+    icon: str = "🎬",
 ) -> str:
-    """Foydalanuvchiga yuboriladigan yechim posti (media izohi yoki matn).
+    """O'quvchiga yuboriladigan yechim sarlavhasi (media izohi).
 
-    Post oxiriga doim hashtag qo'shiladi: «#javob-rashtest1612-3».
+    Matnli yechim yo'q — post faqat sarlavha va hashtagdan iborat:
+    «🎬 3 — video yechim» + «#javob-rashtest1612-3».
     """
-    lines = [f"📝 <b>{_safe(label)}</b> — {_safe(kind)}", SEP]
-    body = _truncate(solution_text, limit)
-    if body:
-        lines.append(_safe(body))
-        lines.append(SEP)
-    lines.append(hashtag)
-    return "\n".join(lines)
+    return f"{icon} <b>{_safe(label)}</b> — {_safe(kind)}\n{SEP}\n{hashtag}"
+
+
+def solution_unavailable(*, label: str) -> str:
+    """Faylli yechimni yuborib bo'lmadi (file_id eskirgan yoki fayl o'chirilgan)."""
+    return (
+        f"⚠️ <b>{_safe(label)}</b>-savol yechimini yuklab bo'lmadi.\n\n"
+        "O'qituvchi yechimni qayta yuklashi kerak. Keyinroq yana urinib ko'ring."
+    )
+
+
+def solution_media_required() -> str:
+    """Admin qo'llanmaydigan media (audio, animatsiya, dumaloq video) yuborsa."""
+    return (
+        "⚠️ <b>Yechim faqat video yoki rasm bo'lishi mumkin.</b>\n\n"
+        "Videoni oddiy <b>video</b> sifatida, rasmni esa <b>surat</b> sifatida "
+        "yuboring (dumaloq video, audio va animatsiya qabul qilinmaydi).\n\n"
+        "Yo'riqnoma: /add_solution"
+    )
+
+
+def solution_size_warning(*, size_mb: float, limit_mb: int) -> str:
+    """Fayl hajmi tavsiya etilgan chegaradan katta bo'lganda (saqlangan)."""
+    return (
+        f"ℹ️ Fayl hajmi <b>{size_mb:.1f} MB</b> — Telegram bot uchun tavsiya "
+        f"etilgan chegara <b>{limit_mb} MB</b>.\n\n"
+        "Yechim saqlandi. Agar o'quvchida ochilmasa — videoni <b>720p</b> qilib "
+        "qayta yuklang yoki rasm ko'rinishida yuboring."
+    )
 
 
 def solution_admin_intro() -> str:
     """`/add_solution` yo'riqnomasi (o'qituvchi uchun)."""
     return (
-        "🎬 <b>Video/media yechim yuklash</b>\n"
+        "🎬 <b>Video yoki rasm yechim yuklash</b>\n"
         f"{SEP}\n"
-        "<b>1-usul (tavsiya etiladi)</b> — botga video (rasm yoki hujjat)\n"
-        "yuboring va izohiga test kodi bilan savol raqamini yozing:\n\n"
+        "<b>1-usul (tavsiya etiladi)</b> — Mini App'dagi «🎬 Yechimlar» "
+        "bo'limidan savolni tanlab, yuklash tugmasini bosing.\n\n"
+        "<b>2-usul</b> — botga video yoki rasm yuboring va izohiga test kodi "
+        "bilan savol raqamini yozing:\n\n"
         "<code>rashtest1612 3</code>  yoki  <code>#rashtest1612-3</code>\n"
         "A/B qismli savollar uchun: <code>rashtest1612 36a</code>\n\n"
-        "<b>2-usul (matnli tahlil)</b>:\n"
-        "<code>/add_solution rashtest1612 3 yechim matni…</code>\n"
         f"{SEP}\n"
-        "🤖 Bot faylning Telegram <code>file_id</code> sini o'zi olib,\n"
+        "⚠️ Matnli yechim qo'llanmaydi — faqat <b>video</b> yoki <b>rasm</b>.\n"
+        "🎬 Video — 50 MB gacha (720p tavsiya etiladi)\n"
+        "🖼 Rasm — 10 MB gacha\n"
+        "🤖 Bot faylning Telegram <code>file_id</code> sini o'zi olib, "
         "bazadagi tegishli savolga biriktiradi."
     )
 
@@ -757,7 +863,8 @@ def solution_caption_error() -> str:
     """Izohdagi format tanilmaganda."""
     return (
         "⚠️ <b>Format tanilmadi.</b>\n\n"
-        "Izohga test kodi va savol raqamini yozing:\n"
+        "Videoni yoki rasmni yuborib, izohiga test kodi va savol raqamini "
+        "yozing:\n"
         "<code>rashtest1612 3</code> · <code>#rashtest1612-3</code> · "
         "<code>rashtest1612 36a</code>\n\n"
         "Yo'riqnoma: /add_solution"
@@ -788,12 +895,129 @@ def solution_saved(*, test_code: str, label: str, kind: str) -> str:
     )
 
 
-def solution_text_required() -> str:
-    """Matnli yechim uchun matn kiritilmaganda."""
+def solution_link_prompt(*, title: str, test_code: str, label: str) -> str:
+    """Panel deep-link'i orqali botga o'tganda ko'rsatiladigan yo'riqnoma.
+
+    Shu holatda o'qituvchi **izoh yozmaydi** — keyingi media shu savolga
+    biriktiriladi (`handlers/admin_solution.py`).
+    """
     return (
-        "⚠️ Matnli yechim uchun matn ham yozing.\n\n"
-        "Masalan:\n"
-        "<code>/add_solution rashtest1612 3 2x+5=13 → x=4</code>"
+        "🎬 <b>Yechim yuklash</b>\n"
+        f"{SEP}\n"
+        f"📌 {_safe(title)}\n"
+        f"🎯 Savol: <b>{_safe(test_code)} · {_safe(label)}</b>\n\n"
+        "Endi shu savol uchun <b>videoni yoki rasmni</b> shu chatga yuboring — "
+        "<b>izoh yozish shart emas</b>.\n\n"
+        "⚠️ Matnli yechim yo'q: faqat video (50 MB gacha) yoki rasm (10 MB "
+        "gacha).\n\n"
+        "Bekor qilish: /cancel"
+    )
+
+
+# ---------------------------------------------------------------------------
+# «Yakunlash» natijasi (bot xabari) — javob kalitisiz, tugmali grid bilan
+# ---------------------------------------------------------------------------
+def submission_accepted(
+    *,
+    title: str,
+    full_name: str,
+    answered: int,
+    total: int,
+    result_local: str,
+) -> str:
+    """Javob qabul qilinganini tasdiqlovchi xabar (natija hali YOPIQ).
+
+    Muhim: bu xabarda to'g'ri/xato sanoq yoki savollar gridi **yo'q** —
+    natija faqat `result_time` kelgach alohida yuboriladi (imtihon tozaligi).
+    """
+    return (
+        "✅ <b>Javoblaringiz qabul qilindi</b>\n"
+        f"{SEP}\n"
+        f"👤 {_safe(full_name)}\n"
+        f"📌 {_safe(title)}\n"
+        f"📝 Belgilangan: <b>{answered} / {total}</b> savol\n"
+        f"⏰ Natija e'lon qilinishi: <b>{_safe(result_local)}</b>\n"
+        f"{SEP}\n"
+        "Natija tayyor bo'lgach <b>shu chatga avtomatik</b> yuboriladi.\n"
+        "Holatni ilovaning «Natijalar» bo'limida ham kuzatishingiz mumkin."
+    )
+
+
+def _score_bar(score: float, segments: int = 10) -> str:
+    """0–100 ballni 10 bo'lakli ixcham chiziq ko'rinishida beradi."""
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        value = 0.0
+    filled = max(0, min(segments, round(value / (100.0 / segments))))
+    return "▰" * filled + "▱" * (segments - filled)
+
+
+def _level_emoji(level: str) -> str:
+    """Daraja uchun bitta tushunarli belgi (rang o'rniga)."""
+    return {
+        "A+": "🏆",
+        "A": "🏆",
+        "B+": "🥈",
+        "B": "🥈",
+        "C+": "🥉",
+        "C": "🥉",
+    }.get(level, "📘")
+
+
+def result_ready(
+    *,
+    title: str,
+    full_name: str,
+    report: Mapping[str, object],
+) -> str:
+    """Natija e'lon qilinganda yuboriladigan boy karta (Rasch ko'rsatkichlari).
+
+    `report` — `services.grading.build_report()` natijasi. Xabar sodda, lekin
+    barcha muhim ma'lumotni beradi: ball, daraja, to'g'ri javoblar, θ va
+    95% ishonch oralig'i.
+    """
+    score = float(report.get("scaled_score") or 0.0)
+    level = str(report.get("ability_level") or "")
+    theta = float(report.get("theta") or 0.0)
+    raw = int(report.get("raw_score") or 0)
+    total = int(report.get("total_questions") or 0)
+    advice = str(report.get("advice") or "")
+    interval = report.get("scaled_interval")
+
+    lines = [
+        "🎉 <b>Natijangiz e'lon qilindi!</b>",
+        SEP,
+        f"📌 {_safe(title)}",
+        f"👤 {_safe(full_name)}",
+        "",
+        f"🎯 <b>{score:.1f} / 100 ball</b>",
+        f"<code>{_score_bar(score)}</code>",
+        f"{_level_emoji(level)} Daraja: <b>{_safe(level)}</b>",
+        f"✅ To'g'ri javoblar: <b>{raw} / {total}</b>",
+        f"🧠 Bilim darajasi (θ): <b>{_sign(theta)} logit</b>",
+    ]
+    if isinstance(interval, (list, tuple)) and len(interval) == 2:
+        lines.append(
+            "📏 95% ishonch oralig'i: "
+            f"<b>{float(interval[0]):.1f} – {float(interval[1]):.1f}</b> ball"
+        )
+    if advice:
+        lines += ["", f"💡 {_safe(advice)}"]
+
+    lines += [
+        "",
+        "📊 Batafsil tahlil va yechimlar — pastdagi tugmalarda.",
+    ]
+    return "\n".join(lines)
+
+
+def solution_locked(*, result_time: str) -> str:
+    """Yechim hali ochilmagan bo'lsa — ogohlantirish (popup)."""
+    return (
+        "⏳ Yechimlar hali ochilmagan.\n\n"
+        f"Savol yechimlarini natijalar e'lon qilinganda ({_safe(result_time)}) "
+        "ko'rishingiz mumkin."
     )
 
 

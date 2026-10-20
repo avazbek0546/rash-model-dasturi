@@ -30,7 +30,7 @@ if hasattr(sys.stdout, "reconfigure"):
 from database.db import Database  # noqa: E402
 from database.models import Exam, ExamStatus, User  # noqa: E402
 from database.repository import AlreadySubmittedError, Repositories  # noqa: E402
-from services import exam_service, grading  # noqa: E402
+from services import exam_service, grading, scoring  # noqa: E402
 
 USER = 111_000_222
 QUESTIONS = 4
@@ -84,6 +84,24 @@ async def check_schema(db: Database) -> None:
     assert exam.difficulties == [0.0, 1.5, -0.5]
     assert exam.is_graded is False and ExamStatus.ACTIVE.value == "active"
 
+    # `b_source` — `b` qayerdan olinganini bildiradi: o'qituvchi foiz kiritgan
+    # bo'lsa (noldan farqli `b` bor) — `legacy_expert`, aks holda `default`.
+    assert scoring.ScoringContext.from_exam(exam).b_source == "legacy_expert"
+
+    flat = Exam(
+        exam_id=3,
+        title="Nol logitlar",
+        test_code="ZERO123",
+        start_time="",
+        end_time="",
+        result_time="",
+        total_questions=3,
+        answer_key="1A2B3C",
+        difficulty_logits="[0.0, 0.0, 0.0]",
+    )
+    assert scoring.ScoringContext.from_exam(flat).b_source == "default"
+    print("[OK] b_source: foizli logitlar → legacy_expert, nollar → default")
+
     broken = Exam(
         exam_id=2,
         title="Buzuq",
@@ -126,6 +144,37 @@ def check_inputs() -> None:
     else:  # pragma: no cover
         raise AssertionError("ValueError kutilgan edi")
     print("[OK] Logit kiritilmasa standart 0.0 olinadi (tasdiqlangan talab)")
+
+    # --- Foiz → logit (yangi yo'l: `b = ln((1-p)/p)`) ----------------------
+    percent = exam_service.parse_difficulties_input("90, 75, 50, 25", QUESTIONS)
+    assert [round(value, 4) for value in percent] == [
+        -2.1972,
+        -1.0986,
+        0.0,
+        1.0986,
+    ], percent
+
+    marked = exam_service.parse_difficulties_input("75%", QUESTIONS)
+    assert marked == [percent[1]] * QUESTIONS, marked
+
+    assert exam_service.parse_difficulties_input("100", QUESTIONS) == [
+        -exam_service.config.THETA_BOUND
+    ] * QUESTIONS
+
+    for value, expected_percent in zip(percent, (90, 75, 50, 25), strict=True):
+        assert round(exam_service.logit_to_percent(value)) == expected_percent
+
+    try:
+        exam_service.parse_difficulties_input("150", QUESTIONS)
+    except ValueError as exc:
+        print(f"[OK] Foiz 0-100 dan tashqarida bo'lsa xato: {exc}")
+    else:  # pragma: no cover
+        raise AssertionError("ValueError kutilgan edi")
+
+    print(
+        "[OK] Foiz → logit: 90/75/50/25 → -2.1972/-1.0986/0.0/+1.0986 "
+        "(teskari o'tkazish ham ishlaydi)"
+    )
 
     local = exam_service.parse_local_datetime("15.01.2026 09:00")
     assert exam_service.to_db_time(local) == "2026-01-15T04:00:00+00:00", exam_service.to_db_time(local)

@@ -15,5 +15,9 @@ aiohttp>=3.9.0
 # bazasi bo'lmaydi — bu paket bo'lmasa kod avtomatik UTC+5 ga o'tadi.
 tzdata>=2024.1
 
+# PDF hisobot generatori (faqat admin paneli uchun). Sof Python — tizim
+# kutubxonalarini talab qilmaydi.
+fpdf2>=2.7.0
+
 # Eslatma: Rasch modeli (IRT) hisob-kitoblari sof Python "math" modulida
 # bajariladi, shu sababli numpy/scipy kerak emas.

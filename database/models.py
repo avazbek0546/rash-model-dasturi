@@ -181,6 +181,7 @@ class ExamSubmission:
     raw_score: int | None = None  # to'g'ri javoblar soni
     submitted_at: str | None = None
     submission_id: int | None = None
+    notified_at: str | None = None  # natija xabari yuborilgan vaqt (UTC ISO)
 
     # JOIN orqali to'ldiriladigan maydonlar (natijalar tarixi uchun qulaylik)
     exam_title: str | None = None
@@ -199,8 +200,12 @@ class ExamSubmission:
 class SolutionType(str, Enum):
     """Yechim qanday ko'rinishda saqlanganini bildiradi.
 
-    VIDEO / PHOTO / DOCUMENT / ANIMATION / AUDIO — Telegram `file_id` orqali;
-    TEXT — faqat matnli tahlil (`solution_text`) sifatida.
+    Barcha turlar Telegram `file_id` orqali saqlanadi (matnli yechim
+    qo'llanmaydi — faqat video va rasm).
+
+    VIDEO / PHOTO — asosiy (o'qituvchi yuklaydigan) turlar;
+    DOCUMENT — rasm/video «fayl sifatida» yuborilganda;
+    ANIMATION / AUDIO — eski yozuvlar uchun (yangi yuklashda qabul qilinmaydi).
     """
 
     VIDEO = "video"
@@ -208,7 +213,6 @@ class SolutionType(str, Enum):
     DOCUMENT = "document"
     ANIMATION = "animation"
     AUDIO = "audio"
-    TEXT = "text"
 
     @property
     def title(self) -> str:
@@ -216,18 +220,25 @@ class SolutionType(str, Enum):
         return SOLUTION_TYPE_TITLES.get(self, self.value)
 
     @property
-    def has_file(self) -> bool:
-        """Yechim Telegram fayli (`file_id`) bilan saqlanadimi?"""
-        return self is not SolutionType.TEXT
+    def icon(self) -> str:
+        """Xabar sarlavhasidagi belgi (`🎬`, `🖼`, ...)."""
+        return SOLUTION_TYPE_ICONS.get(self, "📎")
 
 
 SOLUTION_TYPE_TITLES: Final[dict[SolutionType, str]] = {
     SolutionType.VIDEO: "video yechim",
     SolutionType.PHOTO: "rasm yechim",
-    SolutionType.DOCUMENT: "hujjat ko'rinishidagi yechim",
+    SolutionType.DOCUMENT: "fayl ko'rinishidagi yechim",
     SolutionType.ANIMATION: "animatsiya ko'rinishidagi yechim",
     SolutionType.AUDIO: "audio yechim",
-    SolutionType.TEXT: "matnli yechim",
+}
+
+SOLUTION_TYPE_ICONS: Final[dict[SolutionType, str]] = {
+    SolutionType.VIDEO: "🎬",
+    SolutionType.PHOTO: "🖼",
+    SolutionType.DOCUMENT: "📄",
+    SolutionType.ANIMATION: "🎞",
+    SolutionType.AUDIO: "🔊",
 }
 
 
@@ -244,23 +255,30 @@ class Solution:
     solution_type: str = SolutionType.VIDEO.value
     part: str = PART_WHOLE
     solution_file_id: str | None = None
-    solution_text: str | None = None
     created_by: int | None = None
     updated_at: str | None = None
     solution_id: int | None = None
 
     @property
     def type(self) -> SolutionType:
-        """`solution_type` satrini `SolutionType` ga aylantiradi (buzuq bo'lsa — TEXT)."""
+        """`solution_type` satrini `SolutionType` ga aylantiradi.
+
+        Bazada eski (`text`) yoki noma'lum turdagi yozuv qolgan bo'lsa — VIDEO
+        ga keltiriladi; bunday yozuvda `solution_file_id` yo'q, shu sababli
+        `is_file` `False` bo'lib, u yechim sifatida ko'rsatilmaydi.
+        """
         try:
             return SolutionType(self.solution_type)
         except ValueError:
-            return SolutionType.TEXT
+            return SolutionType.VIDEO
 
     @property
     def is_file(self) -> bool:
-        """Yechim fayl ko'rinishidami?"""
-        return bool(self.solution_file_id) and self.type.has_file
+        """Yechim Telegram fayli (`file_id`) bilan saqlanganmi?
+
+        Matnli (eski) yozuvlarda fayl bo'lmaydi — ular yechim hisoblanmaydi.
+        """
+        return bool(self.solution_file_id)
 
     @property
     def label(self) -> str:

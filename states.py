@@ -28,3 +28,13 @@ class TestStates(StatesGroup):
     """Eski mashq rejimi holati (arxivlangan oqim uchun saqlanadi)."""
 
     in_progress = State()
+
+
+class SolutionUploadStates(StatesGroup):
+    """«🎬 Yechimlar» — imtihon panelidan deep-link orqali yuklash holati.
+
+    O'qituvchi panelda savol yonidagi «➕ Yuklash»ni bosganda botga o'tadi va
+    bot shu holatga o'tib, **keyingi mediani** (izohsiz) shu savolga bog'laydi.
+    """
+
+    awaiting_upload = State()

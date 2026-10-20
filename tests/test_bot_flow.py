@@ -39,6 +39,7 @@ from aiogram.enums import ParseMode  # noqa: E402
 from aiogram.fsm.storage.memory import MemoryStorage  # noqa: E402
 from aiogram.methods import (  # noqa: E402
     AnswerCallbackQuery,
+    DeleteMessage,
     EditMessageText,
     GetMe,
     SendDocument,
@@ -46,6 +47,7 @@ from aiogram.methods import (  # noqa: E402
     SendPhoto,
     SendVideo,
 )
+from aiogram.types import ReplyKeyboardRemove  # noqa: E402
 from aiogram.types import Message, Update  # noqa: E402
 from aiogram.types import User as TgUser  # noqa: E402
 
@@ -55,7 +57,7 @@ from database.models import SolutionType, User  # noqa: E402
 from database.repository import Repositories  # noqa: E402
 from database.seed import seed_questions  # noqa: E402
 from handlers import setup_routers  # noqa: E402
-from keyboards.inline import AnalysisCallback  # noqa: E402
+from keyboards.inline import AnalysisCallback, AppCallback  # noqa: E402
 from keyboards.reply import ANALYSIS_BUTTON, UPLOAD_SOLUTION_BUTTON  # noqa: E402
 from middlewares import UserSyncMiddleware  # noqa: E402
 from services import exam_service  # noqa: E402
@@ -132,25 +134,51 @@ class FakeSession(BaseSession):
 
 
 async def check_start_and_menu(bot, session, dp, repos) -> None:
-    """`/start` → Web App tugmali menyu → foydalanuvchi bazada."""
+    """`/start` → bitta inline menyu (pastdagi klaviatura yo'q) → foydalanuvchi bazada."""
     await dp.feed_update(bot, message_update(bot, 1, "/start"))
     last = session.last()
     assert isinstance(last, SendMessage), type(last)
     assert "Assalomu alaykum" in last.text and "Rasch" in last.text
+    assert "Qanday ishlaydi" not in last.text, "eski yo'riqnoma matni qolgan"
 
     buttons = last.reply_markup.inline_keyboard
-    # Admin uchun: Web App, «Yangi imtihon», «Imtihonlar ro'yxati», «Yordam»
-    assert len(buttons) == 4, [row[0].text for row in buttons]
+    labels = [row[0].text for row in buttons]
+    # Admin uchun 7 qator: ilova → natijalar → bo'limlar → admin → yordam.
+    assert len(buttons) == 7, labels
+    assert labels[0] == "📝 Javoblarni belgilash", labels
+    assert labels[1] == "📊 Natijalarim", labels
+    assert labels[2:4] == ["🔍 Test tahlili", "🏡 Asosiy menyu"], labels
     web_app_button = buttons[0][0]
     assert web_app_button.web_app is not None, "Web App tugmasi yo'q"
-    assert web_app_button.web_app.url == "https://exam.example.uz/", web_app_button.web_app.url
+    # Manzilga kesh-buster (`?v=…`) qo'shiladi — shuning uchun prefiks bo'yicha.
+    assert web_app_button.web_app.url.startswith("https://exam.example.uz/"), (
+        web_app_button.web_app.url
+    )
+    assert "tab=results" in buttons[1][0].web_app.url, buttons[1][0].web_app.url
+    assert labels[4:] == [
+        "📋 Imtihonlar ro'yxati",
+        "🎬 Yechim yuklash",
+        "ℹ️ Yordam",
+    ], labels
+    assert "➕ Yangi imtihon" not in labels, "«Yangi imtihon» tugmasi qaytib qo'shilgan"
+
+    # Pastdagi (reply) klaviatura olib tashlangan: ReplyKeyboardRemove + delete.
+    removals = [
+        call
+        for call in session.calls
+        if isinstance(call, SendMessage) and isinstance(call.reply_markup, ReplyKeyboardRemove)
+    ]
+    assert removals, "eski reply klaviatura tozalanmadi"
+    assert any(isinstance(call, DeleteMessage) for call in session.calls), (
+        "tozalash xabari o'chirilmadi"
+    )
 
     user = await repos.users.get(USER_ID)
     assert user is not None, "middleware foydalanuvchini bazaga yozmadi"
     assert user.full_name == FULL_NAME and user.username == "aziz"
     print(
-        f"[OK] /start: Web App tugmasi ({web_app_button.web_app.url}) + admin tugmalari; "
-        "foydalanuvchi bazada (middleware ishladi)"
+        f"[OK] /start: inline menyu ({len(buttons)} qator) + Web App tugmasi "
+        f"({web_app_button.web_app.url}); reply klaviatura olib tashlandi"
     )
 
     await dp.feed_update(bot, callback_update(bot, 2, "app:help"))
@@ -166,7 +194,13 @@ async def check_commands(bot, session, dp) -> None:
     assert "/new_exam" in session.sent_texts()[-1]
 
     await dp.feed_update(bot, message_update(bot, 21, "/app"))
-    assert "Web App" in session.sent_texts()[-1]
+    app_menu = session.last()
+    assert isinstance(app_menu, SendMessage) and "Assalomu alaykum" in app_menu.text
+    assert any(
+        button.web_app is not None
+        for row in app_menu.reply_markup.inline_keyboard
+        for button in row
+    ), "`/app` Web App tugmasini yubormadi"
 
     # Tanilmagan matnli xabar → yordam + menyu
     await dp.feed_update(bot, message_update(bot, 22, "salom, qalaysiz?"))
@@ -287,8 +321,71 @@ async def check_new_exam_wizard(bot, session, dp, repos) -> None:
     print("[OK] /exams: ro'yxat va o'chirish tugmasi ko'rsatildi")
 
     await dp.feed_update(bot, callback_update(bot, 71, f"exam:delete:{exam.exam_id}"))
+    # Tasodifiy bosishdan himoya: birinchi bosishda imtihon O'CHMAYDI.
+    assert await repos.exams.count() == 1, "tasdiqsiz o'chirildi"
+    assert "o'chirish" in session.sent_texts()[-1].lower()
+    await dp.feed_update(
+        bot, callback_update(bot, 72, f"exam:delete_confirm:{exam.exam_id}")
+    )
     assert await repos.exams.count() == 0, "imtihon o'chirilmadi"
-    print("[OK] «🗑» tugmasi imtihonni o'chirdi (javoblar ham CASCADE)")
+    print("[OK] «🗑» tugmasi tasdiqdan keyin o'chirdi (javoblar ham CASCADE)")
+
+
+async def check_regrade(bot, session, dp, repos) -> None:
+    """`/regrade` — kalit tuzatilgach natijalar qayta hisoblanadi."""
+    now = exam_service.utc_now()
+    exam_id = await repos.exams.create(
+        title="Regrade testi",
+        test_code="REG01",
+        start_time=exam_service.to_db_time(now - timedelta(hours=3)),
+        end_time=exam_service.to_db_time(now - timedelta(hours=2)),
+        result_time=exam_service.to_db_time(now - timedelta(hours=1)),
+        total_questions=4,
+        answer_key="1A2B3C4D",
+        difficulty_logits=exam_service.difficulties_to_json([0.0, 0.0, 0.0, 0.0]),
+        created_by=USER_ID,
+    )
+    # O'quvchi: 1A 2B 3C 4A → kalit (4D) bo'yicha 4-savol xato → xom ball 3
+    await repos.answers.submit(
+        user_id=USER_ID, exam_id=exam_id, submitted_answers="1A2B3C4A"
+    )
+
+    # 1) Birinchi qayta baholash (hali baholanmagan) — javob hisoblanadi
+    await dp.feed_update(bot, message_update(bot, 80, "/regrade REG01"))
+    first = session.sent_texts()[-1]
+    assert "Qayta baholash bajarildi" in first, repr(first)
+    submission = await repos.answers.get(USER_ID, exam_id)
+    assert submission is not None and submission.raw_score == 3, submission
+
+    # 2) Kalit tuzatiladi (4-savol: D → A) va YANA qayta baholanadi
+    await repos.db.connection.execute(
+        "UPDATE exams SET answer_key = ? WHERE exam_id = ?", ("1A2B3C4A", exam_id)
+    )
+    await repos.db.connection.commit()
+    await dp.feed_update(bot, message_update(bot, 81, "/regrade REG01"))
+    assert "Qayta baholash bajarildi" in session.sent_texts()[-1]
+    submission = await repos.answers.get(USER_ID, exam_id)
+    assert submission is not None and submission.raw_score == 4, submission
+    print("[OK] /regrade: kalit tuzatilgach natija qayta hisoblandi (3/4 → 4/4)")
+
+    # 3) Noto'g'ri test kodi rad etiladi
+    await dp.feed_update(bot, message_update(bot, 82, "/regrade YOQ01"))
+    assert "topilmadi" in session.sent_texts()[-1]
+    print("[OK] /regrade: noto'g'ri test kodi rad etildi")
+
+
+async def check_report(bot, session, dp, repos) -> None:
+    """`/report TEST_KODI` — natijalar PDF **admin chatiga** yuboriladi."""
+    await dp.feed_update(bot, message_update(bot, 90, "/report REG01"))
+    documents = [call for call in session.calls if isinstance(call, SendDocument)]
+    assert documents, "PDF yuborilmadi"
+    filename = getattr(documents[-1].document, "filename", "") or ""
+    assert "REG01" in filename, (filename, documents[-1].document)
+    print("[OK] /report: PDF admin chatiga yuborildi")
+
+    await dp.feed_update(bot, message_update(bot, 91, "/report YOQ01"))
+    assert "topilmadi" in session.sent_texts()[-1]
+    print("[OK] /report: noto'g'ri test kodi rad etildi")
 
 
 async def check_solution_flow(bot, session, dp, repos) -> None:
@@ -309,13 +406,30 @@ async def check_solution_flow(bot, session, dp, repos) -> None:
     )
     await repos.answers.submit(user_id=USER_ID, exam_id=exam_id, submitted_answers="1A2B3X4D")
 
-    # 1) Reply menyu tugmasi → natijasi e'lon qilingan imtihonlar ro'yxati
+    # 0) Asosiy menyudagi inline «🔍 Test tahlili» → ro'yxat shu xabarda ochiladi
+    await dp.feed_update(
+        bot, callback_update(bot, 99, AppCallback(action="analysis").pack())
+    )
+    inline_list = last_edit(session)
+    assert "Test tahlili" in inline_list.text, inline_list.text
+    assert any(
+        button.text.startswith("📊 ") and "RASHTEST1612" in button.text
+        for row in inline_list.reply_markup.inline_keyboard
+        for button in row
+    ), [b.text for row in inline_list.reply_markup.inline_keyboard for b in row]
+    print("[OK] Inline «🔍 Test tahlili»: imtihonlar ro'yxati ochildi")
+
+    # 1) Eski reply tugmasi ham ishlashda davom etadi (moslik)
     await dp.feed_update(bot, message_update(bot, 100, ANALYSIS_BUTTON))
     listing = session.last()
     assert isinstance(listing, SendMessage), type(listing)
     assert "Test tahlili" in listing.text and "Sahifa 1/1" in listing.text, listing.text
     buttons = [row[0].text for row in listing.reply_markup.inline_keyboard]
-    assert buttons[0].endswith("tahlili") and buttons[0].startswith("📊 RASH EXAM"), buttons
+    assert (
+        buttons[0].startswith("📊 ")
+        and "RASH EXAM" in buttons[0]
+        and "RASHTEST1612" in buttons[0]
+    ), buttons
     assert buttons[-1] == "🏡 Asosiy menyu", buttons
     print(f"[OK] «{ANALYSIS_BUTTON}»: ro'yxat tugmasi → «{buttons[0]}»")
 
@@ -358,34 +472,82 @@ async def check_solution_flow(bot, session, dp, repos) -> None:
     assert videos[-1].video == "VIDEO-FILE-ID-3", videos[-1].video
     assert "#javob-rashtest1612-3" in videos[-1].caption, videos[-1].caption
     assert "video yechim" in videos[-1].caption
-    print("[OK] «❌ 3» tugmasi → video yuborildi, hashtag: #javob-rashtest1612-3")
+    # Yechim ostida «⬅️ Savollar ro'yxati» tugmasi bo'ladi (1.1: oqimga qaytish).
+    nav = [button.text for row in videos[-1].reply_markup.inline_keyboard for button in row]
+    assert nav[0] == "⬅️ Savollar ro'yxati" and nav[-1] == "🏡 Asosiy menyu", nav
+    print("[OK] «❌ 3» tugmasi → video yuborildi + «⬅️ Savollar ro'yxati» tugmasi")
 
     # 5) Yechimi yo'q savol → ogohlantirish
     await dp.feed_update(
         bot,
         callback_update(
-            bot, 105, AnalysisCallback(action="question", exam_id=exam_id, question=1).pack()
+            bot, 105, AnalysisCallback(action="question", exam_id=exam_id, question=4).pack()
         ),
     )
     assert "yechim hali yuklanmagan" in session.sent_texts()[-1], session.sent_texts()[-1]
 
-    # 6) Matnli yechim: /add_solution → «✅ 1» tugmasi matn qaytaradi
-    await dp.feed_update(bot, message_update(bot, 106, "/add_solution rashtest1612 1 2+2=4"))
-    assert "matnli yechim muvaffaqiyatli saqlandi" in session.sent_texts()[-1]
+    # 6) Rasm yechim: izoh bilan yuklash → «✅ 1» tugmasi rasm qaytaradi
+    await dp.feed_update(
+        bot, photo_update(bot, 106, caption="#rashtest1612-1", file_id="PHOTO-FILE-ID-1")
+    )
+    assert "rasm yechim muvaffaqiyatli saqlandi" in session.sent_texts()[-1]
+    saved_photo = await repos.solutions.get(exam_id, 1)
+    assert saved_photo is not None and saved_photo.type is SolutionType.PHOTO
+    assert saved_photo.solution_file_id == "PHOTO-FILE-ID-1", saved_photo
+
     await dp.feed_update(
         bot,
         callback_update(
             bot, 107, AnalysisCallback(action="question", exam_id=exam_id, question=1).pack()
         ),
     )
-    text_solution = session.sent_texts()[-1]
-    assert "matnli yechim" in text_solution and "#javob-rashtest1612-1" in text_solution
-    assert "2+2=4" in text_solution
-    print("[OK] Matnli yechim: /add_solution + «#javob-rashtest1612-1» hashtagi")
+    photos = [call for call in session.calls if isinstance(call, SendPhoto)]
+    assert photos, "rasm yechim yuborilmadi"
+    assert photos[-1].photo == "PHOTO-FILE-ID-1", photos[-1].photo
+    assert "#javob-rashtest1612-1" in photos[-1].caption, photos[-1].caption
+    assert "rasm yechim" in photos[-1].caption, photos[-1].caption
+    print("[OK] Rasm yechim: izoh bilan yuklandi + hashtag bilan yuborildi")
 
-    # 7) Admin reply tugmasi va huquqsiz foydalanuvchi
+    # 6b) Matnli yechim endi qo'llanmaydi: /add_solution faqat yo'riqnoma beradi
+    before = await repos.solutions.get(exam_id, 1)
+    await dp.feed_update(bot, message_update(bot, 1061, "/add_solution rashtest1612 1 2+2=4"))
+    assert "Matnli yechim qo'llanmaydi" in session.sent_texts()[-1], session.sent_texts()[-1]
+    after = await repos.solutions.get(exam_id, 1)
+    assert after is not None and after.solution_file_id == before.solution_file_id, after
+    print("[OK] Matnli yechim olib tashlandi: /add_solution faqat yo'riqnoma beradi")
+
+    # 6c) Qo'llanmaydigan media (audio) → aniq ogohlantirish
+    await dp.feed_update(
+        bot, audio_update(bot, 1062, caption="#rashtest1612-2", file_id="AUDIO-FILE-2")
+    )
+    assert "faqat video yoki rasm" in session.sent_texts()[-1], session.sent_texts()[-1]
+    assert await repos.solutions.get(exam_id, 2) is None, "audio yechim saqlandi"
+
+    # 6d) PDF hujjat ham yechim emas (faqat rasm/video «fayl sifatida» qabul qilinadi)
+    await dp.feed_update(
+        bot,
+        document_update(
+            bot,
+            1063,
+            caption="#rashtest1612-4",
+            file_id="PDF-FILE-4",
+            mime_type="application/pdf",
+            file_name="yechim.pdf",
+        ),
+    )
+    assert "faqat video yoki rasm" in session.sent_texts()[-1], session.sent_texts()[-1]
+    assert await repos.solutions.get(exam_id, 4) is None, "PDF yechim saqlandi"
+    print("[OK] Qo'llanmaydigan media (audio, PDF) rad etildi")
+
+    # 7) Admin yuklash yo'riqnomasi: inline tugma va eski reply tugmasi
+    await dp.feed_update(
+        bot, callback_update(bot, 1081, AppCallback(action="upload").pack())
+    )
+    assert "Video yoki rasm yechim yuklash" in session.sent_texts()[-1], session.sent_texts()[-1]
+
     await dp.feed_update(bot, message_update(bot, 108, UPLOAD_SOLUTION_BUTTON))
-    assert "Video/media yechim yuklash" in session.sent_texts()[-1]
+    assert "Video yoki rasm yechim yuklash" in session.sent_texts()[-1]
+    print("[OK] «🎬 Yechim yuklash»: inline va reply tugmalari yo'riqnoma berdi")
 
     saved_admins = config.ADMIN_IDS
     config.ADMIN_IDS = frozenset()
@@ -395,9 +557,42 @@ async def check_solution_flow(bot, session, dp, repos) -> None:
         )
         assert "Mavjud komandalar" in session.sent_texts()[-1], session.sent_texts()[-1]
         assert await repos.solutions.get(exam_id, 2) is None, "admin bo'lmagan yuklay oldi"
+
+        # Soxta inline callback ham rad etiladi (tugma o'quvchiga ko'rsatilmasa ham).
+        await dp.feed_update(
+            bot, callback_update(bot, 1091, AppCallback(action="upload").pack())
+        )
+        alert = [call for call in session.calls if isinstance(call, AnswerCallbackQuery)][-1]
+        assert "faqat o'qituvchi" in (alert.text or ""), alert
     finally:
         config.ADMIN_IDS = saved_admins
     print("[OK] Ruxsat nazorati: oddiy o'quvchi video yuklay olmaydi")
+
+    # 7b) Panel deep-link'i: `/start s_<kod>_<belgi>` → IZOH YOZMASDAN yuklash
+    await dp.feed_update(bot, start_deep_link_update(bot, 118, "s_RASHTEST1612_2"))
+    prompt = session.sent_texts()[-1]
+    assert "izoh yozish shart emas" in prompt, prompt
+    assert "RASHTEST1612 · 2" in prompt, prompt
+
+    await dp.feed_update(bot, video_update(bot, 119, caption="", file_id="VIDEO-DEEP-2"))
+    deep_saved = await repos.solutions.get(exam_id, 2)
+    assert deep_saved is not None and deep_saved.solution_file_id == "VIDEO-DEEP-2", deep_saved
+    assert deep_saved.type is SolutionType.VIDEO, deep_saved
+    print("[OK] Deep-link: «/start s_RASHTEST1612_2» → izohsiz video 2-savolga saqlandi")
+
+    # Deep-link faqat admin uchun: oddiy o'quvchi oddiy menyuni ko'radi
+    saved_admins = config.ADMIN_IDS
+    config.ADMIN_IDS = frozenset()
+    try:
+        await dp.feed_update(bot, start_deep_link_update(bot, 120, "s_RASHTEST1612_4"))
+        assert "Assalomu alaykum" in session.sent_texts()[-1], session.sent_texts()[-1]
+        # Holat yoqilmagani va admin emasligi uchun media qabul qilinmaydi
+        await dp.feed_update(bot, video_update(bot, 121, caption="", file_id="VIDEO-NO-TARGET"))
+        assert "Mavjud komandalar" in session.sent_texts()[-1], session.sent_texts()[-1]
+        assert await repos.solutions.get(exam_id, 4) is None, "admin bo'lmagan deep-link ishladi"
+    finally:
+        config.ADMIN_IDS = saved_admins
+    print("[OK] Deep-link: admin bo'lmagan foydalanuvchida holat yoqilmaydi")
 
     # 8) Sahifalash: 7 ta imtihon → «Sahifa 1/2 (jami: 7 ta test)»
     for index in range(6):
@@ -429,11 +624,14 @@ async def check_solution_flow(bot, session, dp, repos) -> None:
     assert "Sahifa 1/2 (jami: 7 ta test)" in last_edit(session).text
     print("[OK] Sahifalash: «⬅️ Oldingi» / «Keyingi ➡️» va «Sahifa 1/2 (jami: 7 ta test)»")
 
-    # 9) «🏡 Asosiy menyu» tugmasi asosiy menyuni qaytaradi
+    # 9) «🏡 Asosiy menyu» tugmasi asosiy inline menyuni qaytaradi
     await dp.feed_update(bot, callback_update(bot, 113, AnalysisCallback(action="home").pack()))
-    home = session.last()
-    assert isinstance(home, SendMessage) and "Web App" in home.text, home.text
-    print("[OK] «🏡 Asosiy menyu» tugmasi reply + inline menyuni qaytardi")
+    home = last_edit(session)
+    assert "Assalomu alaykum" in home.text, home.text
+    home_labels = [button.text for row in home.reply_markup.inline_keyboard for button in row]
+    assert "🔍 Test tahlili" in home_labels, home_labels
+    assert "🏡 Asosiy menyu" in home_labels, home_labels
+    print("[OK] «🏡 Asosiy menyu» tugmasi inline menyuni qaytardi (reply klaviatura yo'q)")
 
 
 def last_edit(session):
@@ -476,6 +674,8 @@ async def main() -> None:
         await check_commands(bot, session, dp)
         await check_new_exam_wizard(bot, session, dp, repos)
         await check_solution_flow(bot, session, dp, repos)
+        await check_regrade(bot, session, dp, repos)
+        await check_report(bot, session, dp, repos)
     finally:
         await bot.session.close()
         await db.close()
@@ -518,6 +718,26 @@ def message_update(bot: Bot, update_id: int, text: str) -> Update:
     return Update.model_validate({"update_id": update_id, "message": message}, context={"bot": bot})
 
 
+def start_deep_link_update(bot: Bot, update_id: int, payload: str) -> Update:
+    """`/start <payload>` xabarini imitatsiya qiladi (panel deep-link'i).
+
+    Telegram'da `bot_command` entity faqat komandani qamraydi (`/start`) —
+    payload undan keyin alohida keladi.
+    """
+    text = f"/start {payload}"
+    message: dict = {
+        "message_id": update_id,
+        "date": NOW,
+        "chat": {"id": USER_ID, "type": "private"},
+        "from": USER_JSON,
+        "text": text,
+        "entities": [{"type": "bot_command", "offset": 0, "length": len("/start")}],
+    }
+    return Update.model_validate(
+        {"update_id": update_id, "message": message}, context={"bot": bot}
+    )
+
+
 def video_update(bot: Bot, update_id: int, *, caption: str, file_id: str) -> Update:
     """Admin yuborgan video xabarni (izohi bilan) imitatsiya qiladi."""
     message: dict = {
@@ -532,6 +752,79 @@ def video_update(bot: Bot, update_id: int, *, caption: str, file_id: str) -> Upd
             "width": 1280,
             "height": 720,
             "duration": 120,
+            "file_size": 5_000_000,
+        },
+    }
+    return Update.model_validate(
+        {"update_id": update_id, "message": message}, context={"bot": bot}
+    )
+
+
+def photo_update(bot: Bot, update_id: int, *, caption: str, file_id: str) -> Update:
+    """Admin yuborgan rasm xabarni (izohi bilan) imitatsiya qiladi."""
+    message: dict = {
+        "message_id": update_id,
+        "date": NOW,
+        "chat": {"id": USER_ID, "type": "private"},
+        "from": USER_JSON,
+        "caption": caption,
+        "photo": [
+            {
+                "file_id": file_id,
+                "file_unique_id": f"unique-{file_id}",
+                "width": 1280,
+                "height": 960,
+                "file_size": 250_000,
+            }
+        ],
+    }
+    return Update.model_validate(
+        {"update_id": update_id, "message": message}, context={"bot": bot}
+    )
+
+
+def document_update(
+    bot: Bot,
+    update_id: int,
+    *,
+    caption: str,
+    file_id: str,
+    mime_type: str,
+    file_name: str,
+) -> Update:
+    """Admin yuborgan hujjat xabarni imitatsiya qiladi (PDF/DOCX va h.k.)."""
+    message: dict = {
+        "message_id": update_id,
+        "date": NOW,
+        "chat": {"id": USER_ID, "type": "private"},
+        "from": USER_JSON,
+        "caption": caption,
+        "document": {
+            "file_id": file_id,
+            "file_unique_id": f"unique-{file_id}",
+            "file_name": file_name,
+            "mime_type": mime_type,
+            "file_size": 400_000,
+        },
+    }
+    return Update.model_validate(
+        {"update_id": update_id, "message": message}, context={"bot": bot}
+    )
+
+
+def audio_update(bot: Bot, update_id: int, *, caption: str, file_id: str) -> Update:
+    """Admin yuborgan audio xabarni imitatsiya qiladi (qo'llanmaydigan media)."""
+    message: dict = {
+        "message_id": update_id,
+        "date": NOW,
+        "chat": {"id": USER_ID, "type": "private"},
+        "from": USER_JSON,
+        "caption": caption,
+        "audio": {
+            "file_id": file_id,
+            "file_unique_id": f"unique-{file_id}",
+            "duration": 10,
+            "file_size": 100_000,
         },
     }
     return Update.model_validate(

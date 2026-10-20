@@ -186,12 +186,12 @@ def test_extreme_cases() -> None:
     best = rasch.evaluate(questions, answers_for(questions, len(questions)))
     assert best.is_extreme and best.standard_error is None
     assert abs(best.theta - config.THETA_BOUND) < TOL
-    assert abs(best.scaled_score - 100.0) < TOL
+    assert abs(best.scaled_score - config.SCALED_CAP_MAX) < TOL  # 100 emas (91)
 
     worst = rasch.evaluate(questions, answers_for(questions, 0))
     assert worst.is_extreme and worst.standard_error is None
     assert abs(worst.theta + config.THETA_BOUND) < TOL
-    assert abs(worst.scaled_score - 0.0) < TOL
+    assert abs(worst.scaled_score - config.SCALED_CAP_MIN) < TOL  # 0 emas (9)
 
     # Javob berilmagan savollar ham noto'g'ri (u = 0) hisoblanadi
     blank = rasch.evaluate(questions, {})
@@ -205,19 +205,23 @@ def test_extreme_cases() -> None:
 # ---------------------------------------------------------------------------
 def test_scaled_score_mapping() -> None:
     assert abs(rasch.theta_to_scaled(0.0) - 50.0) < TOL
-    assert abs(rasch.theta_to_scaled(-config.THETA_BOUND) - 0.0) < TOL
-    assert abs(rasch.theta_to_scaled(config.THETA_BOUND) - 100.0) < TOL
+    # Chekka θ → cap qiymat (masalan 9 / 91), 0 / 100 EMAS
+    assert abs(rasch.theta_to_scaled(-config.THETA_BOUND) - config.SCALED_CAP_MIN) < TOL
+    assert abs(rasch.theta_to_scaled(config.THETA_BOUND) - config.SCALED_CAP_MAX) < TOL
+    # Chekka bo'lmagan ballar tegilmaydi
     assert abs(rasch.theta_to_scaled(-1.5) - 25.0) < TOL
     assert abs(rasch.theta_to_scaled(1.5) - 75.0) < TOL
+    assert abs(rasch.theta_to_scaled(-2.0) - 16.6667) < 1e-3
+    assert abs(rasch.theta_to_scaled(2.0) - 83.3333) < 1e-3
 
-    # Chegaradan tashqaridagi θ qiymatlari 0..100 ga siqiladi
-    assert rasch.theta_to_scaled(-9.9) == 0.0
-    assert rasch.theta_to_scaled(9.9) == 100.0
+    # Chegaradan tashqaridagi θ ham cap ichida qoladi
+    assert rasch.theta_to_scaled(-9.9) == config.SCALED_CAP_MIN
+    assert rasch.theta_to_scaled(9.9) == config.SCALED_CAP_MAX
 
-    # Teskari o'tkazish ham to'g'ri ishlaydi
-    for theta in (-2.5, -1.0, 0.0, 1.0, 2.5):
+    # Teskari o'tkazish cap ichida (chekka emas) to'g'ri ishlaydi
+    for theta in (-2.0, -1.0, 0.0, 1.0, 2.0):
         assert abs(rasch.scaled_to_theta(rasch.theta_to_scaled(theta)) - theta) < 1e-9
-    print("[OK] Scaled score: θ = -3 → 0, θ = 0 → 50, θ = +3 → 100")
+    print("[OK] Scaled score: θ = -3 → 9, θ = 0 → 50, θ = +3 → 91 (qisilgan)")
 
 
 # ---------------------------------------------------------------------------
@@ -227,9 +231,20 @@ def test_labels() -> None:
     assert rasch.difficulty_label(-2.0) == "juda oson"
     assert rasch.difficulty_label(0.0) == "o'rtacha"
     assert rasch.difficulty_label(2.0) == "juda qiyin"
-    assert rasch.ability_level(30.0) == "boshlang'ich daraja"
-    assert rasch.ability_level(90.0) == "yuqori daraja"
-    print("[OK] Izoh yordamchilari (qiyinchilik va daraja yorliqlari)")
+    # Sertifikat darajalari (milliy shkala): NC / C / C+ / B / B+ / A / A+
+    assert rasch.ability_level(45.9) == "NC"
+    assert rasch.ability_level(46.0) == "C"
+    assert rasch.ability_level(49.9) == "C"
+    assert rasch.ability_level(50.0) == "C+"
+    assert rasch.ability_level(55.0) == "B"
+    assert rasch.ability_level(60.0) == "B+"
+    assert rasch.ability_level(65.0) == "A"
+    assert rasch.ability_level(70.0) == "A+"
+    assert rasch.ability_level(100.0) == "A+"
+    # `level_code` va `ability_level` bir xil; NC tavsiyasi sertifikat yo'qligini aytadi
+    assert rasch.level_code(52.0) == rasch.ability_level(52.0) == "C+"
+    assert "sertifikat olinmadi" in rasch.level_advice(45.9).lower()
+    print("[OK] Izoh yordamchilari (qiyinchilik + sertifikat darajalari)")
 
 
 # ---------------------------------------------------------------------------

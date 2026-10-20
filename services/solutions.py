@@ -1,8 +1,9 @@
 """«🔍 Test tahlili» bo'limi va video yechimlarni yuklash mantig'i.
 
-Bu modul Telegram'ga bog'liq emas (`aiogram` import qilinmaydi): matn tahlili,
-tugma belgilari (✅/❌, A-B qismlar), sahifalash va hashtag qurish shu yerda
-bajariladi. Handler'lar faqat tayyor natijalarni ko'rsatadi.
+Bu modul Telegram'ga bog'liq emas (`aiogram` import qilinmaydi): tugma
+belgilari (✅/❌, A-B qismlar), sahifalash va hashtag qurish shu yerda
+bajariladi. Yechim faqat **video yoki rasm** (`file_id`) ko'rinishida bo'ladi —
+matnli yechim qo'llanmaydi. Handler'lar faqat tayyor natijalarni ko'rsatadi.
 
 Ikki oqim
 ---------
@@ -21,7 +22,7 @@ from dataclasses import dataclass
 from typing import Final, Mapping, Sequence
 
 from database.models import PART_WHOLE, Exam, ExamSubmission, normalize_part
-from services import answer_key, exam_service
+from services import answer_key, exam_service, scoring
 
 # Bir sahifada ko'rsatiladigan imtihonlar soni (sahifalash uchun).
 PAGE_SIZE: Final[int] = 6
@@ -52,17 +53,36 @@ UZ_MONTHS: Final[tuple[str, ...]] = (
 # ---------------------------------------------------------------------------
 # Imtihon tugmasi va sahifalash
 # ---------------------------------------------------------------------------
+def _short_label(text: str, limit: int) -> str:
+    """Tugma matni uchun qisqartirish (Telegram 64 belgi chegarasi)."""
+    clean = " ".join(str(text or "").split())
+    return clean if len(clean) <= limit else clean[: limit - 1] + "…"
+
+
 def exam_label(exam: Exam) -> str:
-    """Imtihon tugmasidagi matn: «📊 RASH EXAM 12-fevral tahlili».
+    """Imtihon tugmasidagi matn: «📊 12-fevral · RASH EXAM · EXAM01».
 
     Sana imtihon boshlanish vaqtidan (mahalliy zona, `config.TIMEZONE`)
-    olinadi. Vaqt buzuq bo'lsa — imtihon nomi ishlatiladi.
+    olinadi. Sana buzuq bo'lsa — faqat nom va kod ko'rsatiladi. Nom va kod
+    qisqartiriladi: bir kunda bir nechta test bo'lsa ham tugmalar farqlanadi.
     """
+    title = _short_label(exam.title, 20)
+    code = _short_label(exam.test_code, 12)
     try:
         local = exam_service.to_local(exam.start_time)
     except (TypeError, ValueError):
-        return f"📊 RASH EXAM ({exam.title}) tahlili"
-    return f"📊 RASH EXAM {local.day}-{UZ_MONTHS[local.month - 1]} tahlili"
+        return f"📊 {title} · {code}"
+    return f"📊 {local.day}-{UZ_MONTHS[local.month - 1]} · {title} · {code}"
+
+
+def result_locked(exam: Exam, now_iso: str) -> bool:
+    """Yechimlar hali e'lon qilinmaganmi? (`result_time` kelmagunicha — True).
+
+    Yechim to'g'ri javobni ko'rsatadi, shu sababli natijalar e'lon qilingunicha
+    ochilmasligi kerak (imtihon tozaligi). «Yakunlash»dan keyin kelgan natija
+    xabaridagi tugmalar ham shu qulf orqali himoyalanadi.
+    """
+    return exam.result_time > now_iso
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,8 +176,8 @@ def parse_solution_target(text: str) -> tuple[SolutionTarget, str] | None:
         (maqsad, matnning qolgan qismi) — format tanilgan bo'lsa;
         None — tanilmagan bo'lsa (savol raqami yo'q, raqam 0 va h.k.).
 
-    Matnli yechim ham shu yo'l bilan o'qiladi:
-        «/add_solution rashtest1612 3 — 2x+5=13 → x=4» → matn qismi qoladi.
+    Media izohi (caption) shu funksiya orqali o'qiladi; undan keyin ortiqcha
+    matn qolsa — format noto'g'ri hisoblanadi (`parse_solution_caption`).
     """
     raw = text or ""
     match = _TARGET_RE.match(raw)
@@ -215,9 +235,35 @@ class QuestionUnit:
         """Tugma matni: «✅ 1», «❌ 3», «✅ 36a», «❌ 36b»."""
         return f"{'✅' if self.is_correct else '❌'} {self.number}{self.part}"
 
+    @property
+    def style(self) -> str:
+        """Tugma rangi (Bot API `InlineKeyboardButton.style`).
+
+        To'g'ri javob — yashil («success»), xato javob — qizil («danger»).
+        Eski Telegram ilovalarida rang ko'rinmasa ham, matndagi ✅/❌ belgi
+        saqlanadi (zaxira).
+        """
+        return "success" if self.is_correct else "danger"
+
+
+def _item_results(
+    exam: Exam, submission: ExamSubmission | None
+) -> tuple[scoring.ItemScoreResult, ...]:
+    """`build_item_results` natijalari (kalit buzuq bo'lsa — bo'sh to'plam)."""
+    submitted = submission.submitted_answers if submission is not None else ""
+    try:
+        context = scoring.ScoringContext.from_exam(exam)
+        return scoring.build_item_results(context, submitted)
+    except answer_key.AnswerKeyError:
+        return ()
+
 
 def question_marks(exam: Exam, submission: ExamSubmission | None) -> list[bool]:
     """Har bir savol uchun to'g'ri (True) / noto'g'ri (False) natijalar ro'yxati.
+
+    Hisoblash **`services/scoring.py`** da (yagona nuqta) — baholash va hisobot
+    bilan aynan bir xil qoida ishlatiladi: 1–32/33–35 → variant harfi
+    (A–F), 36–45 → sonli qiymat; eski kalitlarda esa A–D harflar.
 
     Kalit yoki o'quvchi javoblari buzuq bo'lsa — barcha savollar «noto'g'ri»
     deb olinadi (tahlil bo'limi ishlashda davom etadi).
@@ -226,19 +272,37 @@ def question_marks(exam: Exam, submission: ExamSubmission | None) -> list[bool]:
     if total == 0:
         return []
 
-    try:
-        correct = answer_key.parse_answer_key(exam.answer_key, total)
-        given = answer_key.parse_submitted(
-            submission.submitted_answers if submission is not None else "", total
-        )
-    except answer_key.AnswerKeyError:
+    results = _item_results(exam, submission)
+    if not results:
         return [False] * total
-    return answer_key.compare(correct, given)
+    return [result.is_correct for result in results]
 
 
 def raw_score(exam: Exam, submission: ExamSubmission | None) -> int:
     """O'quvchining shu imtihondagi to'g'ri javoblari soni."""
     return sum(question_marks(exam, submission))
+
+
+def _labeled_marks(exam: Exam, submission: ExamSubmission | None) -> list[tuple[str, int, bool]]:
+    """Har bir savol uchun ``(label, position, is_correct)`` ro'yxati.
+
+    Kalit buzuq bo'lsa — barcha savollar «noto'g'ri» (`question_marks` bilan
+    bir xil qoida), belgilar esa pozitsiya ko'rinishida bo'ladi.
+    """
+    total = max(int(exam.total_questions or 0), 0)
+    if total == 0:
+        return []
+    results = _item_results(exam, submission)
+    if not results:
+        return [(str(position), position, False) for position in range(1, total + 1)]
+    return [
+        (
+            result.label or str(result.question_number),
+            result.question_number,
+            result.is_correct,
+        )
+        for result in results
+    ]
 
 
 def build_question_units(
@@ -248,24 +312,42 @@ def build_question_units(
 ) -> list[QuestionUnit]:
     """Savol tugmalari ro'yxatini quradi.
 
-    A/B qismli savollar alohida tugma bo'ladi: «✅ 36a», «❌ 36b» (qismlar
-    `parts` xaritasidan olinadi — `SolutionRepository.parts_for_exam`).
+    Qismli savollar **alohida** tugma bo'ladi: «✅ 36a», «❌ 36b». Qismlar
+    baholash natijasidagi belgi (`36a`, `36b`) bo'yicha aniqlanadi — shu sababli
+    har bir qism o'z ✅/❌ belgisini oladi.
 
-    Izoh: `user_answers.submitted_answers` har bir savol uchun bitta harf
-    saqlaydi, shu sababli 36-savolning ikkala qismi bir xil belgi oladi
-    (qismlar bo'yicha alohida javob saqlash — keyingi bosqich ishi).
+    Eski (qismsiz) imtihonlarda xulq **avvalgidek**: qismlar `parts` xaritasidan
+    olinadi (`SolutionRepository.parts_for_exam`) va ikkala qism bir xil belgi
+    oladi (`user_answers.submitted_answers` savol uchun bitta javob saqlaydi).
     """
     parts = parts or {}
+    marks = _labeled_marks(exam, submission)
     units: list[QuestionUnit] = []
 
-    for index, is_correct in enumerate(question_marks(exam, submission), start=1):
-        unit_parts = sorted({normalize_part(part) for part in parts.get(index, ()) if part})
-        if not unit_parts:
-            units.append(QuestionUnit(number=index, is_correct=is_correct))
-            continue
-        for part in unit_parts:
-            units.append(QuestionUnit(number=index, part=part, is_correct=is_correct))
+    if not any(label != str(position) for label, position, _ in marks):
+        # Legacy (qismsiz): savol raqami + `parts` xaritasi — o'zgarishsiz.
+        for index, (_label, _position, is_correct) in enumerate(marks, start=1):
+            unit_parts = sorted(
+                {normalize_part(part) for part in parts.get(index, ()) if part}
+            )
+            if not unit_parts:
+                units.append(QuestionUnit(number=index, is_correct=is_correct))
+                continue
+            for part in unit_parts:
+                units.append(
+                    QuestionUnit(number=index, part=part, is_correct=is_correct)
+                )
+        return units
 
+    # Qismli forma: har bir belgi (`36a`, `36b`) — alohida tugma.
+    for label, position, is_correct in marks:
+        try:
+            number, part = answer_key.split_label(label)
+        except ValueError:  # kutilmagan belgi — pozitsiya bo'yicha qoldiramiz
+            number, part = position, None
+        units.append(
+            QuestionUnit(number=number, part=part or PART_WHOLE, is_correct=is_correct)
+        )
     return units
 
 

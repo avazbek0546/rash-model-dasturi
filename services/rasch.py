@@ -327,7 +327,10 @@ def theta_to_scaled(
 
     Chiziqli o'tkazish:
         ball = 100 · (θ - θ_min) / (θ_max - θ_min)
-    Natija [0, 100] oralig'iga siqiladi (θ chegaradan tashqariga chiqsa ham).
+
+    Natija avval ``[0, 100]`` ga, so'ng ``[SCALED_CAP_MIN, SCALED_CAP_MAX]``
+    (masalan ``[9, 91]``) ga **qisiladi** — 0 va 100 ko'rinmasligi uchun
+    (ishonchlilik). Oddiy ballar tegilmaydi, faqat eng chet qiymatlar.
     """
     low = -config.THETA_BOUND if theta_min is None else float(theta_min)
     high = config.THETA_BOUND if theta_max is None else float(theta_max)
@@ -336,7 +339,8 @@ def theta_to_scaled(
 
     span = config.SCALED_MAX - config.SCALED_MIN
     scaled = config.SCALED_MIN + (theta - low) * span / (high - low)
-    return _clip(scaled, config.SCALED_MIN, config.SCALED_MAX)
+    bounded = _clip(scaled, config.SCALED_MIN, config.SCALED_MAX)
+    return _clip(bounded, config.SCALED_CAP_MIN, config.SCALED_CAP_MAX)
 
 
 def scaled_to_theta(
@@ -367,30 +371,88 @@ def difficulty_label(difficulty: float) -> str:
     return "juda qiyin"
 
 
+#: Milliy sertifikat darajalari: `(pastki chegara, kod, tavsiya)` — pastdan yuqoriga.
+#: Chegaralar INKLYUZIV (`,,>=`` ): `46.0 → C`, `70.0 → A+`. `< 46 → NC`
+#: (sertifikat olinmadi).
+CERTIFICATE_LEVELS: tuple[tuple[float, str, str], ...] = (
+    (
+        0.0,
+        "NC",
+        "Afsus, sertifikat olinmadi (NC). Asosiy mavzularni mustahkamlab, "
+        "qayta urinib ko'ring.",
+    ),
+    (
+        46.0,
+        "C",
+        "Sertifikat C darajasi. Oson va o'rtacha savollardagi xatolarni tuzatsangiz, "
+        "natija oshadi.",
+    ),
+    (
+        50.0,
+        "C+",
+        "Sertifikat C+ darajasi. Barqarorlikni oshirib, B darajaga chiqish mumkin.",
+    ),
+    (
+        55.0,
+        "B",
+        "Sertifikat B darajasi. Qiyinroq savollar (trigonometriya, progressiyalar) "
+        "ustida ishlang.",
+    ),
+    (
+        60.0,
+        "B+",
+        "Sertifikat B+ darajasi. Qiyin savollarda aniqlikni oshiring — A daraja yaqin.",
+    ),
+    (
+        65.0,
+        "A",
+        "Sertifikat A darajasi. Faqat eng qiyin savollarda xatolar qoldi.",
+    ),
+    (
+        70.0,
+        "A+",
+        "Sertifikat A+ darajasi! Endi olimpiada tipidagi noan'anaviy masalalarga "
+        "o'tish mumkin.",
+    ),
+)
+
+
+def level_code(scaled_score: float) -> str:
+    """0..100 ball bo'yicha **sertifikat darajasi kodi**.
+
+    Chegaralar (pastdan yuqoriga, inklyuziv)::
+
+        < 46    → NC   (sertifikat olinmadi)
+        46–49.9 → C
+        50–54.9 → C+
+        55–59.9 → B
+        60–64.9 → B+
+        65–69.9 → A
+        >= 70   → A+
+    """
+    score = float(scaled_score)
+    code = CERTIFICATE_LEVELS[0][1]
+    for threshold, level, _advice in CERTIFICATE_LEVELS:
+        if score < threshold:
+            break
+        code = level
+    return code
+
+
 def ability_level(scaled_score: float) -> str:
-    """0..100 ball bo'yicha o'quvchi darajasini so'z bilan ifodalaydi."""
-    if scaled_score < 40:
-        return "boshlang'ich daraja"
-    if scaled_score < 55:
-        return "o'rtachadan past"
-    if scaled_score < 70:
-        return "o'rtacha daraja"
-    if scaled_score < 85:
-        return "yaxshi daraja"
-    return "yuqori daraja"
+    """O'quvchi darajasi (sertifikat kodi) — :func:`level_code` bilan bir xil."""
+    return level_code(scaled_score)
 
 
 def level_advice(scaled_score: float) -> str:
-    """O'quvchiga qisqa tavsiya (natija izohida ko'rsatiladi)."""
-    if scaled_score < 40:
-        return "Asosiy tushunchalarni (arifmetika, kasrlar, sodda tenglamalar) takrorlashdan boshlang."
-    if scaled_score < 55:
-        return "Oson va o'rtacha savollarda xatolar bor — ularni mustahkamlash kerak."
-    if scaled_score < 70:
-        return "Asos yaxshi. Endi qiyinroq savollar (trigonometriya, progressiyalar) ustida ishlang."
-    if scaled_score < 85:
-        return "Natija yaxshi. Qiyin savollarda barqarorlikni oshirishga harakat qiling."
-    return "A'lo daraja! Endi olimpiada tipidagi noan'anaviy masalalarga o'tish mumkin."
+    """O'quvchiga qisqa tavsiya (daraja bo'yicha; natija izohida ko'rsatiladi)."""
+    score = float(scaled_score)
+    advice = CERTIFICATE_LEVELS[0][2]
+    for threshold, _level, text in CERTIFICATE_LEVELS:
+        if score < threshold:
+            break
+        advice = text
+    return advice
 
 
 def build_responses(

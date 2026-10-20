@@ -15,23 +15,31 @@ Serverni `main.py` bot bilan bitta `asyncio` event loop'ida ishga tushiradi:
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from aiohttp import web
 
 import config
 from database.repository import Repositories
-from web import api
+from web import api, api_admin, api_v2
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(repos: Repositories) -> web.Application:
-    """`aiohttp.web` ilovasini yaratadi (static + API marshrutlari bilan)."""
+def create_app(repos: Repositories, *, bot: Any = None) -> web.Application:
+    """`aiohttp.web` ilovasini yaratadi (static + API marshrutlari bilan).
+
+    `bot` — ixtiyoriy Telegram bot: berilsa, «Yakunlash»dan keyin o'quvchiga
+    natija xabari bot chatiga yuboriladi (`web/api.py`). Testlarda `None`.
+    """
     app = web.Application(middlewares=[api.error_middleware])
     app["repos"] = repos
+    app["bot"] = bot
 
     # --- API marshrutlari ---------------------------------------------------
-    api.setup_routes(app)
+    api.setup_routes(app)      # v1 (o'zgarmagan: /api/verify-code, /api/submit, ...)
+    api_v2.setup_routes(app)   # item-level o'quvchi oqimi (/api/v2/*)
+    api_admin.setup_routes(app)  # admin paneli (/api/v2/me, /api/v2/admin/*)
 
     # --- Mini App fayllari --------------------------------------------------
     async def index(request: web.Request) -> web.StreamResponse:
@@ -43,7 +51,12 @@ def create_app(repos: Repositories) -> web.Application:
                 "Web App fayllari topilmadi (webapp/index.html yo'q). "
                 "Loyiha to'liq nusxalanganini tekshiring.",
             )
-        return web.FileResponse(index_file)
+        # `no-cache` — Telegram WebView Mini App ni qattiq keshlaydi; shu sarlavha
+        # tufayli yangilangan sahifa har ochilganda qaytadan olinadi.
+        return web.FileResponse(
+            index_file,
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
 
     app.router.add_get("/", index)
     app.router.add_get("/index.html", index)
@@ -58,11 +71,12 @@ def create_app(repos: Repositories) -> web.Application:
 async def start_server(
     repos: Repositories,
     *,
+    bot: Any = None,
     host: str | None = None,
     port: int | None = None,
 ) -> web.AppRunner:
     """Serverni ishga tushiradi va `AppRunner` ni qaytaradi (to'xtatish uchun)."""
-    app = create_app(repos)
+    app = create_app(repos, bot=bot)
     runner = web.AppRunner(app)
     await runner.setup()
 

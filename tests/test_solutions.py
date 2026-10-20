@@ -2,7 +2,7 @@
 
 Tekshiriladi:
     1. `solutions` jadvali va `Solution` modeli (`solution_file_id`,
-       `solution_type`, `solution_text`, A/B `part`);
+       `solution_type`, A/B `part`) — matnli yechim yo'q;
     2. admin izohini tahlil qilish: «rashtest1612 3», «#rashtest1612-3», «36a»;
     3. repository: upsert (qayta yuklashda yangilanadi), A/B qismlar, o'chirish,
        imtihon o'chirilganda CASCADE;
@@ -85,11 +85,11 @@ async def check_schema(db: Database) -> None:
         "part",
         "solution_type",
         "solution_file_id",
-        "solution_text",
         "created_by",
         "created_at",
         "updated_at",
     } <= columns, columns
+    assert "solution_text" not in columns, "matnli yechim ustuni qolgan"
 
     video = Solution(
         exam_id=1,
@@ -100,10 +100,22 @@ async def check_schema(db: Database) -> None:
     )
     assert video.label == "36a" and video.type is SolutionType.VIDEO and video.is_file
 
-    text = Solution(exam_id=1, question_number=1, solution_type="text", solution_text="yechim")
-    assert text.label == "1" and text.type is SolutionType.TEXT and not text.is_file
+    photo = Solution(
+        exam_id=1,
+        question_number=1,
+        solution_type=SolutionType.PHOTO.value,
+        solution_file_id="PHOTO-ID-1",
+    )
+    assert photo.label == "1" and photo.type is SolutionType.PHOTO and photo.is_file
+
+    # Eski (matnli) yozuv: `file_id` yo'q → yechim hisoblanmaydi.
+    legacy = Solution(exam_id=1, question_number=1, solution_type="text")
+    assert legacy.label == "1" and not legacy.is_file
+
+    assert not hasattr(SolutionType, "TEXT"), "SolutionType.TEXT qolgan"
     assert SolutionType.VIDEO.title == "video yechim"
     assert SolutionType.PHOTO.title == "rasm yechim"
+    assert SolutionType.VIDEO.icon == "🎬" and SolutionType.PHOTO.icon == "🖼"
     assert normalize_part(None) == PART_WHOLE and normalize_part(" A ") == "a"
     try:
         normalize_part("c")
@@ -111,7 +123,7 @@ async def check_schema(db: Database) -> None:
         pass
     else:  # pragma: no cover
         raise AssertionError("normalize_part noto'g'ri qismni qabul qildi")
-    print("[OK] Sxema va model: solutions jadvali (file_id/type/text/part) tayyor")
+    print("[OK] Sxema va model: solutions jadvali (file_id/type/part) tayyor — matnli yechim yo'q")
 
 
 def check_captions() -> None:
@@ -147,17 +159,21 @@ def check_labels_and_pagination() -> None:
     assert solutions.solution_hashtag(TEST_CODE, 3) == "#javob-rashtest1612-3"
     assert solutions.solution_hashtag(TEST_CODE, 36, "a") == "#javob-rashtest1612-36a"
 
-    # Imtihon tugmasi matni
+    # Imtihon tugmasi matni: sana + nom + kod (bir kunda bir nechta test bo'lsa
+    # ham farqlanadi; Telegram 64 belgi chegarasidan oshmaydi).
     exam = make_exam(start_time="2026-02-12T05:00:00+00:00")
     label = solutions.exam_label(exam)
     local = exam_service.to_local(exam.start_time)
-    assert label == f"📊 RASH EXAM {local.day}-{solutions.UZ_MONTHS[local.month - 1]} tahlili"
-    assert re.fullmatch(r"📊 RASH EXAM \d{1,2}-[a-z]+ tahlili", label), label
+    assert label.startswith(f"📊 {local.day}-"), label
+    assert "RASHTEST1612" in label, label
+    assert "RASH EXAM" in label, label
+    assert len(label) <= 64, label
     if exam_service.local_zone().utcoffset(None) == timedelta(hours=5):
-        assert label == "📊 RASH EXAM 12-fevral tahlili", label
+        assert label.startswith("📊 12-fevral"), label
 
     broken = make_exam(start_time="")
-    assert "RASH EXAM" in solutions.exam_label(broken)
+    broken_label = solutions.exam_label(broken)
+    assert "RASHTEST1612" in broken_label and "RASH EXAM" in broken_label, broken_label
 
     # Sahifalash: 7 ta imtihon → 2 sahifa (6 + 1)
     exams = [make_exam(exam_id=index) for index in range(1, 8)]
@@ -192,6 +208,10 @@ def check_question_units() -> None:
     units = solutions.build_question_units(exam, submission)
     assert [unit.label for unit in units] == ["✅ 1", "✅ 2", "❌ 3", "✅ 4"], [
         unit.label for unit in units
+    ]
+    # Tugma rangi: to'g'ri — yashil («success»), xato — qizil («danger»).
+    assert [unit.style for unit in units] == ["success", "success", "danger", "success"], [
+        unit.style for unit in units
     ]
 
     # 36-savolni qismlarga bo'lamiz (a va b alohida tugma bo'ladi)
@@ -271,27 +291,47 @@ async def check_repository(repos: Repositories) -> None:
         exam_id=exam_id,
         question_number=36,
         part="b",
-        solution_type=SolutionType.TEXT.value,
-        solution_text="36b yechimi: ...",
+        solution_type=SolutionType.PHOTO.value,
+        solution_file_id="PHOTO-36B",
         created_by=ADMIN,
     )
     parts = await repos.solutions.parts_for_exam(exam_id)
     assert parts == {36: ["a", "b"]}, parts
     assert await repos.solutions.count_for_exam(exam_id) == 3
     assert await repos.solutions.count() == 3
+    assert await repos.solutions.count_files() == 3
 
     listed = await repos.solutions.list_for_exam(exam_id)
     assert [item.label for item in listed] == ["3", "36a", "36b"], [i.label for i in listed]
+    assert all(item.is_file for item in listed), [i for i in listed if not i.is_file]
 
     # Noto'g'ri qism rad etiladi
     try:
         await repos.solutions.upsert(
-            exam_id=exam_id, question_number=5, part="c", solution_type="video"
+            exam_id=exam_id,
+            question_number=5,
+            part="c",
+            solution_type="video",
+            solution_file_id="VIDEO-5",
         )
     except ValueError:
         pass
     else:  # pragma: no cover
         raise AssertionError("noto'g'ri qism («c») bazaga yozildi")
+
+    # Faylsiz yechim (matn/bo'sh) saqlanmaydi — faqat file_id qabul qilinadi.
+    for missing_file in (None, "", "   "):
+        try:
+            await repos.solutions.upsert(
+                exam_id=exam_id,
+                question_number=5,
+                solution_type="video",
+                solution_file_id=missing_file,
+            )
+        except ValueError:
+            pass
+        else:  # pragma: no cover
+            raise AssertionError(f"faylsiz yechim saqlandi: {missing_file!r}")
 
     # O'chirish
     await repos.solutions.delete(exam_id, 3)

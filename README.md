@@ -17,6 +17,39 @@ Natijalar faqat o'qituvchi belgilagan vaqtda e'lon qilinadi.
 
 ---
 
+## 📚 Arxitektura hujjatlari (`docs/`)
+
+Keyingi rivojlanish **rejasi** alohida hujjatlar to'plamida yozilgan
+(kod hali yozilmagan — bu arxitektura loyihasi):
+
+| Hujjat | Mazmuni |
+|---|---|
+| [docs/README.md](docs/README.md) | Indeks va asosiy tamoyillar |
+| [01-ARXITEKTURA](docs/01-ARXITEKTURA.md) | Komponentlar, oqimlar, xavfsizlik, texnologiya tanlovi |
+| [02-DATABASE-SCHEMA](docs/02-DATABASE-SCHEMA.md) | To'liq sxema: 34 jadval (SQLite MVP + PostgreSQL), audit, soft delete |
+| [03-QIYINCHILIK-ALGORITMI](docs/03-QIYINCHILIK-ALGORITMI.md) | **`p → b = ln((1−p)/p)`** avtomatik hisoblash, tekislash, shrinkaj, flag'lar |
+| [04-API-VA-UI-MVP](docs/04-API-VA-UI-MVP.md) | Minimal API'lar, bot oqimi, kartochkali javoblar varag'i |
+| [05-MIGRATSIYA](docs/05-MIGRATSIYA.md) | Bosqichma-bosqich ko'chirish va PostgreSQL'ga o'tish |
+| [06-RASCH-KALIBRLASH](docs/06-RASCH-KALIBRLASH.md) | JMLE kalibrlash, anchor items, equating, fit statistikasi |
+| [07-ROADMAP](docs/07-ROADMAP.md) | Keyingi 3 oy va keyingi 1 yil yo'l xaritasi |
+| [08-PSIKOMETRIK-AUDIT](docs/08-PSIKOMETRIK-AUDIT.md) | **Senior audit**: Critical/High/Medium topilmalar, yetishmayotgan jadvallar, ideal PostgreSQL sxemasi, item lifecycle, professional roadmap |
+| [09-RESPONSE-MODEL-V2](docs/09-RESPONSE-MODEL-V2.md) | **Javob saqlash modeli (yakuniy)**: 4 artefakt, uch o'qli status, autosave yo'li, immutability, testlet/LD, psixometrik majburiy maydonlar |
+| [10-MVP-PRIORITET-AUDITI](docs/10-MVP-PRIORITET-AUDIT.md) | **MVP / PHASE-2 / FUTURE tasnifi**: 12 element bahosi, 5 natija ro'yxati, murakkablik byudjeti, trigger jadvali |
+| [11-FINAL-MVP-DATABASE-MODEL](docs/11-FINAL-MVP-DATABASE-MODEL.md) | **Yakuniy MVP modeli (16 jadval)**: docs/02 tasnifi (M/P2/F/R), REMOVE sabablari, maydonlar lug'ati, Rasch uchun majburiy ma'lumotlar |
+| [12-RAILWAY-JOYLASHTIRISH](docs/12-RAILWAY-JOYLASHTIRISH.md) | **Bulutga joylashtirish (Railway Hobby $5)**: volume, port/domen avtomatikasi, healthcheck, xatolar jadvali |
+
+**Hujjatlardagi uchta muhim qoida:**
+
+1. **Savollar bazaga yuklanmaydi** — faqat pozitsiya (`position`, `part`),
+   javob kaliti va metadata saqlanadi.
+2. **O'qituvchi `b`/logit/Rasch parametrlarini kiritmaydi** — faqat test kodi,
+   javob kaliti va test metadata. Qolgan statistikani tizim hisoblaydi.
+3. **Har bir savol default holatda yaratiladi** (`b = 0.0`) va test
+   ishlangandan keyin qiyinchilik **avtomatik** hisoblanadi; yetarli ma'lumot
+   yig'ilgach (`N ≥ 200`) modul **to'liq Rasch kalibrlash** bilan almashtiriladi.
+
+---
+
 ## 📁 Loyiha strukturasi
 
 ```
@@ -28,6 +61,16 @@ Rash model dasturi/
 ├── states.py                # FSM holatlari (/new_exam ustasi uchun ExamCreateStates)
 ├── requirements.txt         # kerakli kutubxonalar
 ├── .env.example             # sozlamalar namunasi (nusxa olib .env yaratiladi)
+│
+├── docs/                    #  arxitektura hujjatlari (yangi tizim rejasi)
+│   ├── README.md            #   hujjatlar indeksi va asosiy tamoyillar
+│   ├── 01-ARXITEKTURA.md    #   komponentlar, oqimlar, xavfsizlik, stack
+│   ├── 02-DATABASE-SCHEMA.md#   to'liq sxema (SQLite + PostgreSQL)
+│   ├── 03-QIYINCHILIK-ALGORITMI.md  # p → b avtomatik hisoblash
+│   ├── 04-API-VA-UI-MVP.md  #   MVP API'lari + Mini App javoblar varag'i
+│   ├── 05-MIGRATSIYA.md     #   migratsiya va PostgreSQL'ga o'tish rejasi
+│   ├── 06-RASCH-KALIBRLASH.md   # JMLE, anchor items, equating
+│   └── 07-ROADMAP.md        #   3 oylik va 1 yillik yo'l xaritasi
 │
 ├── database/                #  ma'lumotlar bazasi qatlami
 │   ├── db.py                #   SQLite ulanishi + jadval sxemasi (Database)
@@ -56,11 +99,11 @@ Rash model dasturi/
 ├── handlers/                # 🤖 Telegram handler'lari
 │   ├── __init__.py          #   router'larni ulash (setup_routers) + LEGACY_MODULES
 │   ├── access.py            #   admin (o'qituvchi) huquqini tekshirish
-│   ├── start.py             #   /start, /help, reply menyu, Web App tugmasi
+│   ├── start.py             #   /start, /help, inline menyu, Web App tugmasi
 │   ├── webapp.py            #   /app — ilovani ochish
 │   ├── admin_exam.py        #   /new_exam ustasi (8 qadam) + /cancel
 │   ├── admin.py             #   /stats, /exams va imtihonlarni o'chirish
-│   ├── admin_solution.py    #   /add_solution — video/rasm/matn yechim yuklash (admin)
+│   ├── admin_solution.py    #   /add_solution — video/rasm yechim yuklash (admin)
 │   ├── analysis.py          #   🔍 Test tahlili — savollar gridi va yechimlar (o'quvchi)
 │   ├── fallback.py          #   boshqa xabarlar (ENG OXIRGI router)
 │   │
@@ -70,7 +113,7 @@ Rash model dasturi/
 │
 ├── keyboards/
 │   ├── inline.py            # Inline klaviaturalar (Web App menyusi, admin va tahlil tugmalari)
-│   └── reply.py             # Reply (pastdagi) menyu: «🔍 Test tahlili», «🏡 Asosiy menyu»
+│   └── reply.py             # Eski reply menyu matnlari (moslik uchun; endi ishlatilmaydi)
 │
 ├── middlewares/
 │   └── user_sync.py         # foydalanuvchini bazaga yozib boradi
@@ -109,15 +152,15 @@ copy .env.example .env
 | `BOT_TOKEN` | ✅ | @BotFather dan olingan token |
 | `ADMIN_ID` | ✅ | O'qituvchining Telegram ID si (`/new_exam`, `/exams`, `/stats`) |
 | `ADMIN_IDS` | ➖ | Qo'shimcha adminlar (vergul bilan: `111,222`) |
-| `WEBAPP_URL` | ✅* | Mini App HTTPS manzili (Telegram faqat `https://` qabul qiladi) |
-| `WEBAPP_HOST` | ➖ | Server manzili (default: `127.0.0.1`) |
-| `WEBAPP_PORT` | ➖ | Server porti (default: `8080`) |
+| `WEBAPP_URL` | ✅* | Mini App HTTPS manzili (Railway'da domen avtomatik olinadi) |
+| `WEBAPP_HOST` | ➖ | Server manzili (default: `127.0.0.1`; bulutda avtomatik `0.0.0.0`) |
+| `WEBAPP_PORT` | ➖ | Server porti (default: `8080`; Railway'da `PORT` ustun turadi) |
 | `WEBAPP_DEV_MODE` | ➖ | `1` — brauzerda `?debug_user_id=…` bilan sinash (prod'da `0`!) |
 | `INITDATA_MAX_AGE` | ➖ | `initData` amal qilish muddati, sekund (default: `86400`) |
 | `TIMEZONE` | ➖ | O'qituvchi vaqtni shu zonada kiritadi (default: `Asia/Tashkent`) |
 | `GRADING_INTERVAL` | ➖ | Baholash fon vazifasi davri, sekund (default: `30`) |
 | `MIN_TEST_CODE_LENGTH` | ➖ | Test kodi minimal uzunligi (default: `4`) |
-| `DB_PATH` | ➖ | Baza fayli (default: `data/math_bot.db`) |
+| `DB_PATH` | ➖ | Baza fayli (default: `data/math_bot.db`; Railway volume'ida avtomatik `<volume>/math_bot.db`) |
 | `THETA_BOUND` | ➖ | θ qidiruv chegarasi (default: `3.0` → `-3…+3` logit) |
 | `LOG_LEVEL` | ➖ | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 
@@ -160,6 +203,22 @@ Birinchi ishga tushirishda `data/math_bot.db` avtomatik yaratiladi va yangi
 `exams` / `user_answers` jadvallari qo'shiladi (mavjud baza buzilmaydi).
 To'xtatish: `Ctrl + C`.
 
+**4. Bulutga joylashtirish (Railway, Hobby $5/oy)**
+
+Kod bulutga tayyor: `railway.json` (start buyrug'i, healthcheck, restart
+siyosati), `.python-version` (Python 3.12) va `config.py` dagi avtomatik
+aniqlash. Railway'da faqat quyidagilar qo'lda bajariladi:
+
+1. **New Project → Deploy from GitHub repo** (`rash-model-dasturi`).
+2. **Settings → Volumes → Add Volume**, mount path: `/data` (baza saqlanishi uchun).
+3. **Variables**: `BOT_TOKEN`, `ADMIN_ID`, `WEBAPP_DEV_MODE=0`
+   (`PORT`, `WEBAPP_HOST`, `WEBAPP_URL`, `DB_PATH` avtomatik olinadi).
+4. **Settings → Networking → Generate Domain** (HTTPS domen).
+5. Replicas `1`, Serverless/App Sleeping `OFF`.
+
+To'liq yo'riqnoma, tekshirish ro'yxati va xatolar jadvali:
+[docs/12-RAILWAY-JOYLASHTIRISH.md](docs/12-RAILWAY-JOYLASHTIRISH.md).
+
 ---
 
 ## 🤖 Botdan foydalanish
@@ -168,10 +227,10 @@ To'xtatish: `Ctrl + C`.
 
 | Komanda / tugma | Vazifasi |
 |---|---|
-| `/start` | Kutib olish, reply menyu («🔍 Test tahlili») va Web App tugmasi |
-| 🔍 Test tahlili / `/tahlil` | Topshirilgan imtihonlarning savol-savol tahlili va video yechimlari |
-| 🏡 Asosiy menyu | Reply menyudan asosiy menyuga qaytish |
-| 🚀 Imtihonlar ilovasi / `/app` | Mini App'ni ochadi (Navbat, Natijalar, Offline, Profil) |
+| `/start` | Kutib olish va **bitta inline menyu** (pastdagi reply klaviatura ishlatilmaydi) |
+| 📝 Javoblarni belgilash / `/app` | **Birinchi tugma:** Mini App'ni ochadi (Navbat, Natijalar, Offline, Profil) |
+| 🔍 Test tahlili / `/tahlil` | Inline tugma: topshirilgan imtihonlarning savol-savol tahlili va video/rasm yechimlari |
+| 🏡 Asosiy menyu | Inline tugma: asosiy menyuni yangilaydi (har bir bo'limdan qaytish uchun) |
 | `/help` | Komandalar ro'yxati |
 
 ### O'qituvchi (admin) uchun
@@ -181,7 +240,7 @@ To'xtatish: `Ctrl + C`.
 | `/new_exam` | Yangi imtihon yaratish ustasi (8 qadam, tugmalar bilan) |
 | `/exams` | Imtihonlar ro'yxati; «🗑» tugmasi bilan o'chirish (javoblar ham o'chadi) |
 | `/stats` | O'quvchilar, imtihonlar, qabul qilingan javoblar va yechimlar statistikasi |
-| `/add_solution` | Video/rasm/hujjat yoki matnli yechimni bazaga yuklash (quyida) |
+| `/add_solution` | Video yoki rasm yechim yuklash yo'riqnomasi (quyida) |
 | `/cancel` | Ustani istalgan qadamda bekor qilish |
 
 ### 🔍 «Test tahlili» bo'limi (o'quvchi)
@@ -212,8 +271,8 @@ yechimi.
    Klaviatura ostida doim «⬅️ Testlar ro'yxati» va «🏡 Asosiy menyu» turadi.
 
 3. **Savol yechimi.** Savol tugmasi bosilganda bazadan shu savolning yechimi
-   yuboriladi — video (`file_id`), rasm, hujjat yoki matnli tahlil. Post oxiriga
-   hashtag qo'shiladi:
+   yuboriladi — **video yoki rasm** (`file_id`). Matnli yechim qo'llanmaydi.
+   Post oxiriga hashtag qo'shiladi:
 
    ```
    #javob-rashtest1612-3        # 3-savol
@@ -223,11 +282,14 @@ yechimi.
    Yechim yuklanmagan bo'lsa — ogohlantirish ko'rsatiladi (tugma ishlashda
    davom etadi).
 
-### 🎬 Video/media yechimlarni yuklash (o'qituvchi)
+### 🎬 Video va rasm yechimlarni yuklash (o'qituvchi)
 
-Eng sodda oqim — **video yuborib, izohiga kod va savol raqamini yozish**:
+Yechim faqat **video** yoki **rasm** bo'ladi — matnli yechim qo'llanmaydi
+(audio, animatsiya va dumaloq video ham qabul qilinmaydi).
 
-1. Admin botga videoni (yoki rasmni, hujjatni) yuboradi;
+Eng sodda oqim — **video/rasm yuborib, izohiga kod va savol raqamini yozish**:
+
+1. Admin botga videoni (yoki rasmni) yuboradi;
 2. izoh (caption) sifatida test kodi va savol raqami yoziladi:
 
    ```
@@ -241,8 +303,33 @@ Eng sodda oqim — **video yuborib, izohiga kod va savol raqamini yozish**:
    ✅ RASHTEST1612 ning 3-savoliga video yechim muvaffaqiyatli saqlandi!
    ```
 
-   Matnli tahlil uchun: `/add_solution rashtest1612 3 2x+5=13 → x=4`.
    Bir xil savolga qayta yuklansa, eski yozuv **yangilanadi** (dublikat bo'lmaydi).
+   Rasm/video «fayl sifatida» yuborilsa ham qabul qilinadi (`document` turi).
+
+**Hajm chegaralari (Telegram Bot API):** video — **50 MB** gacha (720p tavsiya
+etiladi), rasm — **10 MB** gacha. Chegaradan katta fayl saqlanadi, lekin
+o'qituvchi ogohlantiriladi (o'quvchida ochilmasa — 720p qilib qayta yuklash
+kerak).
+
+#### 🎬 «Yechimlar» paneli (Mini App) — qamrov va tez yuklash
+
+Mini App'dagi **«⚙️ Test yaratish»** tabida har bir imtihon yonida
+**«🎬 Yechim»** tugmasi bor. U:
+
+* **qamrovni** ko'rsatadi — `12 / 45 (27%)` va savollar to'ri
+  (`🎬 1`, `🖼 3`, `⬜ 4`): yashil = yechim bor, kulrang = yo'q;
+  **«⬜ Yetishmayotganlar»** filtri bilan bo'sh savollarni tez topasiz;
+* savol oynasida **holatni** ko'rsatadi (video/rasm yuklangan yoki yo'q);
+* yechimni **o'chirish** (`🗑`);
+* **«🎬 Video yoki 🖼 rasm yuklash»** — Telegram deep-link
+  (`/start s_<kod>_<savol>`) orqali botga o'tadi: bot qaysi savolga
+  yuklanishni **eslab qoladi**, shuning uchun videoni/rasmni **izohsiz**
+  yuborish kifoya. Izohli oqim ham ishlashda davom etadi.
+
+> Media fayllar (`video`/rasm) faqat **bot orqali** yuklanadi — Telegram
+> `file_id` faqat fayl bot orqali o'tganda olinadi. Panel esa ko'rish va
+> boshqarish uchun (qamrov, holat, o'chirish, deep-link). Matnli yechim
+> butunlay olib tashlangan.
 
 ### `/new_exam` ustasi qadamlari
 
@@ -272,6 +359,7 @@ O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab:
 | **Natijalar** | Natijalar dinamikasi (Chart.js grafigi), o'tgan imtihonlar tarixi va har biri uchun batafsil tahlil (savol-savol, `P(θ)`, SE, 95% interval) |
 | **Offline imtihon** | Hududlar bo'yicha imtihonlar (statik ro'yxat — kelajak uchun tayyor joy) |
 | **Profil** | Ism-familiyani tahrirlash, Telegram ID, ishlangan testlar soni, vaqt zonasi |
+| **⚙️ Test yaratish** | **Faqat admin** uchun: imtihon yaratish ustasi + har bir imtihon yonida **«🎬 Yechim»** paneli (qamrov, video/rasm holati, o'chirish, botga deep-link). Uchta amal tugmasi (yechim, PDF, baholash) tor ekranda ham to'liq sig'adi |
 
 ### Javoblar qanday topshiriladi
 
@@ -281,9 +369,15 @@ O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab:
    * kod topilmasa → `404`; oyna hali boshlanmagan yoki tugagan → `403`;
    * takroriy yuborish → `409` (har bir imtihonga javob **bir marta** yuboriladi);
    * yetishmagan javoblar `X` (noto'g'ri) hisoblanadi;
+   * muvaffaqiyatli yuborilgach **bot chatiga faqat qabul xabari** keladi
+     (to'g'ri/xato sanoq **ko'rsatilmaydi**) va «📊 Natijalar» tugmasi beriladi;
 3. `end_time` da qabul to'xtaydi va **θ hisoblanadi**, ammo natija `result_time`
    gacha yopiq turadi;
-4. `result_time` da fon vazifasi (yoki birinchi so'rov) natijani ochadi.
+4. `result_time` da **natija bildirishnomasi** fon vazifasi
+   (`notify.result_notification_loop`) har bir o'quvchiga bir marta boy kartani
+   yuboradi: 0–100 ball, sertifikat darajasi, θ, 95% ishonch oralig'i va
+   «📊 Batafsil tahlil» / «🔍 Savollar tahlili» tugmalari. Xabar
+   `user_answers.notified_at` bilan belgilanadi (dublikat ketmaydi).
 
 ### API endpoint'lari
 
@@ -297,6 +391,14 @@ O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab:
 | `GET` | `/api/results` | Natijalar tarixi + grafik ma'lumotlari |
 | `GET` | `/api/results/{exam_id}` | Bitta imtihon bo'yicha batafsil hisobot |
 | `GET` | `/api/offline` | Hududiy imtihonlar (statik) |
+| `GET` | `/api/v2/me` | Profil + `is_admin` (admin panelini ko'rsatish uchun) |
+| `GET` | `/api/v2/admin/exams` | Imtihonlar ro'yxati + **yechim qamrovi** (faqat admin) |
+| `GET` | `/api/v2/admin/exams/{id}/solutions` | «🎬 Yechimlar» qamrovi: savollar, tur, `missing[]`, `bot_username` |
+| `POST` | `/api/v2/admin/solutions/delete` | Bitta savol yechimini o'chirish |
+
+> Yechim faqat **video yoki rasm** (`file_id`) bo'ladi va faqat **bot orqali**
+> yuklanadi — `file_id` ni Telegram Bot API beradi. Matnli yechim endpoint'i
+> olib tashlangan.
 
 ### Xavfsizlik
 
@@ -438,6 +540,8 @@ python tests/test_exam_flow.py    # sxema → repository → hayot sikli → bah
 python tests/test_solutions.py    # 🔍 Test tahlili: solutions jadvali, izoh, sahifalash
 python tests/test_webapp_auth.py  # initData imzosi, muddati, buzuq holatlar
 python tests/test_api.py          # /api/* (aiohttp test client, tarmoqsiz)
+python tests/test_result_notify.py # qabul xabari + result_time natijasi (kalitsiz)
+python tests/test_admin_api.py    # /api/v2/me + /api/v2/admin/* (yechimlar paneli)
 python tests/test_flow.py         # eski mashq rejimi + router/klaviatura
 python tests/test_bot_flow.py     # botning TO'LIQ oqimi (Telegram'siz)
 ```
@@ -495,12 +599,12 @@ Bu test `tg_user.user_id` ↔ `tg_user.id` kabi atribut xatolarini ham ushlaydi
 
 **`test_solutions.py`** — «🔍 Test tahlili» va yechimlar (tarmoqsiz):
 
-* `solutions` jadvali (`solution_file_id`, `solution_type`, `solution_text`,
-  `part`) va `Solution`/`SolutionType` modellari;
+* `solutions` jadvali (`solution_file_id`, `solution_type`, `part`) va
+  `Solution`/`SolutionType` modellari — matnli yechim yo'q (`file_id` majburiy);
 * admin izohini tahlil qilish: `rashtest1612 3`, `#rashtest1612-3`,
   `rashtest1612 36a`, `#javob-rashtest1612-3b` (+ noto'g'ri formatlar rad etiladi);
 * repository: `upsert` dublikat yaratmaydi (qayta yuklashda yangilanadi),
-  A/B qismlar, o'chirish va imtihon o'chirilganda `CASCADE`;
+  faylsiz yechimni rad etadi, A/B qismlar, o'chirish va `CASCADE`;
 * tugma belgilari (`✅ 1`, `❌ 3`, `✅ 36a`, `❌ 36b`), hashtag va Inline Grid
   qatorlari (`grid_pattern`);
 * sahifalash: `Sahifa 1/2 (jami: 7 ta test)` va sahifa chegaralari;
@@ -508,15 +612,19 @@ Bu test `tg_user.user_id` ↔ `tg_user.id` kabi atribut xatolarini ham ushlaydi
 * ro'yxatga faqat javob yuborilgan va natijasi e'lon qilingan imtihonlar tushishi.
 
 `test_bot_flow.py` shuningdek «🔍 Test tahlili» oqimini ham tekshiradi:
-reply tugma → imtihon → savollar gridi → adminning video yuklashi →
-`#javob-rashtest1612-3` hashtagi bilan yuborilishi → sahifalash va ruxsat nazorati.
+inline menyu (reply klaviatura yo'q) → imtihon → savollar gridi → adminning
+**video va rasm** yuklashi →
+`#javob-rashtest1612-3` hashtagi bilan yuborilishi → matnli yechim va
+qo'llanmaydigan media (audio) rad etilishi → sahifalash va ruxsat nazorati.
 
 ---
 
 ## ⚠️ Ma'lum cheklovlar
 
-* **Calibration yo'q:** `b` lar oldindan beriladi (real javoblar statistikasi
+* **Calibration yo'q (MVP'da):** `b` lar oldindan beriladi (real javoblar statistikasi
   asosida emas). Rasmiy IRT tahlilida ular statistik baholanadi.
+  → **Reja:** `docs/03-QIYINCHILIK-ALGORITMI.md` (avtomatik `p → b`) va
+  `docs/06-RASCH-KALIBRLASH.md` (JMLE kalibrlash).
 * **1PL (Rasch)** modeli ishlatiladi: barcha savollar bir xil diskriminatsiyaga
   (`a = 1`) ega deb hisoblanadi. 2PL/3PL modellari (taxmin parametri bilan)
   keyinchalik qo'shilishi mumkin.
@@ -547,6 +655,7 @@ reply tugma → imtihon → savollar gridi → adminning video yuklashi →
 
 1. **Calibration:** guruh javoblari yig'ilgach, `b` larni qayta baholash
    (bir o'lchovli MLE yoki `mirt`/`TAM` kabi tayyor vositalar bilan).
+   → **Batafsil:** `docs/03-QIYINCHILIK-ALGORITMI.md`, `docs/06-RASCH-KALIBRLASH.md`.
 2. **2PL/3PL modellar:** `a` (diskriminatsiya) va `c` (taxmin) parametrlarini
    qo'shish.
 3. **Moslik (fit) statistikasi:** `Infit/Outfit MNSQ` — o'quvchi javoblarining

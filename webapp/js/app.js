@@ -11,9 +11,10 @@
     results: ["Natijalar", "Baho dinamikasi va tahlil"],
     offline: ["Offline imtihon", "Hududlar bo'yicha imtihonlar"],
     profile: ["Profil", "Shaxsiy ma'lumotlar"],
+    admin: ["Test yaratish", "O'qituvchi paneli"],
   };
 
-  const listeners = { queue: [], results: [], offline: [], profile: [] };
+  const listeners = { queue: [], results: [], offline: [], profile: [], admin: [] };
   let noticeTimer = null;
 
   function noticeBox() {
@@ -47,6 +48,23 @@
       window.clearTimeout(noticeTimer);
       noticeTimer = null;
     }
+  }
+
+  /** Admin («⚙️ Test yaratish») tugmasini ko'rsatish (`/api/v2/me` → `is_admin`). */
+  function loadAdminAccess() {
+    API.get("/api/v2/me")
+      .then(function (data) {
+        if (!data || !data.is_admin) {
+          return;
+        }
+        const button = document.getElementById("nav-admin");
+        if (button) {
+          button.classList.remove("hidden");
+        }
+      })
+      .catch(function () {
+        /* admin emas yoki xato — tugma yashirin qoladi */
+      });
   }
 
   function showTab(name) {
@@ -108,8 +126,22 @@
     formatCountdown: formatCountdown,
   };
 
-  document.addEventListener("DOMContentLoaded", function () {
+  function initialTabName() {
+    // Botdagi «📊 Natijalarim» tugmasi `?tab=results` bilan ochadi.
+    try {
+      const requested = new URLSearchParams(window.location.search).get("tab");
+      if (requested && TITLES[requested]) {
+        return requested;
+      }
+    } catch (error) {
+      /* URLSearchParams mavjud bo'lmasa — queue */
+    }
+    return "queue";
+  }
+
+  window.addEventListener("DOMContentLoaded", function () {
     API.ready();
+    loadAdminAccess();
 
     document.querySelectorAll("#bottom-nav button").forEach(function (button) {
       button.addEventListener("click", function () {
@@ -128,6 +160,6 @@
       );
     }
 
-    showTab("queue");
+    showTab(initialTabName());
   });
 })();

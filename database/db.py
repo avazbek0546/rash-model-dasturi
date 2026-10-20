@@ -15,8 +15,17 @@ import aiosqlite
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Sxema: users / questions / test_results (eski mashq rejimi) va
-#        exams / user_answers (yangi imtihon platformasi)
+# Legacy sxema (backward compatibility uchun): `users`, `questions`,
+# `test_results` (eski mashq rejimi) hamda `exams`, `user_answers`, `solutions`
+# (birinchi imtihon platformasi). Bu jadvallar O'CHIRILMAYDI va
+# O'ZGARTIRILMAYDI — mavjud ishlayotgan tizim sinmasligi uchun.
+#
+# `docs/11-FINAL-MVP-DATABASE-MODEL.md` bo'yicha MVP jadvallari (items,
+# item_versions, forms, form_versions, form_items, exam_sessions, attempts,
+# responses, item_parameters, item_statistics, scoring_snapshots,
+# scoring_snapshot_items, result_versions, audit_log) bu yerda EMAS — ular
+# `database/migrations/*.sql` fayllarida saqlanadi va `Database.connect()`
+# ishga tushganda avtomatik qo'llanadi (qarang: `database/migrate.py`).
 # ---------------------------------------------------------------------------
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS users (
@@ -86,10 +95,10 @@ CREATE INDEX IF NOT EXISTS idx_user_answers_exam ON user_answers (exam_id);
 CREATE INDEX IF NOT EXISTS idx_user_answers_user ON user_answers (user_id, submitted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_exams_result_time ON exams (result_time);
 
--- O'qituvchi yuklaydigan video/media/matn yechimlar («🔍 Test tahlili» bo'limi).
--- `solution_file_id` — Telegram file_id (video/rasm/hujjat), `solution_type` —
--- fayl turi ("video", "photo", "document", "animation", "audio", "text"),
--- `solution_text` — matnli tahlil (fayl bo'lmasa ham bo'ladi).
+-- O'qituvchi yuklaydigan video/rasm yechimlar («🔍 Test tahlili» bo'limi).
+-- `solution_file_id` — Telegram file_id (video/rasm «fayl sifatida» yuborilsa —
+-- document), `solution_type` — fayl turi.
+-- Matnli yechim qo'llanmaydi: har bir savolga faqat video yoki rasm yuklanadi.
 -- `part` — A/B qismli savollar uchun: '' (butun savol), 'a' yoki 'b'.
 CREATE TABLE IF NOT EXISTS solutions (
     solution_id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,10 +108,9 @@ CREATE TABLE IF NOT EXISTS solutions (
                      CHECK (part IN ('', 'a', 'b')),
     solution_type    TEXT    NOT NULL DEFAULT 'video'
                      CHECK (solution_type IN (
-                         'video', 'photo', 'document', 'animation', 'audio', 'text'
+                         'video', 'photo', 'document', 'animation', 'audio'
                      )),
-    solution_file_id TEXT,                          -- Telegram file_id
-    solution_text    TEXT,                          -- matnli tahlil (ixtiyoriy)
+    solution_file_id TEXT    NOT NULL,              -- Telegram file_id
     created_by       INTEGER,                       -- yuklagan o'qituvchi (Telegram ID)
     created_at       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
     updated_at       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -122,7 +130,17 @@ class Database:
 
     # -- hayot sikli ---------------------------------------------------------
     async def connect(self) -> None:
-        """Bazaga ulanadi, jadvallarni (agar yo'q bo'lsa) yaratadi."""
+        """Bazaga ulanadi va sxemani tayyorlaydi (ikki qadamda).
+
+        1. **Legacy sxema** — `SCHEMA_SQL` (eski jadvallar, backward compatibility);
+        2. **MVP migratsiyalari** — `database/migrations/` papkasidan tartib bilan
+           qo'llanadi (`docs/11`). Idempotent: `schema_migrations` jadvali
+           qo'llangan versiyalarni eslab qoladi, DDL esa `IF NOT EXISTS` bilan
+           yozilgan.
+
+        Import ataylab shu yerda (ichkarida) — `database/__init__.py` orqali
+        aylanma import yuzaga kelmasligi uchun.
+        """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = await aiosqlite.connect(self.path)
         self._conn.row_factory = aiosqlite.Row
@@ -130,6 +148,13 @@ class Database:
         await self._conn.execute("PRAGMA journal_mode = WAL")
         await self._conn.executescript(SCHEMA_SQL)
         await self._conn.commit()
+
+        from database.migrate import apply_migrations
+
+        applied = await apply_migrations(self._conn)
+        if applied:
+            logger.info("Migratsiyalar qo'llandi: %s", ", ".join(applied))
+
         logger.info("Ma'lumotlar bazasi tayyor: %s", self.path)
 
     async def close(self) -> None:

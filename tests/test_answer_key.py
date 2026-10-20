@@ -74,15 +74,20 @@ def check_rasch_letters() -> None:
 
     all_right = rasch.estimate_from_letters(difficulties, key, key)
     assert all_right.is_extreme and all_right.theta == config.THETA_BOUND
-    assert abs(all_right.scaled_score - 100.0) < 1e-9
+    # Ball chegarasi (cap): mukammal natija 100 emas, SCALED_CAP_MAX (91)
+    assert abs(all_right.scaled_score - config.SCALED_CAP_MAX) < 1e-9
 
     all_wrong = rasch.estimate_from_letters(difficulties, key, ["X"] * 4)
     assert all_wrong.is_extreme and all_wrong.theta == -config.THETA_BOUND
-    assert abs(all_wrong.scaled_score) < 1e-9
+    # Butunlay xato → 0 emas, SCALED_CAP_MIN (9)
+    assert abs(all_wrong.scaled_score - config.SCALED_CAP_MIN) < 1e-9
 
     half = rasch.estimate_from_letters(difficulties, key, ["A", "B", "X", "X"])
     assert half.raw_score == 2 and abs(half.theta) < 1e-6
     assert abs(half.scaled_score - 50.0) < 1e-6
+    # Oddiy (chekka bo'lmagan) ballar tegilmaydi — faqat eng chet qisiladi
+    assert abs(rasch.theta_to_scaled(0.9) - 65.0) < 1e-9
+    assert abs(rasch.theta_to_scaled(2.0) - 83.3333) < 1e-3
     print(
         f"[OK] Logitlar asosida baho: 0/4 → θ={all_wrong.theta:+.2f}, "
         f"2/4 → θ={half.theta:+.2f}, 4/4 → θ={all_right.theta:+.2f}"

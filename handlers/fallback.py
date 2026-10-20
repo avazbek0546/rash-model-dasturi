@@ -23,7 +23,7 @@ async def unexpected_message(message: Message) -> None:
         return
 
     await message.answer(
-        texts.help_text(),
+        texts.help_text(is_admin=is_admin(message.from_user.id)),
         reply_markup=webapp_kb(is_admin=is_admin(message.from_user.id)),
     )
 

@@ -56,6 +56,32 @@ def _get_bool(name: str, default: bool = False) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Bulut (Railway) muhiti — avtomatik aniqlash
+# ---------------------------------------------------------------------------
+# Railway quyidagi o'zgaruvchilarni o'zi beradi (qo'lda kiritish shart emas):
+#   RAILWAY_PUBLIC_DOMAIN      — ochiq HTTPS domen (sxemasiz, masalan
+#                                "app-production.up.railway.app")
+#   RAILWAY_VOLUME_MOUNT_PATH  — ulangan volume yo'li (masalan "/data")
+#   RAILWAY_SERVICE_ID         — servis identifikatori
+#   PORT                       — konteyner tinglashi kerak bo'lgan port
+# Shu o'zgaruvchilardan biri mavjud bo'lsa — bulutda ishlayapmiz va quyidagi
+# sozlamalar (host, port, baza yo'li, Web App manzili) avtomatik moslashadi.
+RAILWAY_PUBLIC_DOMAIN: str = _get_str("RAILWAY_PUBLIC_DOMAIN")
+RAILWAY_VOLUME_MOUNT_PATH: str = _get_str("RAILWAY_VOLUME_MOUNT_PATH")
+HOSTING_PORT: int | None = _get_int("PORT")
+IS_CLOUD: bool = bool(
+    RAILWAY_PUBLIC_DOMAIN
+    or RAILWAY_VOLUME_MOUNT_PATH
+    or _get_str("RAILWAY_SERVICE_ID")
+    or HOSTING_PORT
+)
+
+
+# ---------------------------------------------------------------------------
+# Telegram
+# ---------------------------------------------------------------------------
+BOT_TOKEN: str = _get_str("BOT_TOKEN")
+# ---------------------------------------------------------------------------
 # Telegram
 # ---------------------------------------------------------------------------
 BOT_TOKEN: str = _get_str("BOT_TOKEN")
@@ -77,7 +103,13 @@ def is_admin(user_id: int | None) -> bool:
 # ---------------------------------------------------------------------------
 # Ma'lumotlar bazasi
 # ---------------------------------------------------------------------------
-DB_PATH: Path = Path(_get_str("DB_PATH") or str(BASE_DIR / "data" / "math_bot.db"))
+# Prioritet: DB_PATH (qo'lda) → volume yo'li (Railway) → loyiha ichidagi data/.
+# Railway'da volume `RAILWAY_VOLUME_MOUNT_PATH=/data` bo'lsa, baza shu yerda
+# saqlanadi va qayta deploy'larda imtihonlar yo'qolmaydi.
+_DB_DIR: Path = (
+    Path(RAILWAY_VOLUME_MOUNT_PATH) if RAILWAY_VOLUME_MOUNT_PATH else BASE_DIR / "data"
+)
+DB_PATH: Path = Path(_get_str("DB_PATH") or str(_DB_DIR / "math_bot.db"))
 
 # ---------------------------------------------------------------------------
 # Telegram Web App (Mini App)
@@ -86,15 +118,43 @@ DB_PATH: Path = Path(_get_str("DB_PATH") or str(BASE_DIR / "data" / "math_bot.db
 # (masalan: https://exam.example.uz yoki dev uchun Cloudflare Tunnel/ngrok).
 # Bo'sh bo'lsa — bot Web App tugmasini ko'rsatmaydi, API server esa lokal
 # test uchun baribir ishlaydi.
-WEBAPP_URL: str = _get_str("WEBAPP_URL").rstrip("/")
-WEBAPP_HOST: str = _get_str("WEBAPP_HOST", "127.0.0.1") or "127.0.0.1"
-WEBAPP_PORT: int = _get_int("WEBAPP_PORT", 8080) or 8080
+# Prioritet: WEBAPP_URL (qo'lda) → Railway domeni → bo'sh.
+# Railway'da domen generatsiya qilinsa `RAILWAY_PUBLIC_DOMAIN` avtomatik
+# beriladi, shu sababli alohida o'zgaruvchi kiritish shart emas.
+WEBAPP_URL: str = (
+    _get_str("WEBAPP_URL")
+    or (f"https://{RAILWAY_PUBLIC_DOMAIN}" if RAILWAY_PUBLIC_DOMAIN else "")
+).rstrip("/")
+# Mini App kesh-buster versiyasi (dizayn/JS o'zgarganda oshiriladi). Bitta joyda
+# saqlanadi — menyu tugmasi, inline tugmalar va natija xabarlari shu yerdan oladi.
+WEBAPP_VERSION: str = _get_str("WEBAPP_VERSION", "23") or "23"
+# Bulutda konteynerdan tashqaridan ko'rinish uchun `0.0.0.0` shart;
+# lokal ishlab chiqishda esa xavfsizlik uchun `127.0.0.1` qoladi.
+_DEFAULT_WEBAPP_HOST: str = "0.0.0.0" if IS_CLOUD else "127.0.0.1"
+WEBAPP_HOST: str = _get_str("WEBAPP_HOST", _DEFAULT_WEBAPP_HOST) or _DEFAULT_WEBAPP_HOST
+# `PORT` — Railway/PaaS beradigan port (domen shu portga yo'naltiriladi),
+# u bo'lmasa WEBAPP_PORT, u ham bo'lmasa 8080.
+WEBAPP_PORT: int = HOSTING_PORT or _get_int("WEBAPP_PORT", 8080) or 8080
 WEBAPP_DIR: Path = BASE_DIR / "webapp"
 # Faqat lokal ishlab chiqish uchun: initData o'rniga X-Debug-User-Id header'i
 # qabul qilinadi. Ishlab chiqarishda (production) HECH QACHON yoqilmasin!
 WEBAPP_DEV_MODE: bool = _get_bool("WEBAPP_DEV_MODE", False)
 # initData necha sekund "yangi" hisoblanadi (qayta yuborish hujumidan himoya).
 INITDATA_MAX_AGE: int = _get_int("INITDATA_MAX_AGE", 86400) or 86400
+
+
+def webapp_url(*, tab: str = "") -> str:
+    """Mini App manzili: kesh-buster + ixtiyoriy bo'lim (`tab`).
+
+    Misol: ``https://exam.example.uz/?v=21&tab=results``.
+    `WEBAPP_URL` bo'sh bo'lsa — bo'sh satr (chaqiruvchi tugmani ko'rsatmaydi).
+    """
+    if not WEBAPP_URL:
+        return ""
+    url = f"{WEBAPP_URL}/?v={WEBAPP_VERSION}"
+    if tab:
+        url += f"&tab={tab}"
+    return url
 
 # ---------------------------------------------------------------------------
 # Vaqt va fon vazifalari
@@ -103,6 +163,19 @@ INITDATA_MAX_AGE: int = _get_int("INITDATA_MAX_AGE", 86400) or 86400
 TIMEZONE: str = _get_str("TIMEZONE", "Asia/Tashkent") or "Asia/Tashkent"
 # Baholash fon vazifasi qancha sekundda bir marta bazani tekshiradi.
 GRADING_INTERVAL: int = _get_int("GRADING_INTERVAL", 30) or 30
+# Natija bildirishnomasi (result_time kelgach) fon vazifasi oralig'i (sekund).
+# 60 sekund — o'quvchi natijani bir daqiqa ichida oladi; ortiqcha yuklama yo'q.
+RESULT_NOTIFY_INTERVAL: int = _get_int("RESULT_NOTIFY_INTERVAL", 60) or 60
+# Vaqtinchalik item statistikasi (p → b) fon vazifasi oralig'i (sekund).
+# Baholangan testlar uchun `item_difficulty_stats` avtomatik yangilanadi.
+ITEM_STATISTICS_INTERVAL: int = _get_int("ITEM_STATISTICS_INTERVAL", 30) or 30
+
+# ---------------------------------------------------------------------------
+# Sinov rejimi (vaqtinchalik)
+# ---------------------------------------------------------------------------
+# True bo'lsa: bot ishga tushganda `SINOV` kodli namuna test avtomatik yaratiladi
+# — javob oynasini kod kiritmasdan sinash uchun. Bot tayyor bo'lgach `0` qilinadi.
+DEMO_MODE: bool = _get_bool("DEMO_MODE", False)
 
 # ---------------------------------------------------------------------------
 # Imtihon parametrlari
@@ -111,6 +184,50 @@ GRADING_INTERVAL: int = _get_int("GRADING_INTERVAL", 30) or 30
 MIN_TEST_CODE_LENGTH: int = _get_int("MIN_TEST_CODE_LENGTH", 4) or 4
 # Javoblar varag'ida ruxsat etilgan variantlar.
 ANSWER_OPTIONS: tuple[str, ...] = ("A", "B", "C", "D")
+
+# ---------------------------------------------------------------------------
+# Baholash manbasi (item-level MVP)
+# ---------------------------------------------------------------------------
+# True bo'lsa: javoblar item-level `responses` jadvalidan o'qiladi (sessiya +
+# urinish + javoblar mavjud bo'lsa). Ular topilmasa — baholash avvalgidek
+# `user_answers.submitted_answers` dan o'qiladi (avtomatik fallback).
+# False (standart): hamma imtihon avvalgidek `user_answers` dan baholanadi.
+ITEM_LEVEL_GRADING_ENABLED: bool = _get_bool("ITEM_LEVEL_GRADING_ENABLED", False)
+
+# ---------------------------------------------------------------------------
+# Qiyinchilikni tekislash (shrinkaj / empirik Bayes) — docs/03
+# ---------------------------------------------------------------------------
+# True bo'lsa: baholashda har bir savolning `b` si **o'qituvchi bahosi** va
+# **javob ma'lumoti** o'rtasida `N` ga qarab aralashtiriladi
+# (`services/item_statistics`):
+#
+#     w = N / (N + K);   b = w·b_auto + (1 − w)·b_teacher
+#
+# Ya'ni o'quvchi kam bo'lsa — o'qituvchi qiymati, ko'p bo'lsa — ma'lumot ustun.
+# False (standart): `b` faqat o'qituvchi bahosidan olinadi (avvalgi xulq).
+DIFFICULTY_SHRINKAGE_ENABLED: bool = _get_bool("DIFFICULTY_SHRINKAGE_ENABLED", False)
+# Shrinkaj konstantasi `K` (docs/01, docs/02: `calibration.k_shrink = 30`).
+DIFFICULTY_SHRINK_K: float = _get_float("DIFFICULTY_SHRINK_K", 30.0)
+
+# ---------------------------------------------------------------------------
+# Ifodani saqlash (Phase 1 — expression preservation)
+# ---------------------------------------------------------------------------
+# True (standart): o'quvchi kiritgan ASL matematik ifoda (`√5+1`) `responses`
+# jadvalidagi `raw_answer` ustuniga saqlanadi va `GET /api/v2/state` orqali
+# tiklanadi. `normalized_answer`/`numeric_value` va baholash O'ZGARMAYDI.
+# False: avvalgi xatti-harakat — faqat hisoblangan son saqlanadi.
+EXPRESSION_PRESERVATION_ENABLED: bool = _get_bool(
+    "EXPRESSION_PRESERVATION_ENABLED", True
+)
+
+# ---------------------------------------------------------------------------
+# Sonli javoblarni taqqoslash tolerantligi (Phase 2 — matematik ekvivalentlik)
+# ---------------------------------------------------------------------------
+# Natural javoblar (√5, 3/7, π/2) son sifatida hisoblanadi va quyidagi
+# tolerantlik bilan taqqoslanadi. Standart qiymatlar avvalgi xatti-harakatni
+# saqlaydi (mutlaq 1e-6, nisbiy o'chirilgan) — mavjud imtihonlar o'zgarmaydi.
+NUMERIC_ABSOLUTE_TOLERANCE: float = _get_float("NUMERIC_ABSOLUTE_TOLERANCE", 1e-6)
+NUMERIC_RELATIVE_TOLERANCE: float = _get_float("NUMERIC_RELATIVE_TOLERANCE", 0.0)
 
 # ---------------------------------------------------------------------------
 # Test sozlamalari
@@ -135,6 +252,12 @@ MLE_TOLERANCE: float = 1e-6
 # θ → 0..100 "scaled score" chizig'i
 SCALED_MIN: float = 0.0
 SCALED_MAX: float = 100.0
+
+# Yakuniy ball shu chegaraga QISILADI — 0 va 100 ko'rinmasligi uchun
+# (ishonchlilik). Oddiy ballar TEGILMAYDI, faqat eng chet qiymatlar tekislanadi:
+# mukammal (θ→+∞) → SCALED_CAP_MAX, butunlay xato → SCALED_CAP_MIN.
+SCALED_CAP_MIN: float = _get_float("SCALED_CAP_MIN", 9.0)
+SCALED_CAP_MAX: float = _get_float("SCALED_CAP_MAX", 91.0)
 
 
 def scaled_span() -> float:

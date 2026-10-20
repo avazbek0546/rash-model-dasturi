@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Rasch imtihon platformasi</title>
-    <link rel="stylesheet" href="/static/css/style.css" />
+    <link rel="stylesheet" href="/static/css/style.css?v=20" />
     <!-- Telegram Web App SDK — Telegram faqat HTTPS sahifalarda beradi. -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
@@ -25,7 +25,7 @@
           <label class="field">
             <span>O'qituvchi bergan test kodi</span>
             <input id="test-code" class="code-input" type="text" inputmode="text"
-                   autocomplete="off" autocapitalize="characters" spellcheck="false"
+                   autocomplete="off" autocapitalize="off" spellcheck="false"
                    placeholder="MASALAN: MATH2026" />
           </label>
           <button id="find-exam">Kodni tekshirish</button>
@@ -38,15 +38,17 @@
         <div class="card hidden" id="answer-card">
           <h2 id="answer-title">Javoblarni kiritish</h2>
           <p class="muted" id="answer-meta"></p>
-          <label class="field">
-            <span>Javoblar varag'i — savol raqami va variant, masalan: <code>1A2B3C4D</code></span>
-            <textarea id="answer-input" placeholder="1A2B3C4D..."
-                      autocapitalize="characters" spellcheck="false"></textarea>
-          </label>
+          <div class="progress-track" id="answer-progress-track" role="progressbar"
+               aria-label="Javob berilgan savollar"
+               aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="progress-bar" id="answer-progress-bar"></div>
+          </div>
+          <div class="answer-sheet" id="answer-sheet"></div>
           <div class="btn-row">
             <button id="submit-answers">Yuborish</button>
             <button id="cancel-answers" class="ghost">Bekor qilish</button>
           </div>
+          <p class="muted autosave-note" id="autosave-note">Javoblar avtomatik saqlanadi.</p>
         </div>
 
         <div class="card">
@@ -57,26 +59,56 @@
 
       <!-- ================= 2. NATIJALAR ================= -->
       <section id="tab-results" class="tab-panel">
-        <div class="card">
-          <h2>Natijalar dinamikasi</h2>
+        <!-- Hero: eng so'nggi natija (ball, daraja, o'sish, 95% interval) -->
+        <div id="results-hero" class="res-hero-slot">
+          <div class="res-skeleton res-skeleton-hero"></div>
+        </div>
+
+        <!-- Umumiy ko'rsatkichlar: eng yaxshi / o'rtacha / urinishlar / to'g'ri -->
+        <div class="res-stats" id="results-stats"
+             aria-label="Natijalar bo'yicha umumiy ko'rsatkichlar">
+          <div class="res-skeleton res-skeleton-tile"></div>
+          <div class="res-skeleton res-skeleton-tile"></div>
+          <div class="res-skeleton res-skeleton-tile"></div>
+          <div class="res-skeleton res-skeleton-tile"></div>
+        </div>
+
+        <div class="card res-chart-card" id="results-chart-card">
+          <div class="res-card-head">
+            <div>
+              <h2>Natijalar dinamikasi</h2>
+              <p class="res-card-sub" id="chart-sub">0–100 ball shkalasi</p>
+            </div>
+            <div class="res-seg" id="chart-metrics" role="tablist"
+                 aria-label="Grafik ko'rsatkichi">
+              <button type="button" class="res-seg-btn active" data-metric="scaled"
+                      role="tab" aria-selected="true">Ball</button>
+              <button type="button" class="res-seg-btn" data-metric="theta"
+                      role="tab" aria-selected="false">θ</button>
+            </div>
+          </div>
+          <div class="res-scale" id="chart-zones" aria-label="Daraja chegaralari"></div>
           <div class="chart-wrap"><canvas id="results-chart"></canvas></div>
           <div id="chart-fallback" class="hidden"></div>
-          <p class="muted" id="summary-line"></p>
         </div>
-        <div class="card">
+
+        <div class="res-list-head" id="results-list-head">
           <h2>Topshirilgan imtihonlar</h2>
-          <div id="results-list"><div class="spinner"></div></div>
+          <span class="res-count" id="results-count"></span>
         </div>
+        <div class="res-filters" id="results-filters" role="tablist"
+             aria-label="Natijalar filtri">
+          <button type="button" class="res-filter active" data-filter="all"
+                  role="tab" aria-selected="true">Barchasi</button>
+          <button type="button" class="res-filter" data-filter="published"
+                  role="tab" aria-selected="false">E'lon qilingan</button>
+          <button type="button" class="res-filter" data-filter="pending"
+                  role="tab" aria-selected="false">Kutilmoqda</button>
+        </div>
+        <div id="results-list"><div class="res-skeleton res-skeleton-row"></div></div>
       </section>
 
-      <!-- ================= 3. OFFLINE IMtIHON ================= -->
-      <section id="tab-offline" class="tab-panel">
-        <div class="card">
-          <h2>Offline imtihon</h2>
-          <p class="muted" id="offline-note">Yuklanmoqda…</p>
-          <div id="offline-list"></div>
-        </div>
-      </section>
+      <!-- Offline imtihon bo'limi olib tashlandi (o'rniga admin paneli qo'shildi). -->
 
       <!-- ================= 4. PROFIL ================= -->
       <section id="tab-profile" class="tab-panel">
@@ -93,16 +125,89 @@
             <div class="profile-row"><span class="label">Vaqt zonasi</span><b id="profile-tz">—</b></div>
           </div>
         </div>
+        <!-- «Rasch modeli qanday baholaydi?» izohi olib tashlandi. -->
+      </section>
+
+      <!-- ================= 5. TEST YARATISH (faqat admin) ================= -->
+      <section id="tab-admin" class="tab-panel">
         <div class="card">
-          <h2>Rasch modeli qanday baholaydi?</h2>
+          <h2>Yangi test yaratish</h2>
+          <label class="field">
+            <span>Test nomi</span>
+            <input id="admin-title" type="text" autocomplete="off"
+                   placeholder="Milliy sertifikat — Matematika, 1-variant" />
+          </label>
+          <label class="field">
+            <span>Test kodi (o'quvchi kiritadigan kod)</span>
+            <input id="admin-code" class="code-input" type="text" autocomplete="off"
+                   autocapitalize="off" spellcheck="false"
+                   placeholder="MASALAN: MS-MATH-2603" />
+          </label>
+          <label class="field">
+            <span>Savollar soni</span>
+            <input id="admin-total" type="number" min="1" max="200"
+                   inputmode="numeric" placeholder="45" />
+          </label>
+          <label class="field">
+            <span>Javoblar kaliti</span>
+            <textarea id="admin-key" rows="3" spellcheck="false"
+                      placeholder="1A2B3C…35F|36a:12.5,36b:3"></textarea>
+          </label>
+
+          <!-- ============ QULAY KIRITISH (Grid) — asosiy usul ============
+               Har bir savol uchun javob bir bosishda kiritiladi. 36–45 doim
+               `a)` va `b)` ikkita maydon. Oxirida xuddi shu kanonik kalit
+               matni hosil bo'ladi (yuqoridagi maydon) — server o'zgarmaydi. -->
+          <div class="field key-field">
+            <span>Qulay kiritish (bir bosishda)</span>
+            <div class="key-toolbar">
+              <span id="key-count" class="key-count">Variantlar 0/35 · Sonli 0/20</span>
+            </div>
+            <div class="key-grid" id="key-grid"></div>
+            <p class="muted" id="key-warn"></p>
+          </div>
+          <label class="field">
+            <span>Qiyinchilik (foiz, ixtiyoriy)</span>
+            <input id="admin-difficulty" type="text" autocomplete="off"
+                   placeholder="90, 75, 50, 25" />
+          </label>
+          <label class="field">
+            <span>Boshlanish vaqti</span>
+            <input id="admin-start" type="datetime-local" required />
+          </label>
+          <label class="field">
+            <span>Tugash vaqti</span>
+            <input id="admin-end" type="datetime-local" required />
+          </label>
+          <label class="field">
+            <span>Natija vaqti</span>
+            <input id="admin-result" type="datetime-local" required />
+          </label>
+          <div class="btn-row">
+            <button id="admin-create">Yaratish</button>
+            <button id="admin-reset" class="ghost">Tozalash</button>
+          </div>
           <p class="muted">
-            Har bir savolning <b>qiyinchiligi (b, logit)</b> va sizning
-            <b>bilim darajangiz (θ, logit)</b> bitta o'lchovda ifodalanadi.
-            To'g'ri javob ehtimoli <code>P(θ) = 1 / (1 + e^−(θ − b))</code>.
-            Shu sababli bir xil sonda to'g'ri javob qiyin to'plamda yuqoriroq θ
-            beradi. Yakuniy natija 0–100 shkalaga o'tkaziladi va ishonch
-            oralig'i bilan ko'rsatiladi.
+            Kod faqat javob qabul qilish oynasida ishlaydi. Qiyinchilikni bo'sh
+            qoldirsangiz — 0 (o'rtacha) olinadi; keyin javoblar bo'yicha
+            avtomatik tekislanadi.
           </p>
+        </div>
+        <div class="card">
+          <h2>Imtihonlar</h2>
+          <div id="admin-exams"><div class="spinner"></div></div>
+        </div>
+        <div class="card">
+          <h2>🎬 Yechimlar (test tahlili)</h2>
+          <p class="muted">
+            Har bir savolga <b>video</b> yoki <b>rasm</b> yechim yuklang. Bu
+            yerda <b>qaysi savolda yechim bor / yo'q</b> ko'rasiz; yechimni
+            <b>bot orqali</b> yuklaysiz — savol oynasidagi tugma botga o'tadi
+            (izoh yozish shart emas). Matnli yechim qo'llanmaydi.
+          </p>
+          <div id="sol-panel">
+            <p class="muted">Yuqoridagi imtihonlardan «🎬 Yechimlar» tugmasini bosing.</p>
+          </div>
         </div>
       </section>
     </main>
@@ -110,18 +215,56 @@
     <nav class="bottom-nav" id="bottom-nav">
       <button type="button" data-tab="queue" class="active"><span class="icon">📝</span>Navbat</button>
       <button type="button" data-tab="results"><span class="icon">📊</span>Natijalar</button>
-      <button type="button" data-tab="offline"><span class="icon">🏫</span>Offline imtihon</button>
       <button type="button" data-tab="profile"><span class="icon">👤</span>Profil</button>
+      <button type="button" data-tab="admin" id="nav-admin" class="hidden"><span class="icon">⚙️</span>Test yaratish</button>
     </nav>
+
+    <!-- ============ Matematik javob paneli (36–45) — BITTA global panel ============ -->
+    <div id="math-panel" class="math-panel hidden" role="group"
+         aria-label="Matematik javob paneli">
+      <div class="math-head">
+        <span class="math-target" id="math-target">Katakni tanlang</span>
+        <div class="math-modes" role="tablist">
+          <button type="button" id="math-mode-basic" class="math-mode active">Asosiy</button>
+          <button type="button" id="math-mode-math" class="math-mode">Matematik</button>
+          <button type="button" id="math-angle" class="math-mode angle"
+                  aria-label="Burchak rejimi (DEG/RAD)">DEG</button>
+        </div>
+        <button type="button" id="math-close" class="math-close"
+                aria-label="Panelni yopish">×</button>
+      </div>
+      <div class="math-hint" id="math-hint"></div>
+      <div class="math-keys" id="math-keys"></div>
+    </div>
+
+    <!-- ============ Kasr konstruktori (2 slot: surat / maxraj) ============ -->
+    <div id="frac-modal" class="frac-modal hidden" role="dialog"
+         aria-label="Kasr kiritish">
+      <div class="frac-box">
+        <div class="frac-title">Kasr: surat / maxraj</div>
+        <input id="frac-num" class="frac-input" type="text" inputmode="text"
+               autocomplete="off" autocapitalize="off" spellcheck="false"
+               placeholder="surat" />
+        <div class="frac-line"></div>
+        <input id="frac-den" class="frac-input" type="text" inputmode="text"
+               autocomplete="off" autocapitalize="off" spellcheck="false"
+               placeholder="maxraj" />
+        <div class="frac-actions">
+          <button type="button" id="frac-cancel" class="frac-btn">Bekor</button>
+          <button type="button" id="frac-add" class="frac-btn primary">Qo'shish</button>
+        </div>
+      </div>
+    </div>
 
     <div id="modal-root"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="/static/js/api.js"></script>
-    <script src="/static/js/queue.js"></script>
-    <script src="/static/js/results.js"></script>
-    <script src="/static/js/profile.js"></script>
-    <script src="/static/js/offline.js"></script>
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/api.js?v=4"></script>
+    <script src="/static/js/mathpanel.js?v=17"></script>
+    <script src="/static/js/queue.js?v=17"></script>
+    <script src="/static/js/results.js?v=5"></script>
+    <script src="/static/js/profile.js?v=4"></script>
+    <script src="/static/js/admin.js?v=9"></script>
+    <script src="/static/js/app.js?v=6"></script>
   </body>
 </html>

@@ -16,12 +16,17 @@ o'zi tahlil qilmaydi).
 from __future__ import annotations
 
 import re
-from typing import Sequence
+from typing import Collection, Final, Mapping, Sequence
 
 import config
 from database.models import SKIPPED
 
 OPTIONS: frozenset[str] = frozenset(config.ANSWER_OPTIONS)
+
+# Kanonik matnda sonli (ochiq) javoblar shu belgidan KEYIN saqlanadi, masalan
+# "1A2B...45X|36:12.5". Harflar bo'yicha tahlil (baholash) bu qismni o'qimaydi —
+# shuning uchun eski imtihonlar ham, yangi MVP formasi ham bir xil ishlaydi.
+NUMERIC_SECTION_SEPARATOR: Final[str] = "|"
 
 
 class AnswerKeyError(ValueError):
@@ -49,6 +54,8 @@ def parse_letters(
     *,
     require_full: bool = True,
     label: str = "Javoblar",
+    allowed_options: Collection[str] | None = None,
+    optional_positions: Collection[int] = (),
 ) -> list[str]:
     """Erkin formatdagi javoblar matnini harflar ro'yxatiga aylantiradi.
 
@@ -62,6 +69,12 @@ def parse_letters(
             (o'qituvchi kaliti uchun); False bo'lsa yetishmaganlari "X"
             (o'quvchi javoblari uchun).
         label: xato xabarida ko'rsatiladigan nom.
+        allowed_options: ruxsat etilgan variant harflari (opt-in). `None`
+            bo'lsa `config.ANSWER_OPTIONS` (A–D) ishlatiladi — ya'ni eski
+            xulq o'zgarmaydi. MVP formasi 33–35 uchun `A–F` uzatadi.
+        optional_positions: `require_full=True` bo'lganda ham harfsiz
+            qolishiga yo'l qo'yiladigan pozitsiyalar (MVP formasida 36–45 —
+            ularning javobi sonli blokda saqlanadi).
 
     Raises:
         AnswerKeyError: format noto'g'ri bo'lsa yoki `require_full=True` da
@@ -70,7 +83,14 @@ def parse_letters(
     if total_questions <= 0:
         raise AnswerKeyError("Savollar soni noldan katta bo'lishi kerak.")
 
-    cleaned = compact(text)
+    options = (
+        frozenset(OPTIONS)
+        if not allowed_options
+        else frozenset(str(option).upper() for option in allowed_options)
+    )
+
+    # Sonli javoblar bloki (| dan keyin) baholashda hisobga olinmaydi.
+    cleaned = compact((text or "").split(NUMERIC_SECTION_SEPARATOR, 1)[0])
     if not cleaned:
         if require_full:
             raise AnswerKeyError(f"{label} bo'sh bo'lishi mumkin emas.")
@@ -115,17 +135,22 @@ def parse_letters(
             )
         letters += [SKIPPED] * (total_questions - len(letters))
 
-    invalid = sorted({letter for letter in letters if letter not in OPTIONS and letter != SKIPPED})
+    invalid = sorted({letter for letter in letters if letter not in options and letter != SKIPPED})
     if invalid:
         if require_full:
             raise AnswerKeyError(
                 f"{label}: ruxsat etilmagan variant(lar): {', '.join(invalid)}. "
-                f"Faqat {', '.join(config.ANSWER_OPTIONS)} harflari qabul qilinadi."
+                f"Faqat {', '.join(sorted(options))} harflari qabul qilinadi."
             )
-        letters = [letter if letter in OPTIONS else SKIPPED for letter in letters]
+        letters = [letter if letter in options else SKIPPED for letter in letters]
 
     if require_full:
-        missing = [str(index + 1) for index, letter in enumerate(letters) if letter == SKIPPED]
+        optional = {int(position) for position in optional_positions}
+        missing = [
+            str(index + 1)
+            for index, letter in enumerate(letters)
+            if letter == SKIPPED and (index + 1) not in optional
+        ]
         if missing:
             raise AnswerKeyError(
                 f"{label}: quyidagi savollar uchun javob ko'rsatilmagan — {', '.join(missing)}."
@@ -134,14 +159,204 @@ def parse_letters(
     return letters
 
 
-def parse_answer_key(text: str, total_questions: int) -> list[str]:
-    """O'qituvchi kiritgan kalitni tekshirib, harflar ro'yxatiga aylantiradi."""
-    return parse_letters(text, total_questions, require_full=True, label="Javoblar kaliti")
+def parse_answer_key(
+    text: str,
+    total_questions: int,
+    *,
+    allowed_options: Collection[str] | None = None,
+    optional_positions: Collection[int] = (),
+) -> list[str]:
+    """O'qituvchi kiritgan kalitni tekshirib, harflar ro'yxatiga aylantiradi.
+
+    `allowed_options` / `optional_positions` — opt-in (MVP formasi: 33–35 →
+    A–F, 36–45 sonli). Standart chaqiruvda xulq o'zgarmaydi (A–D, to'liq).
+    """
+    return parse_letters(
+        text,
+        total_questions,
+        require_full=True,
+        label="Javoblar kaliti",
+        allowed_options=allowed_options,
+        optional_positions=optional_positions,
+    )
 
 
-def parse_submitted(text: str, total_questions: int) -> list[str]:
-    """O'quvchi yuborgan javoblarni tahlil qiladi (yetishmaganlari — "X")."""
-    return parse_letters(text, total_questions, require_full=False, label="Javoblar")
+def parse_submitted(
+    text: str, total_questions: int, *, allowed_options: Collection[str] | None = None
+) -> list[str]:
+    """O'quvchi yuborgan javoblarni tahlil qiladi (yetishmaganlari — "X").
+
+    `allowed_options` — opt-in (MVP formasida A–F). Standart chaqiruvda xulq
+    o'zgarmaydi: faqat A–D qabul qilinadi, boshqalari "X" bo'ladi.
+    """
+    return parse_letters(
+        text,
+        total_questions,
+        require_full=False,
+        label="Javoblar",
+        allowed_options=allowed_options,
+    )
+
+
+def parse_numeric_block(text: str) -> dict[int, str]:
+    """Kanonik matnning `|` dan keyingi sonli qismini o'qiydi.
+
+    Masalan ``"1A2B...45X|36:12.5,45:3"`` → ``{36: "12.5", 45: "3"}``.
+    Blok bo'lmasa — bo'sh lug'at (eski formatlar uchun xavfsiz).
+
+    Raises:
+        AnswerKeyError: blok formati buzilgan bo'lsa (raqam:qiymat jufti emas,
+            raqam takrorlangan va h.k.).
+    """
+    raw = (text or "").partition(NUMERIC_SECTION_SEPARATOR)[2].strip()
+    if not raw:
+        return {}
+
+    values: dict[int, str] = {}
+    for chunk in raw.split(","):
+        piece = chunk.strip()
+        if not piece:
+            continue
+        position_text, separator, value_text = piece.partition(":")
+        position_text = position_text.strip()
+        value_text = value_text.strip()
+        if not separator or not position_text.isdigit() or not value_text:
+            raise AnswerKeyError(
+                f"Sonli javoblar bloki buzilgan: {piece!r}. Masalan: |36:12.5,37:3"
+            )
+        position = int(position_text)
+        if position in values:
+            raise AnswerKeyError(f"Sonli javoblar bloki: {position} raqami takrorlangan.")
+        values[position] = value_text
+    return values
+
+
+# ---------------------------------------------------------------------------
+# Label (qismli savol belgisi) — Phase 3, Step 1: faqat TAHLIL qatlami.
+#   "36"  → legacy (butun savol)          → (36, None)
+#   "36a" → 36-savolning "a" qismi         → (36, "a")
+#   "36b" → 36-savolning "b" qismi         → (36, "b")
+# Baholash hali qismlarni bilmaydi — bu qatlam faqat belgini TANIYDI.
+# ---------------------------------------------------------------------------
+
+# Belgi: raqam + ixtiyoriy BITTA harf (masalan "36", "36a", "36b").
+_LABEL_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?P<position>[0-9]{1,7})(?P<part>[A-Za-z])?$"
+)
+
+# Ruxsat etilgan qismlar (sxema: `form_items.part IN ('', 'a', 'b')`).
+ALLOWED_PARTS: Final[frozenset[str]] = frozenset({"a", "b"})
+
+
+def normalize_part(part: str | None) -> str:
+    """Qism belgisini normallashtiradi: `None`/`""` → `""`; `"A"` → `"a"`.
+
+    Raises:
+        ValueError: qism ruxsat etilmagan bo'lsa (faqat `''`, `'a'`, `'b'`).
+    """
+    text = "" if part is None else str(part).strip().lower()
+    if text and text not in ALLOWED_PARTS:
+        raise ValueError(
+            f"Qism belgisi noto'g'ri: {part!r}. Ruxsat etilgan: '', 'a', 'b'."
+        )
+    return text
+
+
+def label_of(position: int, part: str | None = None) -> str:
+    """`(36, None)` → `"36"`; `(36, "a")` → `"36a"`; `(36, "b")` → `"36b"`.
+
+    Raises:
+        ValueError: pozitsiya musbat butun son bo'lmasa yoki qism noto'g'ri.
+    """
+    try:
+        number = int(position)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Pozitsiya butun son bo'lishi kerak: {position!r}.") from exc
+    if number <= 0:
+        raise ValueError(f"Pozitsiya musbat bo'lishi kerak: {number}.")
+    return f"{number}{normalize_part(part)}"
+
+
+def split_label(label: str) -> tuple[int, str | None]:
+    """`"36"` → `(36, None)`; `"36a"` → `(36, "a")`; `"36b"` → `(36, "b")`.
+
+    Noto'g'ri belgi **xavfsiz** to'xtaydi — `ValueError`.
+
+    Raises:
+        ValueError: belgi bo'sh, raqamsiz, ortiqcha belgili yoki ruxsat
+            etilmagan qismli bo'lsa (`"36c"`, `"a36"`, `"36ab"`, `""`).
+    """
+    text = "" if label is None else str(label).strip()
+    match = _LABEL_RE.match(text) if text else None
+    if match is None:
+        raise ValueError(
+            f"Belgi formati noto'g'ri: {label!r}. Masalan: 36, 36a, 36b."
+        )
+    number = int(match.group("position"))
+    if number <= 0:
+        raise ValueError(f"Belgi pozitsiyasi musbat bo'lishi kerak: {label!r}.")
+    part = match.group("part")
+    if part is None:
+        return number, None
+    return number, normalize_part(part) or None
+
+
+def parse_labeled_block(text: str) -> dict[str, str]:
+    """Kanonik matnning `|` dan keyingi blokini **LABEL** kalitlari bilan o'qiydi.
+
+    Legacy:  ``"1A2B...|36:12.5,37:3"``  → ``{"36": "12.5", "37": "3"}``.
+    Qismli:  ``"1A2B...|36a:√5,36b:3/7"`` → ``{"36a": "√5", "36b": "3/7"}``.
+
+    `parse_numeric_block` dan farqi: kalitlar **matn (label)** ko'rinishida
+    qaytadi — shu sababli qism belgilari yo'qolmaydi. Blok bo'lmasa — bo'sh
+    lug'at (eski formatlar uchun xavfsiz).
+
+    Raises:
+        AnswerKeyError: blok formati buzilgan bo'lsa (kalit:qiymat jufti emas,
+            belgi noto'g'ri yoki belgi takrorlangan).
+    """
+    raw = (text or "").partition(NUMERIC_SECTION_SEPARATOR)[2].strip()
+    if not raw:
+        return {}
+
+    values: dict[str, str] = {}
+    for chunk in raw.split(","):
+        piece = chunk.strip()
+        if not piece:
+            continue
+        label_text, separator, value_text = piece.partition(":")
+        label_text = label_text.strip()
+        value_text = value_text.strip()
+        if not separator or not label_text or not value_text:
+            raise AnswerKeyError(
+                f"Javoblar bloki buzilgan: {piece!r}. Masalan: |36a:\u221a5,36b:3/7"
+            )
+        try:
+            number, part = split_label(label_text)
+        except ValueError as exc:
+            raise AnswerKeyError(str(exc)) from exc
+        label = label_of(number, part)
+        if label in values:
+            raise AnswerKeyError(f"Javoblar bloki: {label} belgisi takrorlangan.")
+        values[label] = value_text
+    return values
+
+
+def format_labeled_block(values: Mapping[str, str]) -> str:
+    """Label → qiymat xaritasini kanonik blok matniga aylantiradi.
+
+    Kalitlar `"36"` yoki `"36a"` bo'lishi mumkin; tartib **barqaror**
+    (avval pozitsiya, so'ng qism). Bo'sh xarita → bo'sh satr.
+    """
+    ordered: list[tuple[int, str, str]] = []
+    for key, value in values.items():
+        number, part = split_label(key)
+        ordered.append((number, part or "", str(value)))
+    ordered.sort(key=lambda item: (item[0], item[1]))
+    return ",".join(
+        f"{label_of(number, part or None)}:{value}"
+        for number, part, value in ordered
+    )
 
 
 def compare(correct_letters: Sequence[str], given_letters: Sequence[str]) -> list[bool]:
