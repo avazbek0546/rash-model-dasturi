@@ -70,6 +70,7 @@ def help_text(is_admin: bool = False) -> str:
             "/report TEST_KODI — natijalar PDF hisoboti",
             "/add_solution — video/rasm yechim yuklash",
             "/itemstats TEST_KODI — savollar statistikasi",
+            "/admins — adminlarni qo'shish/o'chirish",
         ]
     lines += [
         "",
@@ -718,6 +719,129 @@ def admin_stats(
         f"📝 Topshirilgan testlar (mashq rejimi): <b>{attempts}</b>\n"
         f"{average_line}\n"
         f"🔄 Hozir faol testlar: <b>{active_sessions}</b>"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Adminlarni boshqarish (`/admins`)
+# ---------------------------------------------------------------------------
+def admin_manage_panel(*, owners: list[str], extras: list[dict]) -> str:
+    """`/admins` paneli: egasi adminlar + bot ichidan qo'shilganlar.
+
+    Args:
+        owners: `.env` dan olingan (o'chirilmaydigan) adminlar — tayyor matn.
+        extras: bazadagi adminlar — `{"user_id": int, "mention": str}` ro'yxati.
+    """
+    lines = [
+        "👥 <b>Adminlar</b>",
+        SEP,
+        "🔒 <b>Asosiy adminlar</b> (server sozlamasidan — o'chirilmaydi):",
+    ]
+    if owners:
+        lines += [f"• {_safe(name)}" for name in owners]
+    else:
+        lines.append("• —")
+
+    lines += ["", "➕ <b>Bot ichidan qo'shilganlar</b>:"]
+    if extras:
+        for row in extras:
+            mention = _safe(row.get("mention") or f"ID {row['user_id']}")
+            lines.append(f"• {mention} — <code>{row['user_id']}</code>")
+    else:
+        lines.append("• hozircha yo'q")
+
+    lines += [
+        SEP,
+        "Yangi admin qo'shish uchun «➕ Admin qo'shish» tugmasini bosing.",
+        "O'chirish uchun admin yonidagi «🗑» tugmasini bosing.",
+    ]
+    return "\n".join(lines)
+
+
+def admin_add_prompt() -> str:
+    """«➕ Admin qo'shish» bosilganda: forward yoki ID so'raladi."""
+    return (
+        "➕ <b>Yangi admin qo'shish</b>\n"
+        f"{SEP}\n"
+        "1️⃣ Yangi admin bo'ladigan odam botga <b>/start</b> yozsin.\n"
+        "2️⃣ Uning xabarini shu yerga <b>forward</b> qiling.\n\n"
+        "Yoki uning ID raqamini yozib yuboring: <code>123456789</code>\n\n"
+        "Bekor qilish uchun /admins deb yozing."
+    )
+
+
+def admin_add_unknown() -> str:
+    """Forward qilingan xabarda foydalanuvchi aniqlanmadi."""
+    return (
+        "⚠️ Bu xabardan odamni aniqlab bo'lmadi.\n\n"
+        "• Shaxsiy xabarini forward qiling (kanal yoki guruh posti emas);\n"
+        "• yoki ID raqamini yozib yuboring: <code>123456789</code>"
+    )
+
+
+def admin_add_confirm(mention: str, user_id: int, *, already: bool = False) -> str:
+    """Tasdiqlash xabari (yoki «allaqachon admin» ogohlantirishi)."""
+    if already:
+        return f"ℹ️ {_safe(mention)} allaqachon admin ro'yxatida."
+    return (
+        "❓ <b>Shu odamni admin qilaymi?</b>\n"
+        f"{SEP}\n"
+        f"👤 {_safe(mention)}\n"
+        f"🆔 <code>{user_id}</code>\n"
+        f"{SEP}\n"
+        "Tasdiqlasangiz, unga imtihon yaratish va natijalarni ko'rish huquqi "
+        "beriladi."
+    )
+
+
+def admin_added(mention: str) -> str:
+    """Admin muvaffaqiyatli qo'shildi."""
+    return (
+        f"✅ {_safe(mention)} admin qilib qo'shildi.\n"
+        "Unga /start bosgach admin komandalari ko'rinadi."
+    )
+
+
+def admin_remove_confirm(mention: str, user_id: int) -> str:
+    """Adminni o'chirishni tasdiqlash."""
+    return (
+        "❓ <b>Adminlikdan o'chiraymi?</b>\n"
+        f"{SEP}\n"
+        f"👤 {_safe(mention)}\n"
+        f"🆔 <code>{user_id}</code>\n"
+        f"{SEP}\n"
+        "O'chirilsa, u imtihon yaratolmaydi va statistikani ko'rmaydi."
+    )
+
+
+def admin_removed(mention: str) -> str:
+    """Admin ro'yxatdan o'chirildi."""
+    return f"🗑 {_safe(mention)} adminlikdan o'chirildi."
+
+
+def admin_owner_protected() -> str:
+    """`.env` dagi asosiy adminni o'chirishga urinish."""
+    return (
+        "🔒 Bu — <b>asosiy admin</b> (server sozlamasida yozilgan).\n"
+        "Uni bot ichidan o'chirib bo'lmaydi."
+    )
+
+
+def admin_not_found() -> str:
+    """O'chirilmoqchi bo'lgan admin ro'yxatda yo'q."""
+    return "⚠️ Bu admin ro'yxatda topilmadi (ehtimol allaqachon o'chirilgan)."
+
+
+def admin_new_notice(bot_name: str) -> str:
+    """Yangi adminning o'ziga yuboriladigan xabar."""
+    return (
+        f"🎉 Siz <b>{_safe(bot_name)}</b> botida admin qilib qo'shildingiz.\n\n"
+        "Endi sizga quyidagilar ochildi:\n"
+        "• /new_exam — yangi imtihon yaratish\n"
+        "• /exams — imtihonlar ro'yxati\n"
+        "• /stats — statistika\n"
+        "• /admins — adminlarni boshqarish\n\n"
+        "Boshlash uchun /start ni bosing."
     )
 
 

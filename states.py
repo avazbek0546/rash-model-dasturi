@@ -38,3 +38,13 @@ class SolutionUploadStates(StatesGroup):
     """
 
     awaiting_upload = State()
+
+
+class AdminManageStates(StatesGroup):
+    """`/admins` paneli — yangi adminni qo'shish holati.
+
+    Admin «➕ Admin qo'shish»ni bosgach, bot yangi odamning xabarini
+    **forward** qilishni (yoki ID raqamini yozishni) so'raydi.
+    """
+
+    waiting_forward = State()

@@ -13,6 +13,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from database.db import Database
 from database.models import (
     PART_WHOLE,
+    BotAdmin,
     Exam,
     ExamSubmission,
     Question,
@@ -32,6 +33,17 @@ def _to_user(row: dict) -> User:
         full_name=row["full_name"],
         username=row["username"],
         created_at=row["created_at"],
+    )
+
+
+def _to_bot_admin(row: dict) -> BotAdmin:
+    """`bot_admins` satrini modelga aylantiradi."""
+    return BotAdmin(
+        user_id=int(row["user_id"]),
+        full_name=row["full_name"],
+        username=row["username"],
+        added_by=row["added_by"],
+        added_at=row["added_at"],
     )
 
 
@@ -2105,6 +2117,85 @@ class ItemDifficultyStatsRepository:
         )
 
 
+class BotAdminRepository:
+    """`bot_admins` jadvali — bot ichidan (`/admins` paneli) qo'shilgan adminlar.
+
+    `.env` dagi `ADMIN_ID` / `ADMIN_IDS` bu jadvalga yozilmaydi: ular "egasi"
+    hisoblanadi va panel orqali o'chirilmaydi.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    async def add(
+        self,
+        user_id: int,
+        *,
+        full_name: str | None = None,
+        username: str | None = None,
+        added_by: int | None = None,
+    ) -> bool:
+        """Yangi adminni qo'shadi.
+
+        Returns:
+            True — qo'shildi; False — bu ID allaqachon ro'yxatda (dublikat yo'q).
+        """
+        if await self.exists(user_id):
+            return False
+        await self._db.execute(
+            """
+            INSERT INTO bot_admins (user_id, full_name, username, added_by)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, full_name, username, added_by),
+        )
+        return True
+
+    async def exists(self, user_id: int) -> bool:
+        """Bu ID bazadagi adminlar ro'yxatida bormi?"""
+        row = await self._db.fetchone(
+            "SELECT 1 AS ok FROM bot_admins WHERE user_id = ?", (user_id,)
+        )
+        return row is not None
+
+    async def remove(self, user_id: int) -> bool:
+        """Adminni ro'yxatdan o'chiradi.
+
+        Returns:
+            True — o'chirildi; False — bunday yozuv yo'q edi.
+        """
+        cursor = await self._db.connection.execute(
+            "DELETE FROM bot_admins WHERE user_id = ?", (user_id,)
+        )
+        await self._db.connection.commit()
+        return cursor.rowcount > 0
+
+    async def get(self, user_id: int) -> BotAdmin | None:
+        """Bitta admin yozuvini qaytaradi (topilmasa — None)."""
+        row = await self._db.fetchone(
+            "SELECT * FROM bot_admins WHERE user_id = ?", (user_id,)
+        )
+        return _to_bot_admin(row) if row else None
+
+    async def list_all(self) -> list[BotAdmin]:
+        """Barcha adminlar (qo'shilish tartibida)."""
+        rows = await self._db.fetchall(
+            "SELECT * FROM bot_admins ORDER BY added_at, user_id"
+        )
+        return [_to_bot_admin(row) for row in rows]
+
+    async def list_ids(self) -> set[int]:
+        """Faqat ID'lar (bot ishga tushganda xotiraga yuklash uchun)."""
+        rows = await self._db.fetchall("SELECT user_id FROM bot_admins")
+        return {int(row["user_id"]) for row in rows}
+
+    async def count(self) -> int:
+        """Bazadagi qo'shimcha adminlar soni."""
+        return int(
+            await self._db.fetchvalue("SELECT COUNT(*) FROM bot_admins", default=0)
+        )
+
+
 class Repositories:
     """Barcha repository'larni bitta joyda saqlovchi konteyner.
 
@@ -2131,3 +2222,6 @@ class Repositories:
         self.item_parameters = ItemParameterRepository(db)
         # Vaqtinchalik item statistikasi (p → b) — `services/item_statistics.py`.
         self.item_difficulty = ItemDifficultyStatsRepository(db)
+        # Bot ichidan qo'shilgan adminlar (`/admins` paneli) — `.env` adminlaridan
+        # tashqari; ishga tushganda `config.set_db_admins()` ga uzatiladi.
+        self.admins = BotAdminRepository(db)

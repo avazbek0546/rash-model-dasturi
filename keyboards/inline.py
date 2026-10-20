@@ -13,7 +13,7 @@ from aiogram.types import InlineKeyboardMarkup, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 import config
-from database.models import SKIPPED, Exam, Question
+from database.models import SKIPPED, BotAdmin, Exam, Question
 from services import solutions
 
 
@@ -221,6 +221,77 @@ def exam_delete_confirm_kb(exam_id: int) -> InlineKeyboardMarkup:
         style="danger",
     )
     builder.button(text="⬅️ Bekor qilish", callback_data=ExamAdminCallback(action="list"))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+# ---------------------------------------------------------------------------
+# Adminlarni boshqarish (`/admins`) tugmalari
+# ---------------------------------------------------------------------------
+class AdminManageCallback(CallbackData, prefix="admins"):
+    """`/admins` paneli tugmalari.
+
+    action:
+        add            — «➕ Admin qo'shish» (forward kutish holati yoqiladi);
+        confirm_add    — forward qilingan odamni admin qilishni tasdiqlash;
+        delete         — adminni o'chirishni tasdiqlash (`user_id`);
+        confirm_delete — o'chirishni bajarish (`user_id`);
+        list           — panelni qayta ko'rsatish / bekor qilish.
+    """
+
+    action: str
+    user_id: int = 0
+
+
+def admins_panel_kb(extra_admins: Sequence[BotAdmin]) -> InlineKeyboardMarkup:
+    """Adminlar paneli: «➕ Admin qo'shish» va har bir admin uchun «🗑» tugmasi.
+
+    `.env` dagi "egasi" adminlar bu ro'yxatga tushmaydi — ular o'chirilmaydi.
+    """
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="➕ Admin qo'shish",
+        callback_data=AdminManageCallback(action="add"),
+        style="success",
+    )
+    for admin in extra_admins:
+        builder.button(
+            text=f"🗑 {_short(admin.mention, 30)}",
+            callback_data=AdminManageCallback(action="delete", user_id=admin.user_id),
+            style="danger",
+        )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def admin_add_confirm_kb(user_id: int) -> InlineKeyboardMarkup:
+    """Yangi adminni tasdiqlash: «Ha» / «Bekor» (tasodifiy bosishdan himoya)."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="✅ Ha, admin qilish",
+        callback_data=AdminManageCallback(action="confirm_add", user_id=user_id),
+        style="success",
+    )
+    builder.button(
+        text="⬅️ Bekor qilish",
+        callback_data=AdminManageCallback(action="list"),
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def admin_delete_confirm_kb(user_id: int) -> InlineKeyboardMarkup:
+    """Adminni o'chirishni tasdiqlash: «Ha, o'chirish» / «Bekor»."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="✅ Ha, o'chirish",
+        callback_data=AdminManageCallback(action="confirm_delete", user_id=user_id),
+        style="danger",
+    )
+    builder.button(
+        text="⬅️ Bekor qilish",
+        callback_data=AdminManageCallback(action="list"),
+    )
     builder.adjust(1)
     return builder.as_markup()
 

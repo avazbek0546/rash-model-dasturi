@@ -18,7 +18,16 @@ from __future__ import annotations
 
 from aiogram import Router
 
-from handlers import admin, admin_exam, admin_solution, analysis, fallback, start, webapp
+from handlers import (
+    admin,
+    admin_exam,
+    admin_manage,
+    admin_solution,
+    analysis,
+    fallback,
+    start,
+    webapp,
+)
 
 # Arxivlangan (ulanmaydigan) modullar — kelajakda kerak bo'lsa qo'shiladi.
 LEGACY_MODULES: tuple[str, ...] = ("test", "results", "about")
@@ -27,7 +36,16 @@ LEGACY_MODULES: tuple[str, ...] = ("test", "results", "about")
 def setup_routers() -> Router:
     """Barcha router'larni bitta ildiz router'ga (tartib bilan) ulaydi."""
     root = Router(name="root")
-    for module in (start, webapp, admin_exam, admin, admin_solution, analysis, fallback):
+    for module in (
+        start,
+        webapp,
+        admin_exam,
+        admin,
+        admin_manage,
+        admin_solution,
+        analysis,
+        fallback,
+    ):
         root.include_router(module.router)
     return root
 

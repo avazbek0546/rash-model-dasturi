@@ -151,7 +151,7 @@ copy .env.example .env
 |---|---|---|
 | `BOT_TOKEN` | ✅ | @BotFather dan olingan token |
 | `ADMIN_ID` | ✅ | O'qituvchining Telegram ID si (`/new_exam`, `/exams`, `/stats`) |
-| `ADMIN_IDS` | ➖ | Qo'shimcha adminlar (vergul bilan: `111,222`) |
+| `ADMIN_IDS` | ➖ | Qo'shimcha adminlar (vergul bilan: `111,222`). Bot ichida `/admins` paneli orqali ham qo'shish mumkin |
 | `WEBAPP_URL` | ✅* | Mini App HTTPS manzili (Railway'da domen avtomatik olinadi) |
 | `WEBAPP_HOST` | ➖ | Server manzili (default: `127.0.0.1`; bulutda avtomatik `0.0.0.0`) |
 | `WEBAPP_PORT` | ➖ | Server porti (default: `8080`; Railway'da `PORT` ustun turadi) |
@@ -241,6 +241,7 @@ To'liq yo'riqnoma, tekshirish ro'yxati va xatolar jadvali:
 | `/exams` | Imtihonlar ro'yxati; «🗑» tugmasi bilan o'chirish (javoblar ham o'chadi) |
 | `/stats` | O'quvchilar, imtihonlar, qabul qilingan javoblar va yechimlar statistikasi |
 | `/add_solution` | Video yoki rasm yechim yuklash yo'riqnomasi (quyida) |
+| `/admins` | Adminlarni boshqarish: «➕ Admin qo'shish» (odamning xabarini **forward** qilish kifoya), «🗑» bilan o'chirish |
 | `/cancel` | Ustani istalgan qadamda bekor qilish |
 
 ### 🔍 «Test tahlili» bo'limi (o'quvchi)

@@ -45,6 +45,29 @@ class User:
 
 
 @dataclass(slots=True)
+class BotAdmin:
+    """`bot_admins` jadvalining bir satri — bot ichidan qo'shilgan admin.
+
+    `.env` dagi `ADMIN_ID`/`ADMIN_IDS` bu jadvalda saqlanmaydi: ular "egasi"
+    hisoblanadi va hech qachon o'chirilmaydi.
+    """
+
+    user_id: int
+    full_name: str | None = None
+    username: str | None = None
+    added_by: int | None = None
+    added_at: str | None = None
+
+    @property
+    def mention(self) -> str:
+        """Adminni xabarda ko'rsatish uchun matn (ism + @username)."""
+        name = (self.full_name or "").strip() or f"ID {self.user_id}"
+        if self.username:
+            return f"{name} (@{self.username})"
+        return name
+
+
+@dataclass(slots=True)
 class Question:
     """`questions` jadvalining bir satri.
 

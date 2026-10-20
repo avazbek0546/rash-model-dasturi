@@ -25,12 +25,12 @@ from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramConflictError, TelegramUnauthorizedError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import (
-    BotCommand,
     BotCommandScopeChat,
     MenuButtonWebApp,
     WebAppInfo,
 )
 
+import bot_commands
 import config
 import notify
 from database.db import Database
@@ -97,20 +97,8 @@ async def set_bot_commands(bot: Bot) -> None:
     Oddiy o'quvchi faqat o'ziga kerakli komandalarni ko'radi; adminlar uchun
     qo'shimcha boshqaruv komandalari alohida scope bilan beriladi.
     """
-    base = [
-        BotCommand(command="start", description="Asosiy menyu"),
-        BotCommand(command="app", description="Imtihon ilovasini ochish"),
-        BotCommand(command="tahlil", description="Test tahlili va yechimlar"),
-        BotCommand(command="help", description="Yordam"),
-    ]
-    admin = base + [
-        BotCommand(command="new_exam", description="Yangi imtihon yaratish"),
-        BotCommand(command="exams", description="Imtihonlar ro'yxati"),
-        BotCommand(command="stats", description="Umumiy statistika"),
-        BotCommand(command="report", description="PDF natijalar hisoboti"),
-        BotCommand(command="add_solution", description="Yechim yuklash"),
-        BotCommand(command="itemstats", description="Savollar statistikasi"),
-    ]
+    base = list(bot_commands.BASE_COMMANDS)
+    admin = list(bot_commands.ADMIN_COMMANDS)
     try:
         await bot.set_my_commands(base)
     except Exception:  # pragma: no cover - tarmoq/Telegram xatosi
@@ -172,6 +160,13 @@ async def main() -> None:
     db = Database(config.DB_PATH)
     await db.connect()
     repos = Repositories(db)
+
+    # 1b) Bot ichidan qo'shilgan adminlar (`/admins` paneli) — bazadan xotiraga.
+    #     `.env` dagi adminlar "egasi" bo'lib qoladi (o'chirilmaydi).
+    stored_admins = await repos.admins.list_ids()
+    config.set_db_admins(stored_admins)
+    if stored_admins:
+        logger.info("Bazadan %d ta qo'shimcha admin yuklandi", len(stored_admins))
 
     # 2) Eski "mashq rejimi" savollari (arxivdagi oqim uchun — majburiy emas)
     added = await seed_questions(repos.questions)

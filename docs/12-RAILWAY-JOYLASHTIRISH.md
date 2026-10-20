@@ -183,3 +183,23 @@ Mavjud imtihon/o'quvchilarni ko'chirish kerak bo'lsa:
 
 > Bu qadam majburiy emas — yangi imtihonlarni o'qituvchi bot orqali qayta
 > yaratishi mumkin.
+
+---
+
+## 8. Adminlarni boshqarish (deploy'dan keyin)
+
+Bot ichida **/admins** paneli bor:
+
+1. /admins → **«➕ Admin qo'shish»**;
+2. yangi odam botga **/start** yozsin;
+3. uning xabarini shu yerga **forward** qiling;
+4. tasdiqlang — o'sha odam darhol admin bo'ladi;
+5. o'chirish: admin yonidagi **«🗑»** → tasdiqlash.
+
+Muhim:
+* Ma'lumot **ot_admins** jadvalida saqlanadi — u /data volume ichida,
+  ya'ni qayta deploy'larda yo'qolmaydi;
+* .env dagi ADMIN_ID / ADMIN_IDS **egasi** hisoblanadi va panel orqali
+  o'chirilmaydi (lock-out himoyasi);
+* birinchi admin baribir ADMIN_ID orqali beriladi — panelga kirish uchun.
+

@@ -83,18 +83,74 @@ IS_CLOUD: bool = bool(
 BOT_TOKEN: str = _get_str("BOT_TOKEN")
 ADMIN_ID: int | None = _get_int("ADMIN_ID")
 
-# Qo'shimcha administratorlar: ADMIN_IDS="111,222" (vergul bilan ajratiladi).
-# ADMIN_ID ham ro'yxatga qo'shiladi. Bo'sh bo'lsa faqat ADMIN_ID admin bo'ladi.
-ADMIN_IDS: frozenset[int] = frozenset(
+# `.env` dagi adminlar — "egasi" hisoblanadi va bot ichidan O'CHIRILMAYDI
+# (lock-out himoyasi: kimsa barcha adminlarni o'chirib qo'yolmaydi).
+OWNER_ADMIN_IDS: frozenset[int] = frozenset(
     int(part)
     for part in _get_str("ADMIN_IDS").replace(" ", "").split(",")
     if part.isdigit()
 ) | ({ADMIN_ID} if ADMIN_ID is not None else set())
 
+# Bot ishga tushganda bazadagi (`bot_admins`) adminlar shu yerga qo'shiladi.
+# `set_db_admins()` / `add_admin()` / `remove_admin()` shu to'plamni yangilaydi.
+_DB_ADMIN_IDS: frozenset[int] = frozenset()
+
+# Amaldagi to'liq ro'yxat: egasi + bazadan qo'shilganlar.
+ADMIN_IDS: frozenset[int] = OWNER_ADMIN_IDS
+
 
 def is_admin(user_id: int | None) -> bool:
     """Foydalanuvchi o'qituvchi (admin) huquqiga egami?"""
     return user_id is not None and user_id in ADMIN_IDS
+
+
+def is_owner(user_id: int | None) -> bool:
+    """Foydalanuvchi `.env` dagi "egasi" adminmi (o'chirilmaydi)?"""
+    return user_id is not None and user_id in OWNER_ADMIN_IDS
+
+
+def set_db_admins(user_ids: set[int] | frozenset[int]) -> None:
+    """Bazadan o'qilgan adminlarni xotiraga yuklaydi (bot ishga tushganda)."""
+    global _DB_ADMIN_IDS, ADMIN_IDS
+    _DB_ADMIN_IDS = frozenset(int(uid) for uid in user_ids)
+    ADMIN_IDS = OWNER_ADMIN_IDS | _DB_ADMIN_IDS
+
+
+def add_admin(user_id: int) -> bool:
+    """Adminlar ro'yxatiga ID qo'shadi (faqat xotirada; baza handler'da yoziladi).
+
+    Returns:
+        True — qo'shildi; False — allaqachon admin (yoki egasi).
+    """
+    global _DB_ADMIN_IDS, ADMIN_IDS
+    if is_admin(user_id):
+        return False
+    _DB_ADMIN_IDS = _DB_ADMIN_IDS | {int(user_id)}
+    ADMIN_IDS = OWNER_ADMIN_IDS | _DB_ADMIN_IDS
+    return True
+
+
+def remove_admin(user_id: int) -> bool:
+    """Adminni ro'yxatdan o'chiradi.
+
+    "Egasi" (`.env` orqali berilgan) adminni o'chirib bo'lmaydi.
+
+    Returns:
+        True — o'chirildi; False — egasi yoki ro'yxatda yo'q edi.
+    """
+    global _DB_ADMIN_IDS, ADMIN_IDS
+    if is_owner(user_id):
+        return False
+    if user_id not in _DB_ADMIN_IDS:
+        return False
+    _DB_ADMIN_IDS = _DB_ADMIN_IDS - {int(user_id)}
+    ADMIN_IDS = OWNER_ADMIN_IDS | _DB_ADMIN_IDS
+    return True
+
+
+def db_admin_ids() -> frozenset[int]:
+    """Bot ichidan qo'shilgan adminlar (`.env` dagilarsiz)."""
+    return _DB_ADMIN_IDS
 
 # ---------------------------------------------------------------------------
 # Ma'lumotlar bazasi
