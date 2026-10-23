@@ -167,9 +167,44 @@ Keyin volume va replicas sozlamalari baribir dashboard'da bajariladi
 * SQLite + volume: bitta servis, bitta volume yetarli (SQLite tarmoqda
   ishlamaydi, shuning uchun alohida baza servisi **kerak emas**).
 
+## 7. Botni boshqa botga almashtirish (yangi brend/manzil)
+
+Botni yangisiga ko'chirish kerak bo'lganda (masalan «@eski_bot» → «@yangi_bot»):
+
+1. **@BotFather → `/newbot`** → yangi nom va username (username **`bot`** bilan tugashi shart).
+2. Railway → servis → **Variables** → **`BOT_TOKEN`** ni yangi tokenga almashtiring.
+3. **Yangi deployment kerak bo'ladi** — Railway o'zgaruvchilarni deploymentga "muhrlab" qo'yadi,
+   shuning uchun faqat restart qilish kifoya qilmaydi:
+   ```powershell
+   railway up --detach
+   ```
+4. Loglarda tasdiqlang: `Run polling for bot @yangi_bot id=...`.
+5. Yangi botning nomi/tavsifini chiroyli qilish (Bot API orqali ham mumkin):
+   `setMyName`, `setMyShortDescription`, `setMyDescription`.
+6. Eski botga «biz ko'chdik» yozuvi qo'ying: `setMyShortDescription` + `setMyDescription`
+   → `⚠️ Biz yangi manzilga ko'chdik: @yangi_bot`.
+7. **Ma'lumotlar saqlanadi**: imtihonlar, o'quvchilar, natijalar va `/admins` orqali qo'shilgan
+   adminlar bazada (volume ichida) qoladi. O'quvchilar yangi botga **qaytadan `/start`** bosishi kerak.
+
+> Eslatma: `WEBAPP_URL` (Railway domeni) va `initData` tekshiruvi tokenga bog'liq — token almashsa,
+> Mini App ham avtomatik yangi token bilan tekshiradi (kodda o'zgartirish kerak emas).
+
+### «Deploys have been paused temporarily» xatosi
+
+Bu xato **Railway tomonidagi** cheklov (kodga aloqasi yo'q). Uchraydigan sabablar:
+
+| Sabab | Tekshirish | Yechim |
+|---|---|---|
+| Railway'da platforma nosozligi (outage) | <https://status.railway.com> | Kutish — nosozlik yopilgach deploy o'zi ishlaydi |
+| Workspace «Limited Trial» (tekshirilmagan) | Settings → Plans | `railway.com/verify` yoki karta/Hobby |
+| Kredit tugagan | `railway usage` | Hobby ($5/oy) |
+
+Bunday holatda `railway up`, `railway redeploy`, GitHub push va manbani qayta ulash — **hammasi**
+bir xil javob qaytaradi. Yagona yo'l: nosozlik yopilishini kutish yoki hisobni tasdiqlash.
+
 ---
 
-## 7. Mahalliy bazani serverga ko'chirish (ixtiyoriy)
+## 8. Mahalliy bazani serverga ko'chirish (ixtiyoriy)
 
 Lokal `data/math_bot.db` repoga tushmaydi, shuning uchun server bo'sh baza
 bilan boshlanadi (`seed_questions()` faqat mashq savollarini qo'shadi).
@@ -186,7 +221,7 @@ Mavjud imtihon/o'quvchilarni ko'chirish kerak bo'lsa:
 
 ---
 
-## 8. Adminlarni boshqarish (deploy'dan keyin)
+## 9. Adminlarni boshqarish (deploy'dan keyin)
 
 Bot ichida **/admins** paneli bor:
 
