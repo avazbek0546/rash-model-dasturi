@@ -20,7 +20,7 @@
 | Kod | Xabar |
 |---|---|
 | `400` | `Test kodi kamida 4 belgidan iborat bo'lishi kerak.` |
-| `404` | `Bunday test kodi topilmadi. Kodni tekshirib qayta kiriting.` |
+| `404` | `«{{test_code}}» test kodi topilmadi. Kodni o'qituvchidan aniqlashtirib, qayta kiriting.` |
 | `410` | `Javob qabul qilish vaqti tugagan ({{end_time}}).` |
 | `409` | `Javoblaringiz boshqa qurilmada yangilangan. Sahifa avtomatik yangilanadi.` |
 | `403` | `Bu imtihonda qatnashish huquqi yo'q.` |

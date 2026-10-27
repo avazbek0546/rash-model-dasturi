@@ -122,6 +122,21 @@
     },
     setNotice: setNotice,
     clearNotice: clearNotice,
+    /**
+     * Majburiy xabar (Telegram popup yoki brauzer `alert`).
+     *
+     * MUHIM: bu metod ilgari `window.App` da e'lon qilinmagan edi, holbuki
+     * `queue.js`, `results.js` va `profile.js` uni chaqirardi. Natijada
+     * `catch` blokidagi `TypeError: App.alert is not a function` yutilib,
+     * foydalanuvchi xatoni umuman ko'rmasdi («bot ishlamayapti» taassuroti).
+     */
+    alert: function (message) {
+      API.alert(message);
+    },
+    /** Tasdiqlash oynasi (`Promise<boolean>`). */
+    confirm: function (message) {
+      return API.confirm(message);
+    },
     escape: escapeHtml,
     formatCountdown: formatCountdown,
   };

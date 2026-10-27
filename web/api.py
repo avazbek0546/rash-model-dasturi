@@ -76,6 +76,20 @@ def error_response(status: int, message: str) -> web.Response:
     return web.json_response({"ok": False, "error": message}, status=status)
 
 
+def unknown_code_message(code: str) -> str:
+    """Noma'lum test kodi uchun foydalanuvchiga ko'rsatiladigan xabar.
+
+    Kiritilgan kod **ataylab** xabarga qo'shiladi: o'quvchi nima yozganini
+    ko'rib, xatoni o'zi payqaydi (ortiqcha harf, bo'sh joy va h.k.). Web App
+    bu matnni `textContent` orqali chiqaradi (HTML emas), shuning uchun kod
+    tarkibidagi belgilar hech qanday xavf tug'dirmaydi.
+    """
+    return (
+        f"«{code}» test kodi topilmadi. Kodni o'qituvchidan aniqlashtirib, "
+        "qayta kiriting."
+    )
+
+
 def repositories(request: web.Request) -> Repositories:
     """Ilovaga biriktirilgan repository konteynerini qaytaradi."""
     return request.app["repos"]
@@ -312,7 +326,7 @@ async def submit_answers(request: web.Request) -> web.Response:
 
     exam = await repos.exams.get_by_code(code)
     if exam is None:
-        raise ApiError(404, "Bunday test kodi topilmadi. Kodni tekshirib qayta kiriting.")
+        raise ApiError(404, unknown_code_message(code))
 
     allowed, reason = exam_service.can_submit(exam)
     if not allowed:
@@ -505,7 +519,7 @@ async def verify_code(request: web.Request) -> web.Response:
 
     exam = await repos.exams.get_by_code(code)
     if exam is None:
-        raise ApiError(404, "Bunday test kodi topilmadi. Kodni tekshirib qayta kiriting.")
+        raise ApiError(404, unknown_code_message(code))
 
     now = exam_service.now_db()
     status = exam_service.status_of(exam, now)

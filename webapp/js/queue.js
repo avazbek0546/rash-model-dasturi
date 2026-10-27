@@ -1516,11 +1516,58 @@
     document.body.classList.remove("exam-mode");
   }
 
+  /** Kod maydonidagi xatoni KO'RSATADI (maydon yonida — jim qolib ketmaydi). */
+  function showCodeError(message) {
+    const box = byId("code-error");
+    if (box) {
+      box.textContent = String(message || "Kodni tekshirib qayta kiriting.");
+      box.classList.remove("hidden");
+    }
+    const input = byId("test-code");
+    if (input) {
+      input.classList.add("invalid");
+      input.setAttribute("aria-invalid", "true");
+      try {
+        input.focus();
+      } catch (error) {
+        /* fokus qo'yib bo'lmasa — muhim emas */
+      }
+    }
+    API.haptic("error");
+  }
+
+  /** Kod maydonidagi xato holatini tozalaydi (yozishni boshlaganda/urinishda). */
+  function clearCodeError() {
+    const box = byId("code-error");
+    if (box) {
+      box.textContent = "";
+      box.classList.add("hidden");
+    }
+    const input = byId("test-code");
+    if (input) {
+      input.classList.remove("invalid");
+      input.removeAttribute("aria-invalid");
+    }
+  }
+
+  /** «Kodni tekshirish» tugmasining kutish holati (takroriy bosishga qarshi). */
+  function setVerifying(busy) {
+    const button = byId("find-exam");
+    if (!button) {
+      return;
+    }
+    button.disabled = Boolean(busy);
+    button.textContent = busy ? "Tekshirilmoqda…" : "Kodni tekshirish";
+  }
+
   async function handleVerifyCode(codeOverride) {
     const code = (codeOverride || byId("test-code").value || "").trim().toUpperCase();
+    if (!codeOverride) {
+      clearCodeError();
+    }
     if (code.length < 4) {
       if (!codeOverride) {
-        App.setNotice("error", "Test kodi kamida 4 belgidan iborat bo'lishi kerak.", true);
+        showCodeError("Test kodi kamida 4 belgidan iborat bo'lishi kerak.");
       }
       return;
     }
@@ -1528,6 +1575,7 @@
     if (!codeOverride) {
       API.haptic("medium");
       App.clearNotice();
+      setVerifying(true);
     }
     try {
       const exam = await API.post("/api/verify-code", { test_code: code });
@@ -1543,23 +1591,45 @@
         return;
       }
       if (!exam.can_submit) {
+        // Kod TO'G'RI, lekin javob qabul qilish oynasi hozir ochilmagan
+        // (imtihon hali boshlanmagan yoki allaqachon yopilgan). Kodni
+        // O'CHIRMAYMIZ: oyna ochilganda o'quvchi qaytadan terishi kerak
+        // bo'lmasin. Sahifa ochilishidagi avtomatik tekshiruvda esa jim
+        // qolamiz — har ochilishda xabar chiqib bezovta qilmasin.
         if (!codeOverride) {
           App.setNotice("error", exam.message, false);
-        } else {
-          storageRemove(CODE_KEY); // oyna yopilgan — qayta urinmaymiz
         }
         return;
       }
       byId("test-code").value = code;
+      clearCodeError();
       storageSet(CODE_KEY, code);
       openAnswerSheet(exam, code, Boolean(codeOverride));
       initAttempt(exam, code);
     } catch (error) {
+      const status = error && error.status ? error.status : 0;
       if (codeOverride) {
-        storageRemove(CODE_KEY); // kod endi ishlamaydi — eski holatni tozalaymiz
+        // Sahifa ochilishida eski kod tekshiriladi. Kod umuman yo'q (404)
+        // yoki formati xato (400) bo'lsa — saqlangan holatni tozalaymiz.
+        // Tarmoq xatosida (status yo'q) kod SAQLANADI: aloqa tiklanishi
+        // bilan u yana avtomatik tekshiriladi.
+        if (status === 400 || status === 404) {
+          storageRemove(CODE_KEY);
+        }
         return;
       }
-      App.alert(error.message);
+      // Noto'g'ri kod (yoki tarmoq xatosi) — xabar kod maydoni ostida
+      // ko'rinadi. Ilgari bu yerda `App.alert` chaqirilardi, u mavjud
+      // bo'lmaganligi uchun xato jim yutilib ketardi.
+      showCodeError(
+        error && error.message
+          ? error.message
+          : "Kodni tekshirishda xatolik. Internetni tekshirib, qayta urinib ko'ring."
+      );
+    } finally {
+      if (!codeOverride) {
+        setVerifying(false);
+      }
     }
   }
 
@@ -1683,6 +1753,8 @@
         handleVerifyCode();
       }
     });
+    // O'quvchi kodni qayta yoza boshlaganda eski xato xabari yo'qoladi.
+    byId("test-code").addEventListener("input", clearCodeError);
     App.onShow("queue", loadExams);
 
     // Matematik panel (36–45): barcha tugmalar caret joyiga yoziladi.

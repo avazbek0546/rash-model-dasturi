@@ -25,14 +25,27 @@
 
   async function request(path, options) {
     const opts = options || {};
-    const response = await fetch(path, {
-      method: opts.method || "GET",
-      headers: buildHeaders(),
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-      // `keepalive` — sahifa yopilayotganda ham so'rov uzatilishini ta'minlaydi
-      // (Telegram WebView `pagehide`/`visibilitychange` holatlari uchun).
-      keepalive: opts.keepalive === true,
-    });
+    let response;
+    try {
+      response = await fetch(path, {
+        method: opts.method || "GET",
+        headers: buildHeaders(),
+        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+        // `keepalive` — sahifa yopilayotganda ham so'rov uzatilishini ta'minlaydi
+        // (Telegram WebView `pagehide`/`visibilitychange` holatlari uchun).
+        keepalive: opts.keepalive === true,
+      });
+    } catch (error) {
+      // Server/tunnel ishlamayapti yoki internet yo'q: `fetch` faqat
+      // "Failed to fetch" beradi. Foydalanuvchiga o'zbekcha, aniq xabar
+      // ko'rsatamiz — ilgari bu holat butunlay jim qolardi.
+      const failure = new Error(
+        "Serverga ulanib bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring."
+      );
+      failure.status = 0;
+      failure.network = true;
+      throw failure;
+    }
 
     let payload = null;
     try {
@@ -42,8 +55,16 @@
     }
 
     if (!response.ok) {
-      const message =
-        (payload && payload.error) || "Server xatosi (" + response.status + ")";
+      let message = payload && payload.error ? String(payload.error) : "";
+      if (!message) {
+        // Teskari proksi/tunnel xatolari (502/503/504) — tushunarli izoh.
+        message =
+          response.status >= 500
+            ? "Server vaqtincha ishlamayapti (HTTP " +
+              response.status +
+              "). Birozdan keyin qayta urinib ko'ring."
+            : "Server xatosi (" + response.status + ")";
+      }
       const failure = new Error(message);
       failure.status = response.status;
       throw failure;
@@ -70,12 +91,30 @@
         keepalive: opts.keepalive === true,
       });
     },
-    /** Kichik tebranish (haptic) — faqat Telegram ichida ishlaydi. */
+    /**
+     * Haptic javob — faqat Telegram ichida ishlaydi.
+     *
+     * `style`:
+     *   * `"error"` / `"success"` / `"warning"` → `notificationOccurred`
+     *     (xato yoki natija haqidagi xabarnoma tebranishi);
+     *   * qolganlari (`light`, `medium`, `heavy`, `rigid`, `soft`) →
+     *     `impactOccurred` (oddiy tebranish).
+     */
     haptic: function (style) {
       try {
-        if (tg && tg.HapticFeedback) {
-          tg.HapticFeedback.impactOccurred(style || "light");
+        if (!tg || !tg.HapticFeedback) {
+          return;
         }
+        const preset = style || "light";
+        const isNotification =
+          preset === "error" || preset === "success" || preset === "warning";
+        if (isNotification) {
+          if (typeof tg.HapticFeedback.notificationOccurred === "function") {
+            tg.HapticFeedback.notificationOccurred(preset);
+          }
+          return;
+        }
+        tg.HapticFeedback.impactOccurred(preset);
       } catch (error) {
         /* e'tiborsiz */
       }

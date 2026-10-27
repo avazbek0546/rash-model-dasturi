@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Rasch imtihon platformasi</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=20" />
+    <link rel="stylesheet" href="/static/css/style.css?v=21" />
     <!-- Telegram Web App SDK — Telegram faqat HTTPS sahifalarda beradi. -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
@@ -29,6 +29,8 @@
                    placeholder="MASALAN: MATH2026" />
           </label>
           <button id="find-exam">Kodni tekshirish</button>
+          <p class="field-error hidden" id="code-error" role="alert"
+             aria-live="polite"></p>
           <p class="muted" style="margin-top:8px">
             Kod faqat javob qabul qilish oynasida ishlaydi. Har bir imtihonga
             javob <b>bir marta</b> yuboriladi.
@@ -259,12 +261,12 @@
     <div id="modal-root"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="/static/js/api.js?v=4"></script>
+    <script src="/static/js/api.js?v=6"></script>
     <script src="/static/js/mathpanel.js?v=17"></script>
-    <script src="/static/js/queue.js?v=17"></script>
+    <script src="/static/js/queue.js?v=18"></script>
     <script src="/static/js/results.js?v=5"></script>
     <script src="/static/js/profile.js?v=4"></script>
     <script src="/static/js/admin.js?v=9"></script>
-    <script src="/static/js/app.js?v=6"></script>
+    <script src="/static/js/app.js?v=7"></script>
   </body>
 </html>

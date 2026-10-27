@@ -541,6 +541,7 @@ python tests/test_exam_flow.py    # sxema → repository → hayot sikli → bah
 python tests/test_solutions.py    # 🔍 Test tahlili: solutions jadvali, izoh, sahifalash
 python tests/test_webapp_auth.py  # initData imzosi, muddati, buzuq holatlar
 python tests/test_api.py          # /api/* (aiohttp test client, tarmoqsiz)
+python tests/test_code_error_ux.py # noto'g'ri kod → aniq xato xabari (JS ulanish + API)
 python tests/test_result_notify.py # qabul xabari + result_time natijasi (kalitsiz)
 python tests/test_admin_api.py    # /api/v2/me + /api/v2/admin/* (yechimlar paneli)
 python tests/test_flow.py         # eski mashq rejimi + router/klaviatura

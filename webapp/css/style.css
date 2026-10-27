@@ -141,6 +141,12 @@ input.code-input {
   font-size: 18px;
 }
 
+/* Kod xato bo'lsa — maydon chegarasi qizil bo'ladi (xabar `.field-error` da). */
+input.code-input.invalid {
+  border-color: var(--danger);
+  background: rgba(224, 75, 75, 0.06);
+}
+
 textarea {
   min-height: 76px;
   resize: vertical;
@@ -608,6 +614,14 @@ input.q-input.invalid {
 .notice.success {
   background: rgba(52, 168, 83, 0.14);
   color: #2e9e50;
+}
+
+/* Maydon (input) yonidagi xato matni — kiritilgan kod xato bo'lganda. */
+.field-error {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .spinner {
