@@ -129,6 +129,67 @@ def webapp_button_missing() -> str:
     )
 
 
+def ask_first_name() -> str:
+    """Birinchi kirishda ism so'raladi."""
+    return (
+        "👋 <b>Xush kelibsiz!</b>\n\n"
+        "Botdan foydalanish va test bo'limiga kirish uchun avval "
+        "ro'yxatdan o'tamiz.\n\n"
+        "1️⃣ <b>Ismingizni</b> kiriting (masalan: <code>Ali</code>)."
+    )
+
+
+def ask_last_name(first_name: str) -> str:
+    """Ism qabul qilingandan keyin familiya so'raladi."""
+    return (
+        f"Rahmat, <b>{_safe(first_name)}</b>!\n\n"
+        "2️⃣ Endi <b>Familiyangizni</b> kiriting "
+        "(masalan: <code>Karimov</code>)."
+    )
+
+
+def invalid_name(field: str, reason: str) -> str:
+    """Ism/familiya noto'g'ri kiritilganda (maydon nomi va sabab bilan)."""
+    return (
+        f"⚠️ <b>{_safe(field)}</b> noto'g'ri kiritildi.\n\n"
+        f"{_safe(reason)}\n\n"
+        "Qaytadan kiriting."
+    )
+
+
+def registration_completed(full_name: str) -> str:
+    """Ro'yxatdan o'tish muvaffaqiyatli yakunlanganda."""
+    return (
+        "✅ <b>Ro'yxatdan o'tdingiz!</b>\n\n"
+        f"👤 Ism-familiya: <b>{_safe(full_name)}</b>\n\n"
+        "Endi test bo'limiga kirishingiz mumkin 👇"
+    )
+
+
+def registration_save_error() -> str:
+    """Profilni bazaga saqlashda kutilmagan xatolik."""
+    return (
+        "⚠️ Ma'lumotni saqlashda xatolik yuz berdi.\n"
+        "Iltimos, qayta urinib ko'ring."
+    )
+
+
+def registration_cancelled() -> str:
+    """Ro'yxatdan o'tish bekor qilinganda."""
+    return (
+        "❌ Ro'yxatdan o'tish bekor qilindi.\n"
+        "Davom etish uchun /start buyrug'ini bosing."
+    )
+
+
+def registration_required() -> str:
+    """Ro'yxatdan o'tmagan foydalanuvchi test bo'limiga kirishga urinsa."""
+    return (
+        "🔐 <b>Avval ro'yxatdan o'ting.</b>\n\n"
+        "Ism va familiyani kiritish uchun /start buyrug'ini bosing."
+    )
+
+
 def not_admin() -> str:
     """Admin bo'lmagan foydalanuvchi admin komandasini yozsa."""
     return (
