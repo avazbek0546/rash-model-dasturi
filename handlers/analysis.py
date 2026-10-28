@@ -27,7 +27,9 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 import texts
 from database.models import Exam, SolutionType
 from database.repository import Repositories
-from handlers.start import send_main_menu
+from handlers.access import is_admin
+from handlers.menu import send_main_menu
+from handlers.registration import is_registered
 from keyboards.inline import (
     AnalysisCallback,
     AppCallback,
@@ -302,15 +304,27 @@ async def send_solution(
 
 
 @router.callback_query(AnalysisCallback.filter(F.action == "home"))
-async def back_home(call: CallbackQuery) -> None:
+async def back_home(call: CallbackQuery, repos: Repositories) -> None:
     """«🏡 Asosiy menyu» tugmasi — reply va inline menyuni qaytaradi."""
-    await call.answer()
     if call.message is None:
+        await call.answer()
         return
 
+    if not is_admin(call.from_user.id) and not await is_registered(
+        repos, call.from_user.id
+    ):
+        await call.answer(texts.registration_required(), show_alert=True)
+        return
+
+    await call.answer()
+    profile = await repos.profiles.get(call.from_user.id)
+    full_name = (
+        profile.full_name if profile is not None else call.from_user.full_name
+    )
     await send_main_menu(
         call.message,
         user_id=call.from_user.id,
-        full_name=call.from_user.full_name,
+        full_name=full_name,
+        repos=repos,
         edit=True,
     )

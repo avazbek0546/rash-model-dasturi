@@ -238,6 +238,7 @@ def check_handlers(questions: list) -> None:
     allowed = {
         "message",
         "call",
+        "query",  # aiogram CallbackQuery uchun muqobil nom (admin_manage'da ishlatiladi)
         "callback_data",
         "state",
         "repos",

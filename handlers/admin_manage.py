@@ -106,20 +106,20 @@ async def cmd_admins(
 
 
 @router.callback_query(AdminManageCallback.filter(F.action == "add"))
-async def cb_add(query: CallbackQuery, state: FSMContext) -> None:
+async def cb_add(call: CallbackQuery, state: FSMContext) -> None:
     """«➕ Admin qo'shish» — forward kutish holatini yoqadi."""
-    if query.from_user is None:
+    if call.from_user is None:
         return
-    if not is_admin(query.from_user.id):
-        log_denied("admins:add", query.from_user.id, query.from_user.full_name)
-        await query.answer(texts.not_admin(), show_alert=True)
+    if not is_admin(call.from_user.id):
+        log_denied("admins:add", call.from_user.id, call.from_user.full_name)
+        await call.answer(texts.not_admin(), show_alert=True)
         return
 
     await state.set_state(AdminManageStates.waiting_forward)
     await state.update_data(**{CANDIDATE_KEY: None})
-    await query.answer()
-    if isinstance(query.message, Message):
-        await query.message.answer(texts.admin_add_prompt())
+    await call.answer()
+    if isinstance(call.message, Message):
+        await call.message.answer(texts.admin_add_prompt())
 
 
 def _is_not_command(message: Message) -> bool:

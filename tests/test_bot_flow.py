@@ -134,8 +134,21 @@ class FakeSession(BaseSession):
 
 
 async def check_start_and_menu(bot, session, dp, repos) -> None:
-    """`/start` → bitta inline menyu (pastdagi klaviatura yo'q) → foydalanuvchi bazada."""
+    """`/start` → ism → familiya → inline menyu (pastdagi klaviatura yo'q)."""
     await dp.feed_update(bot, message_update(bot, 1, "/start"))
+    first = session.last()
+    assert isinstance(first, SendMessage), type(first)
+    assert "Ismingizni" in first.text, first.text
+    assert first.reply_markup is None, "ro'yxatdan o'tishdan oldin menyu ko'rsatildi"
+
+    await dp.feed_update(bot, message_update(bot, 2, "Aziz"))
+    second = session.last()
+    assert isinstance(second, SendMessage), type(second)
+    assert "Familiyangizni" in second.text, second.text
+
+    await dp.feed_update(bot, message_update(bot, 3, "Karimov"))
+    assert any("Ro'yxatdan o'tdingiz" in text for text in session.sent_texts())
+
     last = session.last()
     assert isinstance(last, SendMessage), type(last)
     assert "Assalomu alaykum" in last.text and "Rasch" in last.text
@@ -176,12 +189,14 @@ async def check_start_and_menu(bot, session, dp, repos) -> None:
     user = await repos.users.get(USER_ID)
     assert user is not None, "middleware foydalanuvchini bazaga yozmadi"
     assert user.full_name == FULL_NAME and user.username == "aziz"
+    profile = await repos.profiles.get(USER_ID)
+    assert profile is not None and profile.full_name == FULL_NAME
     print(
-        f"[OK] /start: inline menyu ({len(buttons)} qator) + Web App tugmasi "
-        f"({web_app_button.web_app.url}); reply klaviatura olib tashlandi"
+        f"[OK] /start: ism/familiya saqlandi → inline menyu ({len(buttons)} qator) "
+        f"+ Web App tugmasi ({web_app_button.web_app.url}); reply klaviatura olib tashlandi"
     )
 
-    await dp.feed_update(bot, callback_update(bot, 2, "app:help"))
+    await dp.feed_update(bot, callback_update(bot, 4, "app:help"))
     assert any(isinstance(call, AnswerCallbackQuery) for call in session.calls[-2:])
     assert "Mavjud komandalar" in session.sent_texts()[-1]
     print("[OK] «ℹ️ Yordam» tugmasi yordam xabarini yubordi")

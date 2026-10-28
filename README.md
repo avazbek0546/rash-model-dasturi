@@ -227,7 +227,7 @@ To'liq yo'riqnoma, tekshirish ro'yxati va xatolar jadvali:
 
 | Komanda / tugma | Vazifasi |
 |---|---|
-| `/start` | Kutib olish va **bitta inline menyu** (pastdagi reply klaviatura ishlatilmaydi) |
+| `/start` | Birinchi kirishda **ism va familiya** so'raladi; saqlangach **bitta inline menyu** ochiladi (pastdagi reply klaviatura ishlatilmaydi) |
 | 📝 Javoblarni belgilash / `/app` | **Birinchi tugma:** Mini App'ni ochadi (Navbat, Natijalar, Offline, Profil) |
 | 🔍 Test tahlili / `/tahlil` | Inline tugma: topshirilgan imtihonlarning savol-savol tahlili va video/rasm yechimlari |
 | 🏡 Asosiy menyu | Inline tugma: asosiy menyuni yangilaydi (har bir bo'limdan qaytish uchun) |

@@ -45,6 +45,26 @@ class User:
 
 
 @dataclass(slots=True)
+class UserProfile:
+    """`user_profiles` jadvalining bir satri — botda kiritilgan ism/familiya.
+
+    Qatorning **mavjudligi** foydalanuvchi ro'yxatdan o'tganligini bildiradi
+    (`users.full_name` esa hisobotlar uchun saqlanadi va sinxronlanadi).
+    """
+
+    user_id: int
+    first_name: str
+    last_name: str
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    @property
+    def full_name(self) -> str:
+        """Ism va familiyani bitta satrga birlashtiradi."""
+        return f"{self.first_name} {self.last_name}".strip()
+
+
+@dataclass(slots=True)
 class BotAdmin:
     """`bot_admins` jadvalining bir satri — bot ichidan qo'shilgan admin.
 

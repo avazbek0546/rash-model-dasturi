@@ -3,6 +3,11 @@
 Har bir yangilanishda (message/callback) Telegram'dan kelgan foydalanuvchi
 `users` jadvaliga yoziladi — lekin har safar emas: ism o'zgargan holatdagina
 UPDATE bo'ladi (keraksiz SQL yozuvlaridan qochish uchun).
+
+Muhim qoida: botda ism/familiyani kiritib **ro'yxatdan o'tgan** foydalanuvchi
+uchun `full_name` o'zgartirilmaydi — Telegram profili nomi o'zgarsa ham
+o'quvchi kiritgan qiymat saqlanib qoladi. Bunday foydalanuvchida faqat
+`username` yangilanadi.
 """
 
 from __future__ import annotations
@@ -40,13 +45,17 @@ class UserSyncMiddleware(BaseMiddleware):
             # DIQQAT: telegram User obyektida id maydoni `.id` deb nomlanadi
             # (bizning database.models.User da esa `.user_id`).
             if self._known.get(tg_user.id) != full_name:
-                await repos.users.upsert(
-                    User(
-                        user_id=tg_user.id,
-                        full_name=full_name,
-                        username=tg_user.username,
+                if await repos.profiles.exists(tg_user.id):
+                    # Ro'yxatdan o'tgan: ism/familiya o'quvchi kiritgan qiymat.
+                    await repos.users.update_username(tg_user.id, tg_user.username)
+                else:
+                    await repos.users.upsert(
+                        User(
+                            user_id=tg_user.id,
+                            full_name=full_name,
+                            username=tg_user.username,
+                        )
                     )
-                )
                 self._known[tg_user.id] = full_name
                 logger.debug("Foydalanuvchi sinxronlashtirildi: %s (%s)", full_name, tg_user.id)
 

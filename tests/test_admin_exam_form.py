@@ -232,7 +232,8 @@ async def check_mvp_key(bot: Bot, session: FakeSession, dp: Dispatcher, db: Data
     assert "Item-level forma yaratildi" in created.text, created.text
     assert "mcq4: <b>32</b>" in created.text, created.text
     assert "mcq6: <b>3</b>" in created.text, created.text
-    assert "numeric: <b>10</b>" in created.text, created.text
+    # 36–45 ochiq savollar `a`/`b` ga bo'linadi: 35 variant + 20 qism = 55 item.
+    assert "numeric: <b>20</b>" in created.text, created.text
     assert "versiya: <b>1</b>" in created.text, created.text
     assert "Savollar: <b>45</b>" in created.text, created.text
 
@@ -248,26 +249,27 @@ async def check_mvp_key(bot: Bot, session: FakeSession, dp: Dispatcher, db: Data
     form_version_id = int(versions[0]["form_version_id"])
     assert int(forms[0]["current_version_id"]) == form_version_id
 
+    expected_items = total + 10  # 36–45: 10 pozitsiya → 20 qism (a/b)
     form_items = await db.fetchall(
         "SELECT * FROM form_items WHERE form_version_id = ?", (form_version_id,)
     )
-    assert len(form_items) == total, len(form_items)
+    assert len(form_items) == expected_items, len(form_items)
     assert all(row["item_version_id"] is not None for row in form_items)
 
     item_versions = await db.fetchall("SELECT * FROM item_versions")
-    assert len(item_versions) == total, len(item_versions)
+    assert len(item_versions) == expected_items, len(item_versions)
     kinds = Counter(row["item_type"] for row in item_versions)
-    assert kinds == {"mcq4": 32, "mcq6": 3, "numeric": 10}, kinds
+    assert kinds == {"mcq4": 32, "mcq6": 3, "numeric": 20}, kinds
 
     items = await db.fetchall("SELECT * FROM items")
-    assert len(items) == total, len(items)
+    assert len(items) == expected_items, len(items)
 
     # Operatsion `b` (logit) — `item_parameters` ga yoziladi. O'qituvchi
     # qiyinchilikni o'tkazib yuborgan ("-"), shu sababli manba 'default'.
     parameters = await db.fetchall(
         "SELECT * FROM item_parameters ORDER BY item_version_id"
     )
-    assert len(parameters) == total, f"item_parameters: {len(parameters)}"
+    assert len(parameters) == expected_items, f"item_parameters: {len(parameters)}"
     assert all(float(row["b_value"]) == 0.0 for row in parameters), parameters[:3]
     assert {str(row["source"]) for row in parameters} == {"default"}, parameters[:3]
     assert all(str(row["status"]) == "provisional" for row in parameters)
@@ -289,7 +291,7 @@ async def check_mvp_key(bot: Bot, session: FakeSession, dp: Dispatcher, db: Data
     assert len(exams) == 1, "legacy exams yozuvi yo'q"
     print(
         "[OK] MVP kalit → form_id=%s, versiya=1, savollar=45 "
-        "(mcq4=32, mcq6=3, numeric=10), sessiya=%s, legacy exam=%s"
+        "(55 item: mcq4=32, mcq6=3, numeric=20), sessiya=%s, legacy exam=%s"
         % (form_id, int(session_rows[0]["session_id"]), exams[0]["exam_id"])
     )
 
@@ -408,10 +410,13 @@ async def check_percent_difficulty(
     converted = [
         row for row in parameters if abs(float(row["b_value"]) - expected) < 1e-3
     ]
-    assert len(converted) == total, f"legacy_expert parametrlar: {len(converted)}"
+    expected_items = total + 10  # 36–45: 10 pozitsiya → 20 qism (a/b)
+    assert len(converted) == expected_items, (
+        f"legacy_expert parametrlar: {len(converted)}"
+    )
     assert {str(row["source"]) for row in converted} == {"legacy_expert"}
     print(
-        "[OK] Foiz «75» → b=%.4f (%d savol), item_parameters.source=legacy_expert"
+        "[OK] Foiz «75» → b=%.4f (%d item), item_parameters.source=legacy_expert"
         % (expected, len(converted))
     )
 

@@ -20,6 +20,7 @@ from database.models import (
     Solution,
     TestResult,
     User,
+    UserProfile,
     UserStats,
     normalize_part,
 )
@@ -33,6 +34,17 @@ def _to_user(row: dict) -> User:
         full_name=row["full_name"],
         username=row["username"],
         created_at=row["created_at"],
+    )
+
+
+def _to_user_profile(row: dict) -> UserProfile:
+    """`user_profiles` satrini modelga aylantiradi."""
+    return UserProfile(
+        user_id=int(row["user_id"]),
+        first_name=str(row["first_name"]),
+        last_name=str(row["last_name"]),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
     )
 
 
@@ -106,8 +118,83 @@ class UserRepository:
             (" ".join(full_name.split()), user_id),
         )
 
+    async def update_username(self, user_id: int, username: str | None) -> None:
+        """Faqat `username` ni yangilaydi (ismga tegmaydi).
+
+        Ro'yxatdan o'tgan foydalanuvchining `full_name` i o'quvchi kiritgan
+        qiymat bo'lib qolishi kerak — Telegram ismi o'zgarsa ham u
+        o'zgartirilmaydi (middleware shu metodni ishlatadi).
+        """
+        await self._db.execute(
+            "UPDATE users SET username = ? WHERE user_id = ?",
+            (username, int(user_id)),
+        )
+
     async def count(self) -> int:
         return int(await self._db.fetchvalue("SELECT COUNT(*) FROM users", default=0))
+
+
+class UserProfileRepository:
+    """`user_profiles` jadvali — botda kiritilgan ism va familiya.
+
+    Qatorning mavjudligi foydalanuvchi ro'yxatdan o'tganligini bildiradi.
+    `save()` `users.full_name` ni ham sinxronlaydi — hisobotlar va mavjud
+    kodlar avvalgidek ishlaydi.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    async def get(self, user_id: int) -> UserProfile | None:
+        """Profilni qaytaradi (ro'yxatdan o'tmagan bo'lsa — `None`)."""
+        row = await self._db.fetchone(
+            "SELECT * FROM user_profiles WHERE user_id = ?", (int(user_id),)
+        )
+        return _to_user_profile(row) if row else None
+
+    async def exists(self, user_id: int) -> bool:
+        """Foydalanuvchi ro'yxatdan o'tganmi?"""
+        row = await self._db.fetchone(
+            "SELECT 1 AS ok FROM user_profiles WHERE user_id = ?", (int(user_id),)
+        )
+        return row is not None
+
+    async def save(self, user_id: int, first_name: str, last_name: str) -> UserProfile:
+        """Ism/familiyani saqlaydi va `users.full_name` ni yangilaydi (atomar).
+
+        Raises:
+            RuntimeError: saqlashdan keyin qator o'qilmasa (kutilmagan holat).
+        """
+        first = " ".join(str(first_name).split())
+        last = " ".join(str(last_name).split())
+        full_name = f"{first} {last}".strip()
+        conn = self._db.connection
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            await conn.execute(
+                """
+                INSERT INTO user_profiles (user_id, first_name, last_name)
+                VALUES (?, ?, ?)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    first_name = excluded.first_name,
+                    last_name  = excluded.last_name,
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now')
+                """,
+                (int(user_id), first, last),
+            )
+            await conn.execute(
+                "UPDATE users SET full_name = ? WHERE user_id = ?",
+                (full_name, int(user_id)),
+            )
+            await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
+
+        saved = await self.get(user_id)
+        if saved is None:  # pragma: no cover - INSERT muvaffaqiyatli bo'lsa bo'lmaydi
+            raise RuntimeError("Foydalanuvchi profili saqlanmadi.")
+        return saved
 
 
 class QuestionRepository:
@@ -2207,6 +2294,7 @@ class Repositories:
     def __init__(self, db: Database) -> None:
         self.db = db
         self.users = UserRepository(db)
+        self.profiles = UserProfileRepository(db)
         self.questions = QuestionRepository(db)
         self.results = ResultRepository(db)
         self.exams = ExamRepository(db)

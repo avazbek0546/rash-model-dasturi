@@ -1,5 +1,6 @@
 """FSM (Finite State Machine) holatlari.
 
+- `RegistrationStates` — birinchi kirishda ism va familiyani so'rash.
 - `ExamCreateStates` — o'qituvchi `/new_exam` orqali imtihon yaratish ustasi
   (har bir qadamda bitta ma'lumot so'raladi).
 - `TestStates` — eski "mashq rejimi" test jarayoni (arxivda, ishlatilmaydi).
@@ -8,6 +9,13 @@
 from __future__ import annotations
 
 from aiogram.fsm.state import State, StatesGroup
+
+
+class RegistrationStates(StatesGroup):
+    """Birinchi kirishdagi majburiy ro'yxatdan o'tish qadamlari."""
+
+    first_name = State()  # ism
+    last_name = State()  # familiya
 
 
 class ExamCreateStates(StatesGroup):
