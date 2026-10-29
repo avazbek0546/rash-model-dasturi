@@ -713,9 +713,11 @@ def about() -> str:
         "Javoblar asosida maksimal ishonchlilik (MLE) bahosi <b>Newton-Raphson</b>\n"
         "usulida topiladi:\n\n"
         "<code>θ ← θ + Σ(u − P) / Σ P(1 − P)</code>\n\n"
-        "Natija <b>θ (logit)</b> ko'rinishida, uning <b>95% ishonch oralig'i</b> va\n"
-        "sertifikat darajasi (NC … A+) bilan birga ko'rsatiladi. Rasch modelida\n"
-        "\"aniq ball\" tushunchasi yo'q — shuning uchun 0–100 shkala ishlatilmaydi.\n\n"
+        "Natija asosan <b>sertifikat bali (0–100)</b> va uning <b>95% ishonch\n"
+        "oralig'i</b> ko'rinishida ko'rsatiladi; qo'shimcha ravishda θ (logit),\n"
+        "xom ball, sertifikat darajasi (NC … A+), algebra va geometriya ballari\n"
+        "beriladi. Bu 0–100 — oddiy foiz emas: u θ dan o'tkaziladi va savollar\n"
+        "qiyinchiligini hisobga oladi.\n\n"
         "⚠️ <b>Muhim izoh:</b> bu loyihada savollarning qiyinchiligi (b) o'qituvchi\n"
         "tomonidan oldindan belgilangan (muallif bahosi). To'liq rasmiy IRT\n"
         "tahlilida b parametrlari katta guruh javoblari asosida statistik\n"
@@ -1392,19 +1394,41 @@ def result_ready(
     full_name: str,
     report: Mapping[str, object],
 ) -> str:
-    """Natija e'lon qilinganda yuboriladigan karta (faqat Rasch ko'rsatkichlari).
+    """Natija e'lon qilinganda yuboriladigan karta.
 
-    `report` — `services.grading.build_report()` natijasi. Xabarda **faqat**
-    θ (logit), uning 95% ishonch oralig'i, xom ball va sertifikat darajasi bor:
-    0–100 shkala **ko'rsatilmaydi** (Rasch modelida "aniq ball" tushunchasi yo'q).
+    `report` — `services.grading.build_report()` natijasi. Xabarda foydalanuvchi
+    uchun zarur bo'lgan **olti ko'rsatkich** bor: sertifikat bali (95%
+    ishonch oralig'i bilan), to'g'ri javoblar soni, θ (logit), sertifikat
+    darajasi, algebra balli va geometriya balli. Ortiqcha texnik ko'rsatkichlar
+    (SE, θ intervali, tavsiya) bu xabarga qo'shilmaydi.
     """
     level = str(report.get("ability_level") or "")
     theta = float(report.get("theta") or 0.0)
     raw = int(report.get("raw_score") or 0)
     total = int(report.get("total_questions") or 0)
-    advice = str(report.get("advice") or "")
-    interval = report.get("theta_interval")
-    se = report.get("standard_error")
+    scaled = report.get("scaled_score")
+    scaled_interval = report.get("scaled_interval")
+    subject_balls = report.get("subject_balls") or {}
+
+    def ball(value: object) -> str:
+        """0–100 ballni bir kasr xona bilan ko'rsatadi (bo'lmasa — `—`)."""
+        try:
+            return f"{float(value):.1f} ball"
+        except (TypeError, ValueError):
+            return "—"
+
+    score_line = f"🎯 <b>Sertifikat bali:</b> {ball(scaled)}"
+    if isinstance(scaled_interval, (list, tuple)) and len(scaled_interval) == 2:
+        try:
+            low = float(scaled_interval[0])
+            high = float(scaled_interval[1])
+        except (TypeError, ValueError):
+            pass
+        else:
+            score_line += f" (95%: {low:.1f}–{high:.1f} ball)"
+    else:
+        # Chekka holat (SE yo'q) — oraliq mavjud emas, lekin joyi ko'rinadi.
+        score_line += " (95%: —)"
 
     lines = [
         "🎉 <b>Natijangiz e'lon qilindi!</b>",
@@ -1412,23 +1436,12 @@ def result_ready(
         f"📌 {_safe(title)}",
         f"👤 {_safe(full_name)}",
         "",
-        f"🎯 Bilim darajasi (θ): <b>{_sign(theta)} logit</b>",
-    ]
-    if isinstance(interval, (list, tuple)) and len(interval) == 2:
-        lines.append(
-            "📏 95% ishonch oralig'i: "
-            f"<b>{_sign(float(interval[0]))} … {_sign(float(interval[1]))}</b> logit"
-        )
-    if se is not None:
-        lines.append(f"± Standart xato (SE): <b>{float(se):.2f}</b> logit")
-    lines += [
-        f"✅ To'g'ri javoblar: <b>{raw} / {total}</b>",
-        f"{_level_emoji(level)} Daraja: <b>{_safe(level)}</b>",
-    ]
-    if advice:
-        lines += ["", f"💡 {_safe(advice)}"]
-
-    lines += [
+        score_line,
+        f"✅ <b>To'g'ri javoblar:</b> {raw} / {total}",
+        f"🧮 <b>θ (logit):</b> {_sign(theta)}",
+        f"{_level_emoji(level)} <b>Sertifikat darajasi:</b> {_safe(level)}",
+        f"➗ <b>Algebra:</b> {ball(subject_balls.get('algebra'))}",
+        f"📐 <b>Geometriya:</b> {ball(subject_balls.get('geometry'))}",
         "",
         "📊 Batafsil tahlil va yechimlar — pastdagi tugmalarda.",
     ]

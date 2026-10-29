@@ -1605,7 +1605,7 @@ button.math-key.key-fn {
   font-size: 14px;
 }
 
-/* θ (logit) bloki — 0–100 shkala o'rniga yagona ko'rsatkich. */
+/* Sertifikat bali (0–100) bloki — natijalar bo'limining asosiy ko'rsatkichi. */
 .res-theta {
   position: relative;
   flex: 0 0 auto;

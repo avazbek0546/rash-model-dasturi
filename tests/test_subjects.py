@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+import config  # noqa: E402
 from services import subjects  # noqa: E402
 
 
@@ -107,12 +108,44 @@ def check_summarize() -> None:
     print("[OK] Jamlanma: algebra 35 element, geometriya 20 element (jami 55)")
 
 
+def check_scaled_scores() -> None:
+    """Fan bo'yicha Rasch ballari (0–100; foiz emas)."""
+    items = []
+    for position in range(1, 46):
+        parts = ("a", "b") if position >= 36 else ("",)
+        for _part in parts:
+            items.append((position, True, 0.0))
+
+    scores = subjects.scaled_scores(items)
+    assert set(scores) == {"algebra", "geometry"}, scores
+    # Hammasi to'g'ri → har bir fan uchun ham yuqori cap (91.0).
+    assert abs(float(scores["algebra"]) - config.SCALED_CAP_MAX) < 1e-6, scores
+    assert abs(float(scores["geometry"]) - config.SCALED_CAP_MAX) < 1e-6, scores
+
+    mixed = [
+        (position, position not in (36, 41), 0.0)
+        for position, _is_correct, _difficulty in items
+    ]
+    mixed_scores = subjects.scaled_scores(mixed)
+    for code, score in mixed_scores.items():
+        assert score is not None, (code, mixed_scores)
+        assert config.SCALED_CAP_MIN <= score <= config.SCALED_CAP_MAX, (
+            code,
+            score,
+        )
+
+    empty = subjects.scaled_scores([])
+    assert empty == {"algebra": None, "geometry": None}, empty
+    print("[OK] Fan ballari: Rasch bo'yicha 0–100 (foiz emas), bo'sh — None")
+
+
 def main() -> None:
     print("=" * 72)
     print("Algebra / geometriya bo'limlari testi (services/subjects.py)")
     print("=" * 72)
     check_ranges()
     check_summarize()
+    check_scaled_scores()
     print("=" * 72)
     print("Barcha subject tekshiruvlari muvaffaqiyatli o'tdi ✅")
     print("=" * 72)

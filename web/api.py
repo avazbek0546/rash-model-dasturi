@@ -251,10 +251,15 @@ async def _exam_payload(request: web.Request, exam: Any, user_id: int, now: str)
     }
 
     if submission is not None and submission.is_graded and status is ExamStatus.PUBLISHED:
-        # Foydalanuvchiga faqat θ (logit) va xom ball — 0–100 shkala yo'q.
+        # Navbat kartasida ko'rsatiladigan asosiy natija — sertifikat bali.
         payload["my_result"] = {
             "theta": submission.theta,
             "raw_score": submission.raw_score,
+            "scaled_score": (
+                round(float(submission.scaled_score), 2)
+                if submission.scaled_score is not None
+                else None
+            ),
             "level": rasch.ability_level(float(submission.scaled_score or 0.0)),
         }
     return payload
@@ -473,9 +478,14 @@ async def list_results(request: web.Request) -> web.Response:
                 {
                     "theta": submission.theta,
                     "raw_score": submission.raw_score,
-                    # Sertifikat darajasi (NC … A+) — ro'yxat va "hero" kartada
-                    # rangli chip sifatida ko'rsatiladi. Chegaralar `services.rasch`.
-                    # 0–100 shkala foydalanuvchiga **ko'rsatilmaydi**.
+                    # Sertifikat bali (0–100) — "Natijalar" bo'limining asosiy
+                    # ko'rsatkichi va diagramma manbasi.
+                    "scaled_score": (
+                        round(float(submission.scaled_score), 2)
+                        if submission.scaled_score is not None
+                        else None
+                    ),
+                    # Sertifikat darajasi (NC … A+) — rangli chip.
                     "level": rasch.ability_level(float(submission.scaled_score or 0.0)),
                 }
             )
@@ -486,6 +496,12 @@ async def list_results(request: web.Request) -> web.Response:
     chart_source = sorted(published, key=lambda item: item["submitted_at"])
     thetas = [float(item["theta"]) for item in published if item["theta"] is not None]
     average = sum(thetas) / len(thetas) if thetas else None
+    scores = [
+        float(item["scaled_score"])
+        for item in published
+        if item.get("scaled_score") is not None
+    ]
+    average_score = sum(scores) / len(scores) if scores else None
     return web.json_response(
         {
             "ok": True,
@@ -493,13 +509,19 @@ async def list_results(request: web.Request) -> web.Response:
             "pending": pending,
             "chart": {
                 "labels": [item["title"] for item in chart_source],
+                # Eski klientlar uchun θ; yangi UI `score` dan foydalanadi.
                 "theta": [item["theta"] for item in chart_source],
+                "score": [item.get("scaled_score") for item in chart_source],
             },
             "summary": {
                 "attempts": len(submissions),
                 "published": len(published),
                 "best_theta": max(thetas, default=None),
                 "average_theta": round(average, 3) if average is not None else None,
+                "best_score": max(scores, default=None),
+                "average_score": (
+                    round(average_score, 3) if average_score is not None else None
+                ),
             },
         }
     )

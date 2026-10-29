@@ -284,12 +284,15 @@ async def check_lifecycle(repos: Repositories) -> None:
     assert report["items"][2]["given_answer"] is None
     assert report["items"][2]["correct_answer"] == "C"
     assert 0.0 < report["items"][0]["probability"] < 1.0
-    # Foydalanuvchi hisoboti faqat θ (logit) shkalasida — 0–100 maydonlari yo'q.
+    # Foydalanuvchi hisoboti: sertifikat bali (0–100) + uning 95% intervali,
+    # fan ballari; θ esa qo'shimcha texnik ko'rsatkich sifatida qoladi.
     assert report["theta_interval"] is not None and report["standard_error"] is not None
-    assert "scaled_score" not in report and "scaled_interval" not in report, report
+    assert report["scaled_score"] is not None
+    assert report["scaled_interval"] is not None
+    assert set(report["subject_balls"]) == {"algebra", "geometry"}, report
     print(
-        f"[OK] Hisobot: {report['ability_level']}, SE = {report['standard_error']}, "
-        f"95% interval = {report['theta_interval']} (logit)"
+        f"[OK] Hisobot: {report['ability_level']}, ball = {report['scaled_score']:.2f}, "
+        f"95% interval = {report['scaled_interval']} (ball)"
     )
 
     # "Navbat" ro'yxati: faol imtihon birinchi turadi

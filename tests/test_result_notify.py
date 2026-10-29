@@ -140,8 +140,11 @@ def check_text_builder() -> None:
         "theta": 0.42,
         "theta_interval": [0.12, 0.72],
         "standard_error": 0.31,
+        "scaled_score": 67.1,
+        "scaled_interval": [58.3, 75.9],
         "raw_score": 3,
         "total_questions": 5,
+        "subject_balls": {"algebra": 70.5, "geometry": 63.2},
         "advice": "Sertifikat B darajasi. Qiyinroq savollar ustida ishlang.",
     }
     ready = texts.result_ready(
@@ -150,14 +153,18 @@ def check_text_builder() -> None:
         report=report,
     )
     assert "Natijangiz e'lon qilindi" in ready, ready
-    # Faqat θ (logit) — 0–100 shkala umuman yo'q.
-    assert "θ): <b>+0.42 logit</b>" in ready, ready
-    assert "0.12 … +0.72" in ready, ready
-    assert "Daraja: <b>B</b>" in ready, ready
-    assert "3 / 5" in ready, ready
-    assert "100 ball" not in ready and "ball</b>" not in ready, ready
+    # Foydalanuvchiga kerakli olti ko'rsatkich — ortiqcha texnik maydonlarsiz.
+    assert "Sertifikat bali:</b> 67.1 ball" in ready, ready
+    assert "(95%: 58.3–75.9 ball)" in ready, ready
+    assert "To'g'ri javoblar:</b> 3 / 5" in ready, ready
+    assert "θ (logit):</b> +0.42" in ready, ready
+    assert "Sertifikat darajasi:</b> B" in ready, ready
+    assert "Algebra:</b> 70.5 ball" in ready, ready
+    assert "Geometriya:</b> 63.2 ball" in ready, ready
+    assert "Standart xato" not in ready, ready
+    assert "ishonch oralig'i" not in ready, ready
     assert KEY not in ready and "A2B3" not in ready, ready
-    print("[OK] Matnlar: qabul xabari (markssiz) sanoqsiz; marks bilan faqat ✅/❌")
+    print("[OK] Natija xabari: 6 ko'rsatkich, ortiqcha texnik maydonlarsiz")
 
 
 def check_result_locked() -> None:
@@ -220,9 +227,14 @@ async def check_notify_send() -> None:
     message = bot.messages[0]
     assert message["chat_id"] == USER["id"], message
     assert "Natijangiz e'lon qilindi" in message["text"], message
-    assert "θ" in message["text"] and "logit" in message["text"], message
-    assert "Daraja:" in message["text"], message
-    assert "100 ball" not in message["text"], message
+    assert "Sertifikat bali:" in message["text"], message
+    assert "(95%:" in message["text"], message
+    assert "To'g'ri javoblar:" in message["text"], message
+    assert "θ (logit):" in message["text"], message
+    assert "Sertifikat darajasi:" in message["text"], message
+    assert "Algebra:" in message["text"], message
+    assert "Geometriya:" in message["text"], message
+    assert "Standart xato" not in message["text"], message
     assert KEY not in message["text"], message
     buttons = [b for row in message["reply_markup"].inline_keyboard for b in row]
     assert any(b.text == "🔍 Savollar tahlili" for b in buttons), buttons
@@ -296,9 +308,13 @@ async def check_submit_and_notify(repos: Repositories) -> None:
     assert len(bot.messages) == 2, bot.messages
     result = bot.messages[-1]
     assert "Natijangiz e'lon qilindi" in result["text"], result
-    assert "θ" in result["text"] and "logit" in result["text"], result
-    assert "Daraja:" in result["text"], result
-    assert "100 ball" not in result["text"], result
+    assert "Sertifikat bali:" in result["text"], result
+    assert "To'g'ri javoblar:" in result["text"], result
+    assert "θ (logit):" in result["text"], result
+    assert "Sertifikat darajasi:" in result["text"], result
+    assert "Algebra:" in result["text"], result
+    assert "Geometriya:" in result["text"], result
+    assert "Standart xato" not in result["text"], result
     assert KEY not in result["text"], result
     print("[OK] notify_due_results → boy natija kartasi yuborildi (kalitsiz)")
 

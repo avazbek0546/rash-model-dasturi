@@ -616,9 +616,16 @@ def build_report(exam: Exam, submission: ExamSubmission) -> dict[str, Any]:
         delta = 1.96 * standard_error
         theta_interval = (round(theta - delta, 3), round(theta + delta, 3))
 
-    # Sertifikat darajasi (A+ … NC) ichki shkala bo'yicha aniqlanadi, lekin
-    # foydalanuvchiga **raqam** ko'rinishida ko'rsatilmaydi — faqat daraja kodi.
-    level_score = float(submission.scaled_score or 0.0)
+    # Sertifikat bali — 0..100 shkala (foydalanuvchi uchun asosiy ko'rsatkich).
+    scaled_score = float(submission.scaled_score or 0.0)
+    scaled_error = standard_error * config.scaled_span() if standard_error else None
+    scaled_interval: tuple[float, float] | None = None
+    if scaled_error is not None:
+        delta = 1.96 * scaled_error
+        scaled_interval = (
+            round(max(config.SCALED_CAP_MIN, scaled_score - delta), 2),
+            round(min(config.SCALED_CAP_MAX, scaled_score + delta), 2),
+        )
 
     items: list[dict[str, Any]] = [
         _report_item(result, theta) for result in results
@@ -627,6 +634,10 @@ def build_report(exam: Exam, submission: ExamSubmission) -> dict[str, Any]:
     # Algebra / geometriya bo'limlari (pozitsiya bo'yicha; `services/subjects.py`).
     subject_scores = subjects.summarize(
         (result.question_number, result.is_correct) for result in results
+    )
+    subject_balls = subjects.scaled_scores(
+        (result.question_number, result.is_correct, result.difficulty)
+        for result in results
     )
 
     return {
@@ -637,9 +648,13 @@ def build_report(exam: Exam, submission: ExamSubmission) -> dict[str, Any]:
         "theta": round(theta, 4),
         "theta_interval": theta_interval,
         "standard_error": round(standard_error, 4) if standard_error else None,
-        "ability_level": rasch.ability_level(level_score),
-        "advice": rasch.level_advice(level_score),
+        "scaled_score": round(scaled_score, 2),
+        "scaled_error": round(scaled_error, 2) if scaled_error else None,
+        "scaled_interval": scaled_interval,
+        "ability_level": rasch.ability_level(scaled_score),
+        "advice": rasch.level_advice(scaled_score),
         "submitted_at": submission.submitted_at,
         "subjects": subject_scores,
+        "subject_balls": subject_balls,
         "items": items,
     }

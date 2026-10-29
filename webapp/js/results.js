@@ -17,18 +17,34 @@
   }
 
   /**
-   * θ (logit) ko'rinishi: ishorali, 2 kasr xona (+0.42 · −1.31 · +0.00).
+   * Sertifikat bali (0–100) ko'rinishi: bir kasr xona (67.4 · 91.0 · 9.0).
    *
-   * 0–100 shkala **ishlatilmaydi**: Rasch modelida yagona o'lchov — θ (logit),
-   * shu sababli natijalar ham faqat θ, uning ishonch oralig'i va xom ball
-   * ko'rinishida ko'rsatiladi.
+   * Foydalanuvchi uchun asosiy o'lchov — sertifikat bali. θ (logit) faqat
+   * ichki/texnik ko'rsatkich sifatida qoladi va bu bo'limda ko'rsatilmaydi.
    */
-  function formatTheta(value) {
+  function formatScore(value) {
+    if (value === null || value === undefined || value === "") {
+      return "—";
+    }
     const number = Number(value);
     if (!Number.isFinite(number)) {
       return "—";
     }
-    return (number >= 0 ? "+" : "") + number.toFixed(2);
+    return number.toFixed(1);
+  }
+
+  /** Imtihon yozuvidan sertifikat balini oladi (bo'lmasa — null). */
+  function scoreOf(item) {
+    if (
+      !item ||
+      item.scaled_score === null ||
+      item.scaled_score === undefined ||
+      item.scaled_score === ""
+    ) {
+      return null;
+    }
+    const value = Number(item.scaled_score);
+    return Number.isFinite(value) ? value : null;
   }
 
   // ---------------------------------------------------------------------------
@@ -42,19 +58,19 @@
   };
 
   /**
-   * Sertifikat darajalari — **θ (logit)** chegaralari bo'yicha zaxira jadval
-   * (server `level` maydonini bersa, o'sha ishlatiladi). Chegaralar
-   * `services/rasch.py::CERTIFICATE_LEVELS` bilan bir xil ma'noni beradi:
-   * −0.24 ≈ C, 0 ≈ C+, 0.3 ≈ B, 0.6 ≈ B+, 0.9 ≈ A, 1.2 ≈ A+.
+   * Sertifikat darajalari — **0–100 sertifikat bali** chegaralari bo'yicha
+   * zaxira jadval (server `level` maydonini bersa, o'sha ishlatiladi).
+   * Chegaralar `services/rasch.py::CERTIFICATE_LEVELS` bilan bir xil:
+   * <46 → NC, 46 → C, 50 → C+, 55 → B, 60 → B+, 65 → A, 70 → A+.
    */
   const LEVELS = [
     { code: "NC", min: -Infinity, tone: "res-tone-nc" },
-    { code: "C", min: -0.24, tone: "res-tone-c" },
-    { code: "C+", min: 0, tone: "res-tone-c-plus" },
-    { code: "B", min: 0.3, tone: "res-tone-b" },
-    { code: "B+", min: 0.6, tone: "res-tone-b-plus" },
-    { code: "A", min: 0.9, tone: "res-tone-a" },
-    { code: "A+", min: 1.2, tone: "res-tone-a-plus" },
+    { code: "C", min: 46, tone: "res-tone-c" },
+    { code: "C+", min: 50, tone: "res-tone-c-plus" },
+    { code: "B", min: 55, tone: "res-tone-b" },
+    { code: "B+", min: 60, tone: "res-tone-b-plus" },
+    { code: "A", min: 65, tone: "res-tone-a" },
+    { code: "A+", min: 70, tone: "res-tone-a-plus" },
   ];
 
   const MONTHS = [
@@ -91,8 +107,8 @@
     );
   }
 
-  function levelCode(theta) {
-    const value = Number(theta);
+  function levelCode(score) {
+    const value = Number(score);
     if (!Number.isFinite(value)) {
       return "NC";
     }
@@ -106,7 +122,7 @@
   }
 
   function toneOf(item) {
-    const code = (item && item.level) || levelCode(item && item.theta);
+    const code = (item && item.level) || levelCode(scoreOf(item));
     for (let index = 0; index < LEVELS.length; index += 1) {
       if (LEVELS[index].code === code) {
         return LEVELS[index].tone;
@@ -170,30 +186,14 @@
     return (number >= 0 ? "+" : "") + number.toFixed(digits);
   }
 
-  /** θ (logit) o'qi uchun yumshoq chegaralar. */
-  function thetaAxis(values) {
-    const numbers = (values || [])
-      .map(function (value) {
-        return Number(value);
-      })
-      .filter(function (value) {
-        return Number.isFinite(value);
-      });
-    if (!numbers.length) {
-      return { min: -3, max: 3 };
-    }
-    let low = Math.min.apply(null, numbers);
-    let high = Math.max.apply(null, numbers);
-    if (high - low < 1) {
-      const middle = (low + high) / 2;
-      low = middle - 0.5;
-      high = middle + 0.5;
-    }
-    const padding = (high - low) * 0.18;
-    return {
-      min: Math.floor((low - padding) * 10) / 10,
-      max: Math.ceil((high + padding) * 10) / 10,
-    };
+  /**
+   * Sertifikat bali o'qi — 0..100.
+   *
+   * Belgilangan oraliq diagrammani imtihonlar orasida taqqoslashni oson
+   * qiladi: 46 dan past — NC, 70 dan yuqori — A+ (sertifikat chegaralari).
+   */
+  function scoreAxis() {
+    return { min: 0, max: 100 };
   }
 
   /** HEX rangni shaffof rgba ga aylantiradi (gradient uchun). */
@@ -214,7 +214,7 @@
     const fallback = byId("chart-fallback");
     const wrap = canvas ? canvas.parentElement : null;
     const labels = (chartData && chartData.labels) || [];
-    const theta = (chartData && chartData.theta) || [];
+    const score = (chartData && chartData.score) || [];
 
     if (!labels.length) {
       if (chart) {
@@ -249,9 +249,11 @@
             return (
               '<div class="exam-item"><div><div class="title">' +
               App.escape(label) +
-              "</div></div><div>θ " +
-              formatTheta(theta[index]) +
-              " logit</div></div>"
+              "</div></div><div>" +
+              formatScore(score[index]) +
+              " ball · " +
+              levelCode(score[index]) +
+              "</div></div>"
             );
           })
           .join("");
@@ -264,8 +266,8 @@
       wrap.classList.remove("hidden");
     }
 
-    // θ (logit) o'qi — qiymatlar atrofida yumshoq chegara (0–100 shkala yo'q).
-    const axis = thetaAxis(theta);
+    // Sertifikat bali o'qi — 0..100 (sertifikat chegaralari ko'rinadi).
+    const axis = scoreAxis();
 
     const theme = API.theme();
     const textColor = theme.text_color || "#10151c";
@@ -285,8 +287,8 @@
         labels: labels,
         datasets: [
           {
-            label: "θ (logit)",
-            data: theta,
+            label: "Sertifikat bali (0–100)",
+            data: score,
             borderColor: buttonColor,
             backgroundColor: withAlpha(buttonColor, 0.12),
             borderWidth: 3,
@@ -323,8 +325,8 @@
                   return "—";
                 }
                 return (
-                  "θ " + formatTheta(value) + " logit · daraja " +
-                  levelCode(value)
+                  "Sertifikat bali: " + formatScore(value) +
+                  " · daraja " + levelCode(value)
                 );
               },
             },
@@ -336,8 +338,9 @@
             max: axis.max,
             ticks: {
               color: textColor,
+              stepSize: 20,
               callback: function (value) {
-                return signed(value, 1);
+                return String(Math.round(value));
               },
             },
             grid: { color: "rgba(128,128,128,0.18)" },
@@ -388,13 +391,13 @@
     });
     const previousByExam = {};
     for (let index = 1; index < asc.length; index += 1) {
-      previousByExam[asc[index].exam_id] = Number(asc[index - 1].theta);
+      previousByExam[asc[index].exam_id] = scoreOf(asc[index - 1]);
     }
-    let bestTheta = -Infinity;
+    let bestScore = -Infinity;
     asc.forEach(function (item) {
-      const theta = Number(item.theta);
-      if (theta > bestTheta) {
-        bestTheta = theta;
+      const score = scoreOf(item);
+      if (score !== null && score > bestScore) {
+        bestScore = score;
       }
     });
 
@@ -414,8 +417,9 @@
         .slice()
         .reverse()
         .forEach(function (item) {
-          const theta = Number(item.theta);
-          const isBest = asc.length > 1 && Math.abs(theta - bestTheta) < 1e-9;
+          const score = scoreOf(item);
+          const isBest =
+            asc.length > 1 && score !== null && Math.abs(score - bestScore) < 1e-9;
           rows.push(itemHtml(item, previousByExam[item.exam_id], isBest));
         });
     }
@@ -566,28 +570,28 @@
     byId("results-list").classList.add("hidden");
   }
 
-  /** Hero'dagi asosiy ko'rsatkich — **θ (logit)** (0–100 shkala o'rniga). */
-  function thetaBlock(theta, level) {
+  /** Hero'dagi asosiy ko'rsatkich — sertifikat bali (0–100). */
+  function scoreBlock(score, level) {
     return (
       '<div class="res-theta">' +
-      '<span class="res-theta-value">' + formatTheta(theta) + "</span>" +
-      '<span class="res-theta-unit">logit · ' + App.escape(level) + "</span>" +
+      '<span class="res-theta-value">' + formatScore(score) + "</span>" +
+      '<span class="res-theta-unit">ball · ' + App.escape(level) + "</span>" +
       "</div>"
     );
   }
 
-  /** Hero ichidagi o'sish/kamayish bloki (oldingi imtihonga nisbatan, logit). */
+  /** Hero ichidagi o'sish/kamayish bloki (oldingi imtihonga nisbatan, ball). */
   function deltaBlock(delta) {
     if (delta === null || delta === undefined || !Number.isFinite(Number(delta))) {
       return (
-        '<div class="res-delta flat">— <span>logit</span></div>' +
+        '<div class="res-delta flat">— <span>ball</span></div>' +
         '<div class="res-hero-level">Taqqoslash uchun oldingi natija yo\'q</div>'
       );
     }
     const value = Number(delta);
-    if (Math.abs(value) < 0.005) {
+    if (Math.abs(value) < 0.05) {
       return (
-        '<div class="res-delta flat">+0.00 <span>logit</span></div>' +
+        '<div class="res-delta flat">+0.0 <span>ball</span></div>' +
         '<div class="res-hero-level">Oldingi natija bilan bir xil</div>'
       );
     }
@@ -595,13 +599,13 @@
     return (
       '<div class="res-delta ' + (up ? "up" : "down") + '">' +
       icon(up ? "arrowUp" : "arrowDown", 14) +
-      formatTheta(value) +
-      ' <span>logit</span></div>' +
+      signed(value, 1) +
+      ' <span>ball</span></div>' +
       '<div class="res-hero-level">Oldingi imtihonga nisbatan</div>'
     );
   }
 
-  /** 95% ishonch oralig'i — θ (logit) shkalasida: trek + oraliq + nuqta. */
+  /** 95% ishonch oralig'i — sertifikat bali shkalasida: trek + oraliq + nuqta. */
   function intervalHtml(low, high, value) {
     const left = Number(low);
     const right = Number(high);
@@ -610,7 +614,7 @@
       return "";
     }
     // Trek oraliq atrofida biroz kengaytiriladi (vizual nafas olish uchun).
-    const span = Math.max(right - left, 0.4);
+    const span = Math.max(right - left, 2.0);
     const min = left - span * 0.35;
     const max = right + span * 0.35;
     const scale = function (number) {
@@ -621,7 +625,7 @@
     return (
       '<div class="res-interval">' +
       '<div class="res-interval-head"><span>95% ishonch oralig\'i</span>' +
-      "<b>" + formatTheta(left) + " … " + formatTheta(right) + "</b></div>" +
+      "<b>" + formatScore(left) + " … " + formatScore(right) + "</b></div>" +
       '<div class="res-interval-track">' +
       '<span class="res-interval-range" style="left:' + leftPercent.toFixed(1) +
       "%;width:" + widthPercent.toFixed(1) + '%"></span>' +
@@ -667,21 +671,26 @@
     });
     const latest = asc[asc.length - 1];
     const previous = asc.length > 1 ? asc[asc.length - 2] : null;
-    // Yagona o'lchov — θ (logit). 0–100 shkala ishlatilmaydi.
-    const theta = Number(latest.theta);
-    const delta = previous ? theta - Number(previous.theta) : null;
-    const level = latest.level || levelCode(theta);
+    // Asosiy o'lchov — sertifikat bali (0–100). θ foydalanuvchiga ko'rsatilmaydi.
+    const score = scoreOf(latest);
+    const previousScore = previous ? scoreOf(previous) : null;
+    const delta =
+      score !== null && previousScore !== null ? score - previousScore : null;
+    const level = latest.level || levelCode(score);
     const tone = toneOf(latest);
     const submitted = parseDbTime(latest.submitted_at);
     const total = Number(latest.total_questions) || 0;
     const raw = Number(latest.raw_score) || 0;
-    const best = Math.max.apply(
-      null,
-      asc.map(function (item) {
-        return Number(item.theta);
+    const scores = asc
+      .map(function (item) {
+        return scoreOf(item);
       })
-    );
-    const isRecord = asc.length > 1 && Math.abs(theta - best) < 1e-9;
+      .filter(function (value) {
+        return value !== null;
+      });
+    const best = scores.length ? Math.max.apply(null, scores) : null;
+    const isRecord =
+      asc.length > 1 && score !== null && best !== null && Math.abs(score - best) < 1e-9;
 
     box.innerHTML =
       '<div class="res-hero ' + tone + '">' +
@@ -693,7 +702,7 @@
       "</div>" +
       '<span class="res-chip">' + App.escape(level) + "</span>" +
       "</div>" +
-      '<div class="res-hero-main">' + thetaBlock(theta, level) +
+      '<div class="res-hero-main">' + scoreBlock(score, level) +
       '<div class="res-hero-side">' + deltaBlock(delta) +
       '<div class="res-hero-level">Daraja: <b>' + App.escape(level) + "</b></div>" +
       (isRecord
@@ -724,11 +733,11 @@
           return;
         }
         const intervalSlot = byId("hero-interval-slot");
-        if (intervalSlot && report && Array.isArray(report.theta_interval)) {
+        if (intervalSlot && report && Array.isArray(report.scaled_interval)) {
           intervalSlot.innerHTML = intervalHtml(
-            report.theta_interval[0],
-            report.theta_interval[1],
-            report.theta
+            report.scaled_interval[0],
+            report.scaled_interval[1],
+            report.scaled_score
           );
         }
         const adviceSlot = byId("hero-advice-slot");
@@ -780,8 +789,8 @@
       '<circle cx="72" cy="28" r="4" fill="currentColor"/>' +
       "</svg>" +
       "<h2>Hali natijalar yo'q</h2>" +
-      '<p class="muted">Birinchi imtihonni topshiring — θ (bilim darajasi), ' +
-      "sertifikat darajasi va o'sish dinamikasi shu yerda paydo bo'ladi.</p>" +
+      '<p class="muted">Birinchi imtihonni topshiring — sertifikat bali, ' +
+      "daraja va o'sish dinamikasi shu yerda paydo bo'ladi.</p>" +
       '<button type="button" class="res-empty-cta" id="res-go-queue">' +
       "Navbatga o'tish</button>" +
       "</div>"
@@ -798,28 +807,45 @@
     const published = data.published || [];
     let raw = 0;
     let total = 0;
+    const scores = [];
     published.forEach(function (item) {
       raw += Number(item.raw_score) || 0;
       total += Number(item.total_questions) || 0;
+      const score = scoreOf(item);
+      if (score !== null) {
+        scores.push(score);
+      }
     });
     const correct = total > 0 ? raw + "<small>/" + total + "</small>" : "—";
+    const bestScore =
+      summary.best_score === null || summary.best_score === undefined
+        ? scores.length
+          ? Math.max.apply(null, scores)
+          : null
+        : Number(summary.best_score);
+    const averageScore =
+      summary.average_score === null || summary.average_score === undefined
+        ? scores.length
+          ? scores.reduce(function (sum, value) {
+              return sum + value;
+            }, 0) / scores.length
+          : null
+        : Number(summary.average_score);
 
     box.innerHTML =
       statTile(
         "res-tone-b",
         "trophy",
-        summary.best_theta === null || summary.best_theta === undefined
-          ? "—"
-          : formatTheta(summary.best_theta) + "<small>logit</small>",
-        "Eng yaxshi θ"
+        bestScore === null ? "—" : formatScore(bestScore) + "<small>ball</small>",
+        "Eng yaxshi ball"
       ) +
       statTile(
         "res-tone-c-plus",
         "trend",
-        summary.average_theta === null || summary.average_theta === undefined
+        averageScore === null
           ? "—"
-          : formatTheta(summary.average_theta) + "<small>logit</small>",
-        "O'rtacha θ"
+          : formatScore(averageScore) + "<small>ball</small>",
+        "O'rtacha ball"
       ) +
       statTile("res-tone-b-plus", "list", String(summary.attempts || 0), "Urinishlar") +
       statTile("res-tone-a", "target", correct, "To'g'ri javoblar");
@@ -836,29 +862,32 @@
   }
 
   /** Bitta e'lon qilingan imtihon kartasi (timeline elementi). */
-  function itemHtml(item, previousTheta, isBest) {
+  function itemHtml(item, previousScore, isBest) {
     const tone = toneOf(item);
-    const theta = Number(item.theta);
-    const level = item.level || levelCode(theta);
+    const score = scoreOf(item);
+    const level = item.level || levelCode(score);
     const total = Number(item.total_questions) || 0;
     const raw = Number(item.raw_score) || 0;
-    const ratio = total ? Math.max(0, Math.min(100, (raw / total) * 100)) : 0;
+    const ratio = score === null ? 0 : Math.max(0, Math.min(100, score));
     const submitted = parseDbTime(item.submitted_at);
     const delta =
-      previousTheta === null || previousTheta === undefined
+      previousScore === null ||
+      previousScore === undefined ||
+      score === null
         ? null
-        : theta - Number(previousTheta);
+        : score - Number(previousScore);
     const metaParts = [formatDate(submitted), raw + "/" + total + " to'g'ri"];
 
     return (
       '<button type="button" class="res-item ' + tone + '" data-exam="' +
-      item.exam_id + '" aria-label="' + App.escape(item.title) + ", θ " +
-      formatTheta(theta) + ' logit — batafsil tahlil">' +
+      item.exam_id + '" aria-label="' + App.escape(item.title) + ", " +
+      formatScore(score) + " ball, daraja " + App.escape(level) +
+      ' — batafsil tahlil">' +
       '<span class="res-item-dot" aria-hidden="true"></span>' +
       '<span class="res-item-top">' +
       '<span class="res-item-title">' + App.escape(item.title) + "</span>" +
-      '<span class="res-item-score">' + formatTheta(theta) +
-      "<small>logit</small></span></span>" +
+      '<span class="res-item-score">' + formatScore(score) +
+      "<small>ball</small></span></span>" +
       '<span class="res-item-meta">' + App.escape(metaParts.join(" · ")) + "</span>" +
       '<span class="res-item-foot">' +
       '<span class="res-mini" aria-hidden="true"><span style="width:' +
@@ -873,18 +902,18 @@
     );
   }
 
-  /** Oldingi natijaga nisbatan θ o'zgarishi (kichik chip, logit). */
+  /** Oldingi natijaga nisbatan sertifikat bali o'zgarishi (kichik chip). */
   function deltaBadge(delta) {
     if (delta === null || delta === undefined || !Number.isFinite(Number(delta))) {
       return "";
     }
     const value = Number(delta);
-    const cls = Math.abs(value) < 0.005 ? "flat" : value > 0 ? "up" : "down";
+    const cls = Math.abs(value) < 0.05 ? "flat" : value > 0 ? "up" : "down";
     const arrow =
       cls === "flat" ? "" : icon(cls === "up" ? "arrowUp" : "arrowDown", 11);
     return (
       '<span class="res-item-delta ' + cls + '">' + arrow +
-      formatTheta(value) + "</span>"
+      signed(value, 1) + "</span>"
     );
   }
 
@@ -987,29 +1016,26 @@
           })
           .join("");
 
-        const theta = Number(report.theta);
-        const se =
-          report.standard_error === null
-            ? "chekka holat"
-            : Number(report.standard_error).toFixed(2) + " logit";
-        const interval = report.theta_interval
-          ? '<div class="profile-row"><span class="label">95% ishonch oralig\'i</span><b>' +
-            formatTheta(report.theta_interval[0]) +
-            " … " +
-            formatTheta(report.theta_interval[1]) +
-            " logit</b></div>"
-          : "";
-
+        const score = scoreOf(report);
         const subjects = Array.isArray(report.subjects) ? report.subjects : [];
+        const subjectBalls = report.subject_balls || {};
+        const scoreInterval = Array.isArray(report.scaled_interval)
+          ? '<div class="profile-row"><span class="label">95% ishonch oralig&#39;i (ball)</span><b>' +
+            formatScore(report.scaled_interval[0]) +
+            " … " +
+            formatScore(report.scaled_interval[1]) +
+            " ball</b></div>"
+          : "";
         const subjectRows = subjects
           .map(function (row) {
+            const ball = subjectBalls[row.code];
             return (
               '<div class="profile-row"><span class="label">' +
               App.escape(row.label) +
               "</span><b>" +
-              row.correct +
-              " / " +
-              row.total +
+              (ball === null || ball === undefined
+                ? "—"
+                : formatScore(ball) + " ball") +
               "</b></div>"
             );
           })
@@ -1020,20 +1046,17 @@
           '<div class="modal-head"><h2>' +
           App.escape(report.title) +
           '</h2><button class="close" type="button">×</button></div>' +
-          '<div class="profile-row"><span class="label">Bilim darajasi (θ)</span><b>' +
-          formatTheta(theta) +
-          " logit</b></div>" +
+          '<div class="profile-row"><span class="label">Sertifikat bali</span><b>' +
+          formatScore(score) +
+          " ball</b></div>" +
+          scoreInterval +
           '<div class="profile-row"><span class="label">To\'g\'ri javoblar</span><b>' +
           report.raw_score +
           " / " +
           report.total_questions +
           "</b></div>" +
           subjectRows +
-          '<div class="profile-row"><span class="label">Standart xato (SE)</span><b>' +
-          se +
-          "</b></div>" +
-          interval +
-          '<div class="profile-row"><span class="label">Daraja</span><b>' +
+          '<div class="profile-row"><span class="label">Sertifikat darajasi</span><b>' +
           App.escape(report.ability_level) +
           "</b></div>" +
           '<p class="muted">' +

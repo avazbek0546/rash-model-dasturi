@@ -23,6 +23,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Iterable
 
+from services import rasch
+
 logger = logging.getLogger(__name__)
 
 #: Fan kodlari.
@@ -96,6 +98,44 @@ def summarize(items: Iterable[tuple[int, bool]]) -> list[dict[str, Any]]:
     ]
 
 
-# Eslatma: fan bo'yicha **0–100 ball** hisoblash olib tashlandi — foydalanuvchiga
-# faqat θ (logit), xom ball va sertifikat darajasi ko'rsatiladi (`services/feedback`,
-# `services/grading.build_report`). Fanlar kesimi `summarize()` orqali beriladi.
+def scaled_scores(
+    items: Iterable[tuple[int, bool, float]],
+) -> dict[str, float | None]:
+    """Har bir fan uchun **Rasch bo'yicha 0–100 ball** (umumiy ball bilan bir shkala).
+
+    `items` — `(pozitsiya, to'g'rimi, qiyinchilik)` uchliklari. Har bir fan
+    bo'yicha alohida θ baholanadi va `rasch.theta_to_scaled()` orqali 0–100
+    shkalaga o'tkaziladi. Kichik bo'limda θ beqarorroq bo'lishi mumkin — shu
+    sababli hisoblanmasa `None` qaytariladi.
+
+    Bu **foiz emas**: fan ichidagi savollarning qiyinchiligi ham hisobga
+    olinadi. Shuning uchun Algebra/Geometriya ballari sertifikat bali bilan
+    bir xil shkalada bo'ladi va ularni taqqoslash mumkin.
+    """
+    groups: dict[str, list[rasch.ItemResponse]] = {}
+    for position, is_correct, difficulty in items:
+        code = subject_of_position(int(position))
+        if code is None:
+            continue
+        groups.setdefault(code, []).append(
+            rasch.ItemResponse(
+                question_id=int(position),
+                difficulty=float(difficulty),
+                is_correct=bool(is_correct),
+            )
+        )
+
+    scores: dict[str, float | None] = {}
+    for code in subject_codes():
+        responses = groups.get(code) or []
+        if not responses:
+            scores[code] = None
+            continue
+        try:
+            scores[code] = round(
+                rasch.estimate_theta(responses).scaled_score, 1
+            )
+        except Exception:  # pragma: no cover - kutilmagan matematik holat
+            logger.exception("Fan bo'yicha ball hisoblanmadi: %s", code)
+            scores[code] = None
+    return scores

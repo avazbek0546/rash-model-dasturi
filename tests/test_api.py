@@ -242,11 +242,27 @@ async def check_published_results(repos: Repositories, client: TestClient, exam_
     assert payload["items"][2]["is_correct"] is False
     assert payload["items"][0]["correct_answer"] == "A" and payload["items"][0]["is_correct"] is True
     assert payload["theta"] is not None and payload["theta_interval"] is not None
-    # 0–100 shkala foydalanuvchi API'sida **yo'q** (faqat θ va uning intervali).
-    assert "scaled_score" not in payload and "scaled_interval" not in payload, payload
+    # Asosiy foydalanuvchi ko'rsatkichi — sertifikat bali va uning intervali.
+    assert payload["scaled_score"] is not None, payload
+    assert payload["scaled_interval"] is not None, payload
+    assert set(payload["subject_balls"]) == {"algebra", "geometry"}, payload
     print(
-        f"[OK] Batafsil hisobot: {payload['raw_score']}/{QUESTIONS} → θ = {payload['theta']:+.3f}, "
-        f"interval = {payload['theta_interval']} ({payload['ability_level']})"
+        f"[OK] Batafsil hisobot: {payload['raw_score']}/{QUESTIONS} → "
+        f"ball = {payload['scaled_score']:.2f}, "
+        f"interval = {payload['scaled_interval']} ({payload['ability_level']})"
+    )
+
+    # Natijalar ro'yxati va diagramma sertifikat bali bo'yicha quriladi.
+    listed = await (await client.get("/api/results", headers=VALID_HEADERS)).json()
+    entry = [row for row in listed["published"] if row["exam_id"] == exam_id][0]
+    assert entry["scaled_score"] is not None, entry
+    assert entry["level"], entry
+    assert listed["chart"]["score"], listed["chart"]
+    assert listed["summary"]["best_score"] is not None, listed["summary"]
+    assert listed["summary"]["average_score"] is not None, listed["summary"]
+    print(
+        f"[OK] Natijalar ro'yxati: ball = {entry['scaled_score']:.2f}, "
+        f"diagramma score[] va best/average score to'ldi"
     )
 
     exam = await repos.exams.get(exam_id)
