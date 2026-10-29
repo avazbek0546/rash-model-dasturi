@@ -184,7 +184,7 @@ WEBAPP_URL: str = (
 ).rstrip("/")
 # Mini App kesh-buster versiyasi (dizayn/JS o'zgarganda oshiriladi). Bitta joyda
 # saqlanadi — menyu tugmasi, inline tugmalar va natija xabarlari shu yerdan oladi.
-WEBAPP_VERSION: str = _get_str("WEBAPP_VERSION", "28") or "28"
+WEBAPP_VERSION: str = _get_str("WEBAPP_VERSION", "29") or "29"
 # Bulutda konteynerdan tashqaridan ko'rinish uchun `0.0.0.0` shart;
 # lokal ishlab chiqishda esa xavfsizlik uchun `127.0.0.1` qoladi.
 _DEFAULT_WEBAPP_HOST: str = "0.0.0.0" if IS_CLOUD else "127.0.0.1"

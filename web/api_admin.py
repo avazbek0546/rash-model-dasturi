@@ -338,8 +338,45 @@ def parse_report_token(token: str) -> int | None:
     return exam_id
 
 
+def _forwarded_first(request: web.Request, header: str) -> str:
+    """Proksi sarlavhasidan birinchi qiymatni oladi (`a, b` → `a`)."""
+    raw = request.headers.get(header, "")
+    return raw.split(",")[0].strip()
+
+
+def public_base_url(request: web.Request) -> str:
+    """Mini App ochilgan **ommaviy** manzilni (`https://domen`) aniqlaydi.
+
+    `request.url.origin()` faqat soket sxemasini ko'radi: Railway, Cloudflare
+    Tunnel, ngrok kabi proksilar ortida u doim `http://...` bo'ladi, holbuki
+    foydalanuvchi sahifasi `https://...` da ochilgan. Bunday manzilni `fetch`
+    qilishda brauzer «aralash kontent» (mixed content) deb bloklaydi — PDF
+    o'rniga «Failed to fetch» xatosi chiqadi. Tartib:
+
+        1. proksi sarlavhalari (`X-Forwarded-Proto` / `X-Forwarded-Host`);
+        2. `WEBAPP_URL` sxemasi (ommaviy manzil HTTPS bo'lsa — HTTPS);
+        3. so'rovning o'z sxemasi (lokal ishlab chiqishda `http`).
+    """
+    proto = _forwarded_first(request, "X-Forwarded-Proto").lower()
+    host = _forwarded_first(request, "X-Forwarded-Host") or _forwarded_first(
+        request, "Host"
+    )
+    if not host:
+        return str(request.url.origin()).rstrip("/")
+    if proto not in {"http", "https"}:
+        proto = request.url.scheme
+        if proto == "http" and config.WEBAPP_URL.startswith("https://"):
+            proto = "https"
+    return f"{proto}://{host}"
+
+
 async def report_link(request: web.Request) -> web.Response:
-    """PDF uchun vaqtinchalik havola yasaydi (faqat admin)."""
+    """PDF uchun vaqtinchalik havola yasaydi (faqat admin).
+
+    `url` — to'liq (ommaviy) manzil, `path` — shu serverdagi yo'l. Mini App
+    PDF ni har doim `path` bo'yicha **o'z origin'ida** yuklaydi: proksi ortida
+    `url` `http://...` bo'lib qolsa ham brauzer aralash kontentni bloklamaydi.
+    """
     await ensure_admin(request)
     repos = repositories(request)
     try:
@@ -349,13 +386,16 @@ async def report_link(request: web.Request) -> web.Response:
     if await repos.exams.get(exam_id) is None:
         raise ApiError(404, "Imtihon topilmadi.")
     token = make_report_token(exam_id)
-    base = str(request.url.origin()).rstrip("/")
+    path = f"/api/v2/report/{token}"
     return web.json_response(
         {
             "ok": True,
-            "url": f"{base}/api/v2/report/{token}",
+            "url": f"{public_base_url(request)}{path}",
+            "path": path,
             "ttl": REPORT_TTL_SECONDS,
-        }
+        },
+        # Havola bir martalik va shaxsiy — proksi/brauzer keshlmasin.
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -384,7 +424,12 @@ async def report_pdf_view(request: web.Request) -> web.Response:
     return web.Response(
         body=data,
         content_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            # Hisobotda o'quvchilarning shaxsiy natijalari bor — keshlanmasin.
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

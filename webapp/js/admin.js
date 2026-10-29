@@ -374,6 +374,28 @@
   }
 
   /**
+   * PDF havolasidan faqat **yo'lni** ajratib oladi (`/api/v2/report/<token>`).
+   *
+   * Telegram Mini App har doim HTTPS sahifada ochiladi. Server esa proksi
+   * (Railway, Cloudflare Tunnel, ngrok) ortida `http://...` manzil qaytarishi
+   * mumkin — brauzer bunday so'rovni «aralash kontent» deb bloklaydi va
+   * `fetch` faqat "Failed to fetch" beradi. Shu sababli fayl joriy sahifaning
+   * o'z origin'ida yuklanadi; token o'zi imzolangan, domen muhim emas.
+   */
+  function reportTarget(link) {
+    const raw = (link && (link.path || link.url)) || "";
+    if (!raw) {
+      return "";
+    }
+    try {
+      const parsed = new URL(String(raw), window.location.href);
+      return parsed.pathname + parsed.search;
+    } catch (error) {
+      return String(raw);
+    }
+  }
+
+  /**
    * «📄 PDF» — o'quvchilar natijalari hisobotini yuklab oladi.
    *
    * Ikki qadam: (1) vaqtinchalik havola olinadi; (2) fayl `fetch` bilan
@@ -390,12 +412,22 @@
         "/api/v2/admin/exams/" + examId + "/report-link",
         {}
       );
-      const url = link && link.url;
-      if (!url) {
+      const target = reportTarget(link);
+      if (!target) {
         throw new Error("PDF havolasi olinmadi. Qayta urinib ko'ring.");
       }
 
-      const response = await fetch(url);
+      let response;
+      try {
+        response = await fetch(target, { cache: "no-store" });
+      } catch (error) {
+        // `fetch` tarmoq/aralash kontent xatosida faqat "Failed to fetch"
+        // beradi — foydalanuvchiga tushunarli sabab ko'rsatamiz.
+        throw new Error(
+          "PDF serverdan olinmadi (tarmoq xatosi). " +
+            "Internet aloqasini tekshirib, qayta urinib ko'ring."
+        );
+      }
       if (!response.ok) {
         let message = "";
         try {

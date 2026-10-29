@@ -142,9 +142,30 @@ async def run_checks(repos: Repositories) -> None:
             headers=ADMIN_HEADERS,
         )
         assert link.status == 200, (link.status, await link.text())
-        url = (await link.json())["url"]
+        payload = await link.json()
+        url = payload["url"]
         assert "/api/v2/report/" in url, url
         token = url.rsplit("/", 1)[-1]
+        assert payload["path"] == f"/api/v2/report/{token}", payload
+
+        # Proksi (Railway/Cloudflare Tunnel) ortida `request.url.origin()`
+        # doim `http://...` bo'ladi — HTTPS sahifadan bunday so'rovni brauzer
+        # bloklab, PDF o'rniga "Failed to fetch" chiqarardi. Endi proksi
+        # sarlavhalari hisobga olinadi, `path` esa o'z origin'ida yuklanadi.
+        proxied = await client.post(
+            f"/api/v2/admin/exams/{exam.exam_id}/report-link",
+            headers={
+                **ADMIN_HEADERS,
+                "X-Forwarded-Proto": "https",
+                "X-Forwarded-Host": "rash-model.up.railway.app",
+            },
+        )
+        proxied_payload = await proxied.json()
+        proxied_token = proxied_payload["path"].rsplit("/", 1)[-1]
+        assert proxied_payload["url"] == (
+            "https://rash-model.up.railway.app/api/v2/report/" + proxied_token
+        ), proxied_payload
+        print(f"[OK] Proksi ortida havola HTTPS: {proxied_payload['url']}")
 
         pdf = await client.get(f"/api/v2/report/{token}")
         assert pdf.status == 200, (pdf.status, await pdf.text())
