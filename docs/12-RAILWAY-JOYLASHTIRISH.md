@@ -39,6 +39,8 @@ Railway GitHub'dan deploy qiladi. Kerakli fayllar repoda bo'lishi shart:
 | `requirements.txt` | Nixpacks build (pip install) |
 | `railway.json` | Start buyrug'i `python main.py`, healthcheck `/api/health`, restart siyosati, `numReplicas: 1` |
 | `.python-version` | Python 3.12 (Nixpacks versiyani shu fayldan oladi) |
+| `nixpacks.toml` | Build fazasida `fonts-dejavu-core` o'rnatadi — PDF hisoboti uchun Unicode shrift (zaxira yo'l) |
+| `assets/fonts/DejaVuSans.ttf` | PDF hisobotning asosiy shrifti (repo bilan birga keladi; Windows/Linux'da bir xil) |
 | `webapp/` | Mini App fayllari (index.html, js, css) |
 | `data/` | **kerak emas** — serverda volume yaratiladi |
 

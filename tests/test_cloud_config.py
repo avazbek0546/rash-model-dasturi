@@ -80,7 +80,11 @@ def test_railway_auto_config() -> None:
     assert config.WEBAPP_PORT == 1234
     assert config.DB_PATH == Path("/data/math_bot.db")
     assert config.WEBAPP_URL == "https://rash-model.up.railway.app"
-    assert config.webapp_url() == "https://rash-model.up.railway.app/?v=23"
+    assert config.WEBAPP_VERSION, "Mini App kesh-buster versiyasi bo'sh bo'lmasligi kerak"
+    assert (
+        config.webapp_url()
+        == f"https://rash-model.up.railway.app/?v={config.WEBAPP_VERSION}"
+    )
     print("[OK] Railway rejimi: 0.0.0.0:1234, /data/math_bot.db, HTTPS domen avtomatik")
 
 

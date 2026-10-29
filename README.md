@@ -96,6 +96,11 @@ Rash model dasturi/
 │   ├── css/style.css        #   Telegram themeParams ga moslashgan uslublar
 │   └── js/                  #   api.js, queue.js, results.js, offline.js, profile.js, app.js
 │
+├── assets/                  # 📄 PDF hisobot resurslari
+│   └── fonts/               #   DejaVu shrifti — PDF Windows/Linux'da bir xil chiqadi
+│       ├── DejaVuSans.ttf   #     Unicode shrift (o', g', kirill harflari)
+│       └── LICENSE-DejaVu.txt  #   shrift litsenziyasi (qayta tarqatishga ruxsat)
+│
 ├── handlers/                # 🤖 Telegram handler'lari
 │   ├── __init__.py          #   router'larni ulash (setup_routers) + LEGACY_MODULES
 │   ├── access.py            #   admin (o'qituvchi) huquqini tekshirish

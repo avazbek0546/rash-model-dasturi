@@ -159,20 +159,92 @@
     }
   }
 
+  /**
+   * Blob'ni fayl sifatida yuklab oladi (Telegram WebView'da ham ishlaydi).
+   *
+   * Nega `openLink` emas? Havolani to'g'ridan-to'g'ri ochishda server xato
+   * qaytarsa (`{"ok": false, "error": ...}`) foydalanuvchi brauzerda xom JSON
+   * ko'rib qolardi. Endi fayl avval `fetch` bilan olinadi: xato bo'lsa —
+   * tushunarli popup, muvaffaqiyat bo'lsa — yuklab olish.
+   */
+  function downloadBlob(blob, filename) {
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = filename || "natijalar.pdf";
+    anchor.rel = "noopener";
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    // WebView faylni ulgurguncha URL'ni darhol bo'shatmaymiz.
+    window.setTimeout(function () {
+      URL.revokeObjectURL(objectUrl);
+    }, 60000);
+  }
+
+  /** `Content-Disposition` sarlavhasidan fayl nomini oladi. */
+  function filenameOf(response, fallback) {
+    try {
+      const header = response.headers.get("Content-Disposition") || "";
+      const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
+      if (match && match[1]) {
+        return decodeURIComponent(match[1]);
+      }
+    } catch (error) {
+      /* sarlavha o'qilmasa — zaxira nom ishlatiladi */
+    }
+    return fallback || "natijalar.pdf";
+  }
+
+  /**
+   * «📄 PDF» — o'quvchilar natijalari hisobotini yuklab oladi.
+   *
+   * Ikki qadam: (1) vaqtinchalik havola olinadi; (2) fayl `fetch` bilan
+   * yuklanadi. Shu tufayli server xatosi (masalan, shrift topilmasa) xom JSON
+   * ko'rinishida ochilib qolmaydi — foydalanuvchiga aniq xabar chiqadi.
+   */
   async function report(examId) {
+    const button = document.querySelector('.report[data-exam="' + examId + '"]');
+    if (button) {
+      button.disabled = true;
+    }
     try {
       const link = await API.post(
         "/api/v2/admin/exams/" + examId + "/report-link",
         {}
       );
-      const url = link.url;
-      if (API.tg && typeof API.tg.openLink === "function") {
-        API.tg.openLink(url);
-      } else {
-        window.open(url, "_blank");
+      const url = link && link.url;
+      if (!url) {
+        throw new Error("PDF havolasi olinmadi. Qayta urinib ko'ring.");
       }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        let message = "";
+        try {
+          const payload = await response.json();
+          message = payload && payload.error ? String(payload.error) : "";
+        } catch (error) {
+          message = "";
+        }
+        throw new Error(message || "PDF yasalmadi (HTTP " + response.status + ").");
+      }
+
+      const blob = await response.blob();
+      if (!blob || blob.size === 0) {
+        throw new Error("PDF bo'sh keldi. Qayta urinib ko'ring.");
+      }
+      downloadBlob(blob, filenameOf(response, "natijalar-" + examId + ".pdf"));
+      App.setNotice("success", "📄 PDF yuklab olindi.", true);
     } catch (error) {
-      App.setNotice("error", error.message, false);
+      const message = error && error.message ? error.message : "PDF yuklab bo'lmadi.";
+      App.setNotice("error", message, false);
+      App.alert(message);
+    } finally {
+      if (button) {
+        button.disabled = false;
+      }
     }
   }
 

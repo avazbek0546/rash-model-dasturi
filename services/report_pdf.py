@@ -5,22 +5,28 @@ qarab och fon rangi** bilan bo'yaladi (yozuv — qora). Ballar **yuqoridan pastg
 saralanadi. Hisobot **on-demand** yasaladi (saqlanmaydi) — admin uni bir marta
 olib kanalga qo'yadi.
 
-Shrift: lotin harflari uchun **Unicode TTF** kerak (`o'`, `g'` uchun). Avval
-loyihadagi `assets/fonts/DejaVuSans.ttf` izlanadi, topilmasa — tizim shriftlari
-(Windows: Arial/Segoe UI; Linux: DejaVuSans).
+Shrift: lotin harflari uchun **Unicode TTF** kerak (`o'`, `g'` uchun). Shrift
+**repoda birga keladi** — `assets/fonts/DejaVuSans.ttf` (birinchi nomzod), shu
+tufayli PDF Windows'da ham, Linux (Railway) konteynerida ham bir xil ishlaydi.
+Tizim shriftlari (Arial/Segoe UI/DejaVu/Noto) faqat **zaxira**: repodagi fayl
+o'chirib yuborilgan holatda ham hisobot yasaladi. Railway build'ida
+`nixpacks.toml` qo'shimcha ravishda `fonts-dejavu-core` paketini o'rnatadi.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import config
 
 logger = logging.getLogger(__name__)
 
-#: Shrift nomzodlari (birinchi topilgani ishlatiladi).
+#: Shrift nomzodlari (birinchi topilgani ishlatiladi):
+#: 1) repodagi DejaVuSans; 2) Windows; 3) Linux (Debian/Ubuntu, Arch, Nix);
+#: 4) macOS. Shrift topilmasa — `ReportError` (jimgina buzuq PDF yasalmaydi).
 FONT_CANDIDATES: tuple[Path, ...] = (
     config.BASE_DIR / "assets" / "fonts" / "DejaVuSans.ttf",
     Path("C:/Windows/Fonts/arial.ttf"),
@@ -29,6 +35,11 @@ FONT_CANDIDATES: tuple[Path, ...] = (
     Path("C:/Windows/Fonts/tahoma.ttf"),
     Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
     Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
+    Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
+    Path("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"),
+    Path("/run/current-system/sw/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
+    Path("/Library/Fonts/Arial.ttf"),
 )
 
 #: Daraja → och fon rangi (RGB). `NC` — rangsiz (oq).
@@ -68,18 +79,30 @@ class StudentRow:
     total: int  # jami savol (element) soni
 
 
+@lru_cache(maxsize=1)
 def resolve_font() -> Path:
-    """Lotinni qo'llovchi TTF shriftni topadi.
+    """Lotinni qo'llovchi TTF shriftni topadi (natija **keshlanadi**).
+
+    Birinchi navbatda repodagi `assets/fonts/DejaVuSans.ttf` tekshiriladi —
+    shu tufayli hisobot barcha OS'larda (Windows / Linux / macOS) bir xil
+    yasaladi. Topilmasa — tizim shriftlari (`FONT_CANDIDATES`) izlanadi.
+
+    Eslatma: `lru_cache` faqat **muvaffaqiyatli** natijani keshlaydi; shrift
+    keyinroq qo'shilsa, xato takrorlanmaydi.
 
     Raises:
         ReportError: shrift topilmasa (PDF yasab bo'lmaydi).
     """
     for path in FONT_CANDIDATES:
-        if path.exists():
-            return path
+        try:
+            if path.is_file():
+                return path
+        except OSError:  # ruxsat yo'q / buzuq yo'l — keyingi nomzodga o'tamiz
+            continue
     raise ReportError(
-        "Unicode shrift topilmadi (DejaVuSans/Arial). "
-        "'assets/fonts/DejaVuSans.ttf' faylini qo'shing."
+        "PDF uchun Unicode shrift topilmadi. "
+        "'assets/fonts/DejaVuSans.ttf' faylini loyihaga qo'shing "
+        "(Linux/Railway'da 'fonts-dejavu-core' paketi ham yordam beradi)."
     )
 
 

@@ -1,0 +1,8 @@
+# Railway (Nixpacks) build sozlamalari.
+#
+# PDF hisobot (`services/report_pdf.py`) uchun Unicode shrift kerak. Asosiy
+# manba — repodagi `assets/fonts/DejaVuSans.ttf`; bu paket esa Linux tizim
+# yo'llarini (`/usr/share/fonts/truetype/dejavu/...`) ham to'ldiradi, ya'ni
+# shrift fayli repodan tushib qolsa ham PDF ishlayveradi.
+[phases.setup]
+aptPkgs = ["fonts-dejavu-core"]
