@@ -56,7 +56,7 @@ async def build_exam_report(repos: Repositories, exam) -> ExamReport:
         students.append(
             StudentRow(
                 name=(user.full_name if user else f"#{submission.user_id}"),
-                score=float(report["scaled_score"]),
+                theta=float(report["theta"]),
                 level=str(report["ability_level"]),
                 algebra=_subject_ball(report, "algebra"),
                 geometry=_subject_ball(report, "geometry"),
@@ -65,7 +65,8 @@ async def build_exam_report(repos: Repositories, exam) -> ExamReport:
             )
         )
 
-    students.sort(key=lambda row: row.score, reverse=True)
+    # θ bo'yicha kamayish tartibida (0–100 shkala foydalanilmaydi).
+    students.sort(key=lambda row: row.theta, reverse=True)
     return ExamReport(
         title=str(exam.title),
         test_code=str(exam.test_code),

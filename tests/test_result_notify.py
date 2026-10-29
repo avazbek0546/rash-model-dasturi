@@ -136,12 +136,12 @@ def check_text_builder() -> None:
     assert huge.endswith("<b>900/450</b>"), huge[-40:]
 
     report = {
-        "scaled_score": 57.0,
         "ability_level": "B",
         "theta": 0.42,
+        "theta_interval": [0.12, 0.72],
+        "standard_error": 0.31,
         "raw_score": 3,
         "total_questions": 5,
-        "scaled_interval": [49.6, 64.4],
         "advice": "Sertifikat B darajasi. Qiyinroq savollar ustida ishlang.",
     }
     ready = texts.result_ready(
@@ -150,10 +150,12 @@ def check_text_builder() -> None:
         report=report,
     )
     assert "Natijangiz e'lon qilindi" in ready, ready
-    assert "57.0 / 100 ball" in ready, ready
+    # Faqat θ (logit) — 0–100 shkala umuman yo'q.
+    assert "θ): <b>+0.42 logit</b>" in ready, ready
+    assert "0.12 … +0.72" in ready, ready
     assert "Daraja: <b>B</b>" in ready, ready
-    assert "3 / 5" in ready and "θ" in ready, ready
-    assert "49.6 – 64.4" in ready, ready
+    assert "3 / 5" in ready, ready
+    assert "100 ball" not in ready and "ball</b>" not in ready, ready
     assert KEY not in ready and "A2B3" not in ready, ready
     print("[OK] Matnlar: qabul xabari (markssiz) sanoqsiz; marks bilan faqat ✅/❌")
 
@@ -218,7 +220,9 @@ async def check_notify_send() -> None:
     message = bot.messages[0]
     assert message["chat_id"] == USER["id"], message
     assert "Natijangiz e'lon qilindi" in message["text"], message
-    assert "ball" in message["text"] and "Daraja:" in message["text"], message
+    assert "θ" in message["text"] and "logit" in message["text"], message
+    assert "Daraja:" in message["text"], message
+    assert "100 ball" not in message["text"], message
     assert KEY not in message["text"], message
     buttons = [b for row in message["reply_markup"].inline_keyboard for b in row]
     assert any(b.text == "🔍 Savollar tahlili" for b in buttons), buttons
@@ -292,7 +296,9 @@ async def check_submit_and_notify(repos: Repositories) -> None:
     assert len(bot.messages) == 2, bot.messages
     result = bot.messages[-1]
     assert "Natijangiz e'lon qilindi" in result["text"], result
-    assert "ball" in result["text"] and "Daraja:" in result["text"], result
+    assert "θ" in result["text"] and "logit" in result["text"], result
+    assert "Daraja:" in result["text"], result
+    assert "100 ball" not in result["text"], result
     assert KEY not in result["text"], result
     print("[OK] notify_due_results → boy natija kartasi yuborildi (kalitsiz)")
 

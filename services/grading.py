@@ -609,16 +609,16 @@ def build_report(exam: Exam, submission: ExamSubmission) -> dict[str, Any]:
 
     info = rasch.information(theta, scoring.item_responses(results, context))
     standard_error = (1.0 / math.sqrt(info)) if info > rasch.EPS else None
-    scaled_error = standard_error * config.scaled_span() if standard_error else None
-    scaled_score = float(submission.scaled_score or 0.0)
 
-    scaled_interval: tuple[float, float] | None = None
-    if scaled_error is not None:
-        delta = 1.96 * scaled_error
-        scaled_interval = (
-            round(max(config.SCALED_CAP_MIN, scaled_score - delta), 2),
-            round(min(config.SCALED_CAP_MAX, scaled_score + delta), 2),
-        )
+    # 95% ishonch oralig'i — **logit** shkalasida (θ bilan bir o'lchovda).
+    theta_interval: tuple[float, float] | None = None
+    if standard_error is not None:
+        delta = 1.96 * standard_error
+        theta_interval = (round(theta - delta, 3), round(theta + delta, 3))
+
+    # Sertifikat darajasi (A+ … NC) ichki shkala bo'yicha aniqlanadi, lekin
+    # foydalanuvchiga **raqam** ko'rinishida ko'rsatilmaydi — faqat daraja kodi.
+    level_score = float(submission.scaled_score or 0.0)
 
     items: list[dict[str, Any]] = [
         _report_item(result, theta) for result in results
@@ -628,11 +628,6 @@ def build_report(exam: Exam, submission: ExamSubmission) -> dict[str, Any]:
     subject_scores = subjects.summarize(
         (result.question_number, result.is_correct) for result in results
     )
-    # Har bir fan uchun Rasch balli (0–91) — natija bilan bir shkalada.
-    subject_balls = subjects.scaled_scores(
-        (result.question_number, result.is_correct, result.difficulty)
-        for result in results
-    )
 
     return {
         "exam_id": exam.exam_id,
@@ -640,14 +635,11 @@ def build_report(exam: Exam, submission: ExamSubmission) -> dict[str, Any]:
         "total_questions": exam.total_questions,
         "raw_score": int(submission.raw_score or 0),
         "theta": round(theta, 4),
+        "theta_interval": theta_interval,
         "standard_error": round(standard_error, 4) if standard_error else None,
-        "scaled_score": round(scaled_score, 2),
-        "scaled_error": round(scaled_error, 2) if scaled_error else None,
-        "scaled_interval": scaled_interval,
-        "ability_level": rasch.ability_level(scaled_score),
-        "advice": rasch.level_advice(scaled_score),
+        "ability_level": rasch.ability_level(level_score),
+        "advice": rasch.level_advice(level_score),
         "submitted_at": submission.submitted_at,
         "subjects": subject_scores,
-        "subject_balls": subject_balls,
         "items": items,
     }

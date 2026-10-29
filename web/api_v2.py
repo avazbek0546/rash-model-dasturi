@@ -764,15 +764,12 @@ async def result(request: web.Request) -> web.Response:
     rows = await repos.snapshots.list_items(int(snapshot["snapshot_id"]))
     theta = float(snapshot.get("theta") or 0.0)
     raw_se = snapshot.get("theta_se")
-    scaled = float(snapshot.get("scaled_score") or 0.0)
 
-    scaled_interval: tuple[float, float] | None = None
+    # 95% ishonch oralig'i — **logit** shkalasida (0–100 shkala ko'rsatilmaydi).
+    theta_interval: tuple[float, float] | None = None
     if raw_se is not None:
-        delta = 1.96 * float(raw_se) * config.scaled_span()
-        scaled_interval = (
-            round(max(config.SCALED_CAP_MIN, scaled - delta), 2),
-            round(min(config.SCALED_CAP_MAX, scaled + delta), 2),
-        )
+        delta = 1.96 * float(raw_se)
+        theta_interval = (round(theta - delta, 3), round(theta + delta, 3))
 
     items = [
         {
@@ -802,8 +799,7 @@ async def result(request: web.Request) -> web.Response:
             "engine_version": snapshot.get("engine_version"),
             "theta": round(theta, 4),
             "theta_se": None if raw_se is None else round(float(raw_se), 4),
-            "scaled_score": round(scaled, 2),
-            "scaled_interval": scaled_interval,
+            "theta_interval": theta_interval,
             "raw_score": int(snapshot.get("raw_score") or 0),
             "total_items": int(snapshot.get("total_items") or 0),
             "omitted_count": int(snapshot.get("omitted_count") or 0),

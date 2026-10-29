@@ -81,7 +81,7 @@ async def cmd_stats(
             users=await repos.users.count(),
             questions=await repos.questions.count(),
             attempts=await repos.results.count(),
-            average_scaled=await repos.results.average_scaled(),
+            average_theta=await repos.results.average_theta(),
             active_sessions=sessions.active_count(),
             exams=await repos.exams.count(),
             submissions=await repos.answers.count(),

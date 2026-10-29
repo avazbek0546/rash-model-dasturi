@@ -88,7 +88,10 @@
       const right = document.createElement("div");
       if (exam.published && exam.my_result) {
         right.className = "score-pill";
-        right.innerHTML = Math.round(exam.my_result.scaled_score) + "<small>ball</small>";
+        // Yagona o'lchov — θ (logit); 0–100 shkala ko'rsatilmaydi.
+        const theta = Number(exam.my_result.theta);
+        right.innerHTML =
+          (theta >= 0 ? "+" : "") + theta.toFixed(2) + "<small>logit</small>";
       } else {
         right.className = "badge " + (STATUS_CLASS[exam.status] || "published");
         right.textContent = exam.status_title;

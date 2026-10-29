@@ -251,10 +251,11 @@ async def _exam_payload(request: web.Request, exam: Any, user_id: int, now: str)
     }
 
     if submission is not None and submission.is_graded and status is ExamStatus.PUBLISHED:
+        # Foydalanuvchiga faqat θ (logit) va xom ball — 0–100 shkala yo'q.
         payload["my_result"] = {
             "theta": submission.theta,
-            "scaled_score": submission.scaled_score,
             "raw_score": submission.raw_score,
+            "level": rasch.ability_level(float(submission.scaled_score or 0.0)),
         }
     return payload
 
@@ -456,10 +457,10 @@ async def list_results(request: web.Request) -> web.Response:
             entry.update(
                 {
                     "theta": submission.theta,
-                    "scaled_score": submission.scaled_score,
                     "raw_score": submission.raw_score,
                     # Sertifikat darajasi (NC … A+) — ro'yxat va "hero" kartada
                     # rangli chip sifatida ko'rsatiladi. Chegaralar `services.rasch`.
+                    # 0–100 shkala foydalanuvchiga **ko'rsatilmaydi**.
                     "level": rasch.ability_level(float(submission.scaled_score or 0.0)),
                 }
             )
@@ -468,9 +469,8 @@ async def list_results(request: web.Request) -> web.Response:
             pending.append(entry)
 
     chart_source = sorted(published, key=lambda item: item["submitted_at"])
-    average = (
-        sum(item["scaled_score"] for item in published) / len(published) if published else None
-    )
+    thetas = [float(item["theta"]) for item in published if item["theta"] is not None]
+    average = sum(thetas) / len(thetas) if thetas else None
     return web.json_response(
         {
             "ok": True,
@@ -479,13 +479,12 @@ async def list_results(request: web.Request) -> web.Response:
             "chart": {
                 "labels": [item["title"] for item in chart_source],
                 "theta": [item["theta"] for item in chart_source],
-                "scaled": [item["scaled_score"] for item in chart_source],
             },
             "summary": {
                 "attempts": len(submissions),
                 "published": len(published),
-                "best_scaled": max((item["scaled_score"] for item in published), default=None),
-                "average_scaled": round(average, 1) if average is not None else None,
+                "best_theta": max(thetas, default=None),
+                "average_theta": round(average, 3) if average is not None else None,
             },
         }
     )

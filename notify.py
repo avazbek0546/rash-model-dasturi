@@ -178,10 +178,10 @@ async def send_result_ready(
         return False
 
     logger.info(
-        "Natija yuborildi: user_id=%s, exam_id=%s, ball=%.2f",
+        "Natija yuborildi: user_id=%s, exam_id=%s, theta=%+.3f",
         user_id,
         exam.exam_id,
-        float(report.get("scaled_score") or 0.0),
+        float(report.get("theta") or 0.0),
     )
     return True
 

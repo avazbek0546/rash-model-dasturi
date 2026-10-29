@@ -241,10 +241,12 @@ async def check_published_results(repos: Repositories, client: TestClient, exam_
     assert payload["items"][2]["given_answer"] is None
     assert payload["items"][2]["is_correct"] is False
     assert payload["items"][0]["correct_answer"] == "A" and payload["items"][0]["is_correct"] is True
-    assert payload["theta"] is not None and payload["scaled_interval"] is not None
+    assert payload["theta"] is not None and payload["theta_interval"] is not None
+    # 0–100 shkala foydalanuvchi API'sida **yo'q** (faqat θ va uning intervali).
+    assert "scaled_score" not in payload and "scaled_interval" not in payload, payload
     print(
         f"[OK] Batafsil hisobot: {payload['raw_score']}/{QUESTIONS} → θ = {payload['theta']:+.3f}, "
-        f"ball = {payload['scaled_score']} ({payload['ability_level']})"
+        f"interval = {payload['theta_interval']} ({payload['ability_level']})"
     )
 
     exam = await repos.exams.get(exam_id)
@@ -255,14 +257,16 @@ async def check_published_results(repos: Repositories, client: TestClient, exam_
     payload = await response.json()
     assert len(payload["published"]) == 1 and payload["pending"] == [], payload
     published = payload["published"][0]
-    assert payload["chart"]["scaled"] == [published["scaled_score"]]
-    assert payload["summary"]["best_scaled"] == published["scaled_score"]
+    assert payload["chart"]["theta"] == [published["theta"]]
+    assert "scaled" not in payload["chart"], payload["chart"]
+    assert payload["summary"]["best_theta"] == published["theta"]
+    assert "best_scaled" not in payload["summary"], payload["summary"]
     # Daraja (NC … A+) ro'yxatda ham keladi — Web App chipi shu maydondan oladi.
     assert published["level"] in {"NC", "C", "C+", "B", "B+", "A", "A+"}, published
     assert published["result_time"], published
     print(
-        f"[OK] Grafik/tarix: {payload['chart']['labels']} → {payload['chart']['scaled']} ball "
-        f"(o'rtacha {payload['summary']['average_scaled']})"
+        f"[OK] Grafik/tarix: {payload['chart']['labels']} → {payload['chart']['theta']} logit "
+        f"(o'rtacha {payload['summary']['average_theta']})"
     )
 
     # Boshqa o'quvchi qatnashmagan imtihonni so'rasa — 404

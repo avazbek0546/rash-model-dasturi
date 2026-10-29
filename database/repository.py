@@ -364,9 +364,13 @@ class ResultRepository:
     async def count(self) -> int:
         return int(await self._db.fetchvalue("SELECT COUNT(*) FROM test_results", default=0))
 
-    async def average_scaled(self) -> float | None:
-        """Barcha o'quvchilar bo'yicha o'rtacha scaled ball."""
-        value = await self._db.fetchvalue("SELECT AVG(final_scaled_score) FROM test_results")
+    async def average_theta(self) -> float | None:
+        """Barcha o'quvchilar bo'yicha o'rtacha θ (logit).
+
+        0–100 shkala foydalanuvchiga ko'rsatilmaydi, shu sababli statistika ham
+        faqat θ bo'yicha hisoblanadi.
+        """
+        value = await self._db.fetchvalue("SELECT AVG(theta_score) FROM test_results")
         return float(value) if value is not None else None
 
 

@@ -1584,59 +1584,35 @@ button.math-key.key-fn {
   font-size: 14px;
 }
 
-.res-ring {
+/* θ (logit) bloki — 0–100 shkala o'rniga yagona ko'rsatkich. */
+.res-theta {
   position: relative;
   flex: 0 0 auto;
-  width: 116px;
-  height: 116px;
-  color: var(--tone, var(--res-accent));
-}
-
-.res-ring svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-
-.res-ring-track {
-  fill: none;
-  stroke: rgba(128, 128, 128, 0.2);
-  stroke-width: 9;
-}
-
-.res-ring-progress {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 9;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-.res-ring-text {
-  position: absolute;
-  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-width: 116px;
+  padding: 14px 12px;
+  border-radius: 20px;
+  color: var(--tone, var(--res-accent));
+  background: var(--tone-soft, rgba(47, 124, 224, 0.12));
 }
 
-.res-ring-score {
+.res-theta-value {
   font-size: 30px;
-  font-weight: 750;
-  line-height: 1;
-  letter-spacing: -0.5px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
-.res-ring-unit {
+.res-theta-unit {
   margin-top: 3px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--hint);
+  opacity: 0.78;
+  text-align: center;
 }
 
 .res-hero-side {
@@ -1873,72 +1849,6 @@ button.math-key.key-fn {
   margin: 2px 0 0;
   font-size: 11.5px;
   color: var(--hint);
-}
-
-.res-seg {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 10px;
-  background: rgba(128, 128, 128, 0.14);
-}
-
-.res-seg-btn {
-  width: auto;
-  padding: 5px 10px;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--hint);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1.2;
-}
-
-.res-seg-btn.active {
-  background: var(--bg);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
-}
-
-.res-scale {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.res-zone {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  font-size: 10.5px;
-  color: var(--hint);
-  white-space: nowrap;
-}
-
-.res-zone b {
-  color: var(--text);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.res-zone-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--tone, var(--res-slate));
-}
-
-.res-zone.is-current {
-  color: var(--text);
-  font-weight: 700;
-  background: var(--tone-soft, rgba(79, 107, 255, 0.12));
-  border-color: var(--tone, var(--res-accent));
 }
 
 /* --- Ro'yxat sarlavhasi va filtrlar -------------------------------------- */
@@ -2331,12 +2241,12 @@ button.res-item.pending {
     gap: 10px;
   }
 
-  .res-ring {
-    width: 98px;
-    height: 98px;
+  .res-theta {
+    min-width: 98px;
+    padding: 12px 10px;
   }
 
-  .res-ring-score {
+  .res-theta-value {
     font-size: 25px;
   }
 }
@@ -2347,7 +2257,6 @@ button.res-item.pending {
     animation: none;
   }
 
-  .res-ring-progress,
   .res-item {
     transition: none;
   }
@@ -2355,7 +2264,6 @@ button.res-item.pending {
 
 /* Klaviatura bilan fokus (Telegram Desktop) — ko'rinadigan kontur. */
 .res-filter:focus-visible,
-.res-seg-btn:focus-visible,
 .res-item:focus-visible,
 .res-hero-cta:focus-visible,
 .res-empty-cta:focus-visible {

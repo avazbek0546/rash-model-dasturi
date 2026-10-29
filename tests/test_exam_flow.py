@@ -284,10 +284,12 @@ async def check_lifecycle(repos: Repositories) -> None:
     assert report["items"][2]["given_answer"] is None
     assert report["items"][2]["correct_answer"] == "C"
     assert 0.0 < report["items"][0]["probability"] < 1.0
-    assert report["scaled_interval"] is not None and report["standard_error"] is not None
+    # Foydalanuvchi hisoboti faqat θ (logit) shkalasida — 0–100 maydonlari yo'q.
+    assert report["theta_interval"] is not None and report["standard_error"] is not None
+    assert "scaled_score" not in report and "scaled_interval" not in report, report
     print(
         f"[OK] Hisobot: {report['ability_level']}, SE = {report['standard_error']}, "
-        f"95% interval = {report['scaled_interval']}"
+        f"95% interval = {report['theta_interval']} (logit)"
     )
 
     # "Navbat" ro'yxati: faol imtihon birinchi turadi

@@ -33,7 +33,7 @@ BUNDLED_FONT = config.BASE_DIR / "assets" / "fonts" / "DejaVuSans.ttf"
 STUDENTS = [
     report_pdf.StudentRow(
         name="Aliyev Vali",
-        score=78.4,
+        theta=1.24,
         level="A",
         algebra=81.2,
         geometry=75.5,
@@ -42,7 +42,7 @@ STUDENTS = [
     ),
     report_pdf.StudentRow(
         name="Karimova Dilnoza",
-        score=41.0,
+        theta=-0.62,
         level="NC",
         algebra=None,
         geometry=None,

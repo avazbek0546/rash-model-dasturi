@@ -5,7 +5,10 @@ yaratadi (`/new_exam`), o'quvchilar javoblarini **Telegram Web App (Mini App)** 
 topshiradi. Baholash **Rasch modeli (Item Response Theory, 1PL)** asosida
 bajariladi — har bir savolning qiyinchiligi (`b`, logit) hisobga olinadi,
 o'quvchining bilim darajasi (`θ`, logit) **maksimal ishonchlilik
-(MLE / Newton-Raphson)** usulida topilib, **0–100 shkalaga** o'tkaziladi.
+(MLE / Newton-Raphson)** usulida topiladi. Foydalanuvchiga **faqat θ (logit)**,
+uning 95% ishonch oralig'i, xom ball (nechta to'g'ri) va sertifikat darajasi
+ko'rsatiladi — **0–100 shkala umuman ko'rsatilmaydi** (u ichki hisobda faqat
+daraja chegaralarini aniqlash uchun ishlatiladi).
 Natijalar faqat o'qituvchi belgilagan vaqtda e'lon qilinadi.
 
 * Til: **Python 3.10+** (3.14 da sinovdan o'tgan)
@@ -385,8 +388,9 @@ O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab:
    gacha yopiq turadi;
 4. `result_time` da **natija bildirishnomasi** fon vazifasi
    (`notify.result_notification_loop`) har bir o'quvchiga bir marta boy kartani
-   yuboradi: 0–100 ball, sertifikat darajasi, θ, 95% ishonch oralig'i va
-   «📊 Batafsil tahlil» / «🔍 Savollar tahlili» tugmalari. Xabar
+   yuboradi: θ (logit), 95% ishonch oralig'i, standart xato, to'g'ri javoblar
+   soni, sertifikat darajasi va «📊 Batafsil tahlil» / «🔍 Savollar tahlili»
+   tugmalari. 0–100 shkala ko'rsatilmaydi. Xabar
    `user_answers.notified_at` bilan belgilanadi (dublikat ketmaydi).
 
 ### API endpoint'lari
@@ -463,15 +467,19 @@ Koddagi cheklovlar va nozik joylar:
 * **Boshlang'ich nuqta:** `θ = ln[(u + 0.5) / (n − u + 0.5)]` — xom ball
   logit'i, shu sababli odatda 5–8 iteratsiyada yaqinlashadi.
 
-### 0–100 shkalaga o'tkazish
+### 0–100 shkala — **faqat ichki** (foydalanuvchiga ko'rsatilmaydi)
 
 ```
 ball = 100 · (θ − (−THETA_BOUND)) / (2·THETA_BOUND)
 ```
 
 ya'ni `−3 logit → 0 ball`, `0 → 50 ball`, `+3 → 100 ball`
-(natija `[0, 100]` oralig'iga siqiladi). Har bir `SE` shkaladagi
-"±N ball" aniqlikka o'giriladi.
+(natija `[0, 100]` oralig'iga siqiladi).
+
+⚠️ Bu o'tkazish **hech qayerda foydalanuvchiga ko'rsatilmaydi**: u faqat
+sertifikat darajasi (NC … A+) chegaralarini aniqlash va `user_answers` /
+`scoring_snapshots` ustunlarini to'ldirish uchun ishlatiladi. Bot, Mini App va
+PDF hisobotda yagona o'lchov — **θ (logit)** va uning ishonch oralig'i.
 
 ### Nega bu "7/10 = 70%" dan yaxshiroq?
 
@@ -582,7 +590,7 @@ bilan solishtiriladi:
 **`test_exam_flow.py`** — vaqtinchalik SQLite faylida butun hayot sikli:
 jadvallar/ustunlar, vaqt konvertatsiyasi (mahalliy ↔ UTC), `upcoming → active →
 closed → published` holatlari, javob yuborish va takroriy yuborishning rad
-etilishi, `end_time` dan keyin Rasch baholash (θ, SE, 0–100), `result_time`
+etilishi, `end_time` dan keyin Rasch baholash (θ, SE), `result_time`
 gacha natijaning yopiq turishi, "Navbat" ro'yxati va CASCADE o'chirish.
 
 **`test_api.py`** — HTTP qatlami `aiohttp.test_utils.TestClient` bilan: har bir
@@ -648,8 +656,9 @@ qo'llanmaydigan media (audio) rad etilishi → sahifalash va ruxsat nazorati.
 * **Web App HTTPS talab qiladi:** Telegram Mini App'ni faqat `https://` manzilda
   ochadi (`WEBAPP_URL`). `http://localhost` Telegram ichida ishlamaydi —
   brauzerda sinash uchun `WEBAPP_DEV_MODE=1` va `?debug_user_id=…` ishlatiladi.
-* **0–100 shkala chiziqli:** `θ` asosiy o'lchov (logit), 0–100 esa qulay
-  ko'rinish; `θ` chegarasidan tashqaridagi qiymatlar `0` yoki `100` da siqiladi.
+* **Yagona o'lchov — θ (logit):** foydalanuvchi interfeysida (bot, Mini App, PDF)
+  0–100 shkala **ko'rsatilmaydi**; u faqat sertifikat darajasi chegaralari uchun
+  ichki hisobda ishlatiladi.
 * **Imtihonni tahrirlash yo'q:** `/new_exam` bilan yaratilgan imtihonni faqat
   o'chirish mumkin (`/exams`); vaqtlarni o'zgartirish hozircha repository
   darajasida (`ExamRepository.update_times`).

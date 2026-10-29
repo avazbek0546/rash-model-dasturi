@@ -17,13 +17,18 @@
   }
 
   /**
-   * Ball ko'rinishi: har doim 1 kasr xona (20.4 · 67.8 · 50.0).
-   * Ball hech qachon butun songa yaxlitlanmaydi — o'quvchi aniq natijasini
-   * ko'rishi kerak.
+   * θ (logit) ko'rinishi: ishorali, 2 kasr xona (+0.42 · −1.31 · +0.00).
+   *
+   * 0–100 shkala **ishlatilmaydi**: Rasch modelida yagona o'lchov — θ (logit),
+   * shu sababli natijalar ham faqat θ, uning ishonch oralig'i va xom ball
+   * ko'rinishida ko'rsatiladi.
    */
-  function formatScore(value) {
+  function formatTheta(value) {
     const number = Number(value);
-    return Number.isFinite(number) ? number.toFixed(1) : "—";
+    if (!Number.isFinite(number)) {
+      return "—";
+    }
+    return (number >= 0 ? "+" : "") + number.toFixed(2);
   }
 
   // ---------------------------------------------------------------------------
@@ -32,35 +37,25 @@
   const state = {
     data: null,
     filter: "all",
-    metric: "scaled",
     heroToken: 0,
     timer: null,
   };
 
   /**
-   * Sertifikat darajalari — `services/rasch.py::CERTIFICATE_LEVELS` bilan bir xil
-   * chegaralar (server `level` maydonini bersa, o'sha ishlatiladi; bu — zaxira).
+   * Sertifikat darajalari — **θ (logit)** chegaralari bo'yicha zaxira jadval
+   * (server `level` maydonini bersa, o'sha ishlatiladi). Chegaralar
+   * `services/rasch.py::CERTIFICATE_LEVELS` bilan bir xil ma'noni beradi:
+   * −0.24 ≈ C, 0 ≈ C+, 0.3 ≈ B, 0.6 ≈ B+, 0.9 ≈ A, 1.2 ≈ A+.
    */
   const LEVELS = [
-    { code: "NC", min: 0, tone: "res-tone-nc" },
-    { code: "C", min: 46, tone: "res-tone-c" },
-    { code: "C+", min: 50, tone: "res-tone-c-plus" },
-    { code: "B", min: 55, tone: "res-tone-b" },
-    { code: "B+", min: 60, tone: "res-tone-b-plus" },
-    { code: "A", min: 65, tone: "res-tone-a" },
-    { code: "A+", min: 70, tone: "res-tone-a-plus" },
+    { code: "NC", min: -Infinity, tone: "res-tone-nc" },
+    { code: "C", min: -0.24, tone: "res-tone-c" },
+    { code: "C+", min: 0, tone: "res-tone-c-plus" },
+    { code: "B", min: 0.3, tone: "res-tone-b" },
+    { code: "B+", min: 0.6, tone: "res-tone-b-plus" },
+    { code: "A", min: 0.9, tone: "res-tone-a" },
+    { code: "A+", min: 1.2, tone: "res-tone-a-plus" },
   ];
-
-  // Grafik nuqtalari uchun ranglar (CSS "ton"lari bilan mos).
-  const LEVEL_COLORS = {
-    NC: "#8b93a3",
-    C: "#e0507a",
-    "C+": "#7c5cff",
-    B: "#d98c0b",
-    "B+": "#2f9be0",
-    A: "#1e9e62",
-    "A+": "#0f9d76",
-  };
 
   const MONTHS = [
     "yanvar", "fevral", "mart", "aprel", "may", "iyun",
@@ -96,8 +91,8 @@
     );
   }
 
-  function levelCode(score) {
-    const value = Number(score);
+  function levelCode(theta) {
+    const value = Number(theta);
     if (!Number.isFinite(value)) {
       return "NC";
     }
@@ -111,7 +106,7 @@
   }
 
   function toneOf(item) {
-    const code = (item && item.level) || levelCode(item && item.scaled_score);
+    const code = (item && item.level) || levelCode(item && item.theta);
     for (let index = 0; index < LEVELS.length; index += 1) {
       if (LEVELS[index].code === code) {
         return LEVELS[index].tone;
@@ -175,92 +170,6 @@
     return (number >= 0 ? "+" : "") + number.toFixed(digits);
   }
 
-  // Y o'qi uchun "yumaloq" qadamlar (faqat masshtab; dizayn o'zgarmaydi).
-  const AXIS_STEPS = [1, 2, 5, 10, 20, 25, 50, 100];
-
-  /**
-   * Grafikning Y o'qi chegarasi va qadamini hisoblaydi.
-   *
-   * Past chegara har doim 0 (ball shkalasi 0–100), yuqori chegara esa eng katta
-   * natijaga moslashadi — shunda o'sish dinamikasi vizual aniq ko'rinadi:
-   *   35.7 → 0, 10, 20, 30, 40
-   *   67.3 → 0, 20, 40, 60, 80
-   *   91.4 → 0, 25, 50, 75, 100
-   */
-  function scoreAxis(values) {
-    const numbers = (values || [])
-      .map(function (value) {
-        return Number(value);
-      })
-      .filter(function (value) {
-        return Number.isFinite(value);
-      });
-    const top = numbers.length ? Math.max.apply(null, numbers) : 0;
-    if (!(top > 0)) {
-      return { max: 10, step: 2 };
-    }
-
-    // ~4 bo'linma hosil qiladigan eng kichik "yumaloq" qadam.
-    const target = top / 4;
-    let step = AXIS_STEPS[AXIS_STEPS.length - 1];
-    for (let index = 0; index < AXIS_STEPS.length; index += 1) {
-      if (AXIS_STEPS[index] >= target) {
-        step = AXIS_STEPS[index];
-        break;
-      }
-    }
-
-    return { max: Math.min(100, Math.ceil(top / step) * step), step: step };
-  }
-
-  // Daraja zonalari — diagramma fonidagi rangli polosalar (A+ yashil … NC kulrang).
-  const LEVEL_ZONES = [
-    { min: 0, max: 46, color: "rgba(120,120,120,0.10)" },
-    { min: 46, max: 50, color: "rgba(248,187,208,0.20)" },
-    { min: 50, max: 55, color: "rgba(197,202,233,0.22)" },
-    { min: 55, max: 60, color: "rgba(255,224,178,0.22)" },
-    { min: 60, max: 65, color: "rgba(255,249,196,0.30)" },
-    { min: 65, max: 70, color: "rgba(187,222,251,0.24)" },
-    { min: 70, max: 1000, color: "rgba(200,230,201,0.26)" },
-  ];
-
-  const levelZonesPlugin = {
-    id: "levelZones",
-    beforeDatasetsDraw: function (instance) {
-      const y = instance.scales.y;
-      const area = instance.chartArea;
-      if (!y || !area) {
-        return;
-      }
-      const ctx = instance.ctx;
-      ctx.save();
-      LEVEL_ZONES.forEach(function (zone) {
-        // Zona faqat grafik maydonchasi ichida bo'yaladi (tashqariga chiqmaydi).
-        const top = Math.max(area.top, y.getPixelForValue(zone.max));
-        const bottom = Math.min(area.bottom, y.getPixelForValue(zone.min));
-        if (bottom <= top) {
-          return;
-        }
-        ctx.fillStyle = zone.color;
-        ctx.fillRect(area.left, top, area.right - area.left, bottom - top);
-      });
-      ctx.restore();
-    },
-  };
-
-  /** Daraja zonalari faqat 0–100 ball shkalasida ma'noga ega (θ da yo'q). */
-  function makeZonePlugin(metric) {
-    return {
-      id: "levelZones",
-      beforeDatasetsDraw: function (instance) {
-        if (metric !== "scaled") {
-          return;
-        }
-        levelZonesPlugin.beforeDatasetsDraw(instance);
-      },
-    };
-  }
-
   /** θ (logit) o'qi uchun yumshoq chegaralar. */
   function thetaAxis(values) {
     const numbers = (values || [])
@@ -300,36 +209,12 @@
     );
   }
 
-  /** Zamonaviy gradient to'ldirish (yuqoridan rang → pastga shaffof). */
-  function gradientFill(color) {
-    return function (context) {
-      const area = context.chart.chartArea;
-      if (!area) {
-        return withAlpha(color, 0.12);
-      }
-      const gradient = context.chart.ctx.createLinearGradient(
-        0,
-        area.top,
-        0,
-        area.bottom
-      );
-      gradient.addColorStop(0, withAlpha(color, 0.34));
-      gradient.addColorStop(1, withAlpha(color, 0.02));
-      return gradient;
-    };
-  }
-
   function renderChart(chartData) {
     const canvas = byId("results-chart");
     const fallback = byId("chart-fallback");
     const wrap = canvas ? canvas.parentElement : null;
     const labels = (chartData && chartData.labels) || [];
-    const metric = state.metric === "theta" ? "theta" : "scaled";
-    const scaled = (chartData && chartData.scaled) || [];
     const theta = (chartData && chartData.theta) || [];
-    const series = metric === "theta" ? theta : scaled;
-
-    renderScaleLegend();
 
     if (!labels.length) {
       if (chart) {
@@ -364,9 +249,9 @@
             return (
               '<div class="exam-item"><div><div class="title">' +
               App.escape(label) +
-              "</div></div><div>" +
-              formatScore(scaled[index]) +
-              " ball</div></div>"
+              "</div></div><div>θ " +
+              formatTheta(theta[index]) +
+              " logit</div></div>"
             );
           })
           .join("");
@@ -379,20 +264,13 @@
       wrap.classList.remove("hidden");
     }
 
-    // Ball: 0 dan maksimalgacha; θ: qiymatlar atrofida yumshoq chegara.
-    const axis = metric === "theta" ? thetaAxis(theta) : scoreAxis(scaled);
+    // θ (logit) o'qi — qiymatlar atrofida yumshoq chegara (0–100 shkala yo'q).
+    const axis = thetaAxis(theta);
 
     const theme = API.theme();
     const textColor = theme.text_color || "#10151c";
     const buttonColor = theme.button_color || "#2f7ce0";
 
-    // Nuqta rangi = o'sha natijaning sertifikat darajasi (θ da — brend rangi).
-    const pointBackgrounds = labels.map(function (label, index) {
-      if (metric === "theta") {
-        return "#ffffff";
-      }
-      return LEVEL_COLORS[levelCode(scaled[index])] || buttonColor;
-    });
     const pointRadii = labels.map(function (label, index) {
       return index === labels.length - 1 ? 6 : 4;
     });
@@ -403,27 +281,22 @@
     }
     chart = new Chart(canvas.getContext("2d"), {
       type: "line",
-      plugins: [makeZonePlugin(metric)],
       data: {
         labels: labels,
         datasets: [
           {
-            label: metric === "theta" ? "θ (logit)" : "0–100 ball",
-            data: series,
+            label: "θ (logit)",
+            data: theta,
             borderColor: buttonColor,
-            backgroundColor:
-              metric === "theta"
-                ? withAlpha(buttonColor, 0.12)
-                : gradientFill(buttonColor),
+            backgroundColor: withAlpha(buttonColor, 0.12),
             borderWidth: 3,
             tension: 0.4,
             fill: true,
             spanGaps: true,
             pointRadius: pointRadii,
             pointHoverRadius: 7,
-            pointBackgroundColor:
-              metric === "scaled" ? pointBackgrounds : "#ffffff",
-            pointBorderColor: metric === "scaled" ? "#ffffff" : buttonColor,
+            pointBackgroundColor: "#ffffff",
+            pointBorderColor: buttonColor,
             pointBorderWidth: 2.5,
           },
         ],
@@ -449,29 +322,23 @@
                 if (!Number.isFinite(value)) {
                   return "—";
                 }
-                if (metric === "theta") {
-                  return "θ " + signed(value, 2) + " logit";
-                }
-                return formatScore(value) + " ball · daraja " + levelCode(value);
+                return (
+                  "θ " + formatTheta(value) + " logit · daraja " +
+                  levelCode(value)
+                );
               },
             },
           },
         },
         scales: {
           y: {
-            min: metric === "theta" ? axis.min : 0,
+            min: axis.min,
             max: axis.max,
             ticks: {
               color: textColor,
-              stepSize: metric === "theta" ? undefined : axis.step,
-              callback:
-                metric === "theta"
-                  ? function (value) {
-                      return signed(value, 1);
-                    }
-                  : function (value) {
-                      return Number(value).toFixed(0);
-                    },
+              callback: function (value) {
+                return signed(value, 1);
+              },
             },
             grid: { color: "rgba(128,128,128,0.18)" },
             border: { display: false },
@@ -521,13 +388,13 @@
     });
     const previousByExam = {};
     for (let index = 1; index < asc.length; index += 1) {
-      previousByExam[asc[index].exam_id] = Number(asc[index - 1].scaled_score);
+      previousByExam[asc[index].exam_id] = Number(asc[index - 1].theta);
     }
-    let bestScore = -Infinity;
+    let bestTheta = -Infinity;
     asc.forEach(function (item) {
-      const score = Number(item.scaled_score);
-      if (score > bestScore) {
-        bestScore = score;
+      const theta = Number(item.theta);
+      if (theta > bestTheta) {
+        bestTheta = theta;
       }
     });
 
@@ -547,8 +414,8 @@
         .slice()
         .reverse()
         .forEach(function (item) {
-          const score = Number(item.scaled_score);
-          const isBest = asc.length > 1 && Math.abs(score - bestScore) < 1e-9;
+          const theta = Number(item.theta);
+          const isBest = asc.length > 1 && Math.abs(theta - bestTheta) < 1e-9;
           rows.push(itemHtml(item, previousByExam[item.exam_id], isBest));
         });
     }
@@ -699,38 +566,28 @@
     byId("results-list").classList.add("hidden");
   }
 
-  /** 0–100 shkaladagi ball halqasi (SVG; tashqi kutubxona kerak emas). */
-  function ringHtml(score, tone) {
-    const circumference = 2 * Math.PI * 46;
-    const value = Math.max(0, Math.min(100, Number(score) || 0));
-    const offset = circumference * (1 - value / 100);
+  /** Hero'dagi asosiy ko'rsatkich — **θ (logit)** (0–100 shkala o'rniga). */
+  function thetaBlock(theta, level) {
     return (
-      '<div class="res-ring ' + tone + '">' +
-      '<svg viewBox="0 0 110 110" aria-hidden="true">' +
-      '<circle class="res-ring-track" cx="55" cy="55" r="46"></circle>' +
-      '<circle class="res-ring-progress" cx="55" cy="55" r="46" ' +
-      'stroke-dasharray="' + circumference.toFixed(2) + '" ' +
-      'stroke-dashoffset="' + offset.toFixed(2) + '"></circle>' +
-      "</svg>" +
-      '<div class="res-ring-text">' +
-      '<span class="res-ring-score">' + formatScore(score) + "</span>" +
-      '<span class="res-ring-unit">ball</span>' +
-      "</div></div>"
+      '<div class="res-theta">' +
+      '<span class="res-theta-value">' + formatTheta(theta) + "</span>" +
+      '<span class="res-theta-unit">logit · ' + App.escape(level) + "</span>" +
+      "</div>"
     );
   }
 
-  /** Hero ichidagi o'sish/kamayish bloki (oldingi imtihonga nisbatan). */
+  /** Hero ichidagi o'sish/kamayish bloki (oldingi imtihonga nisbatan, logit). */
   function deltaBlock(delta) {
     if (delta === null || delta === undefined || !Number.isFinite(Number(delta))) {
       return (
-        '<div class="res-delta flat">— <span>ball</span></div>' +
+        '<div class="res-delta flat">— <span>logit</span></div>' +
         '<div class="res-hero-level">Taqqoslash uchun oldingi natija yo\'q</div>'
       );
     }
     const value = Number(delta);
-    if (Math.abs(value) < 0.05) {
+    if (Math.abs(value) < 0.005) {
       return (
-        '<div class="res-delta flat">0.0 <span>ball</span></div>' +
+        '<div class="res-delta flat">+0.00 <span>logit</span></div>' +
         '<div class="res-hero-level">Oldingi natija bilan bir xil</div>'
       );
     }
@@ -738,26 +595,38 @@
     return (
       '<div class="res-delta ' + (up ? "up" : "down") + '">' +
       icon(up ? "arrowUp" : "arrowDown", 14) +
-      (up ? "+" : "-") + formatScore(Math.abs(value)) +
-      ' <span>ball</span></div>' +
+      formatTheta(value) +
+      ' <span>logit</span></div>' +
       '<div class="res-hero-level">Oldingi imtihonga nisbatan</div>'
     );
   }
 
-  /** 95% ishonch oralig'i: trek + oraliq + ball nuqtasi. */
-  function intervalHtml(low, high, score) {
-    const left = Math.max(0, Math.min(100, Number(low)));
-    const right = Math.max(0, Math.min(100, Number(high)));
-    const width = Math.max(0, right - left);
-    const dot = Math.max(0, Math.min(100, Number(score)));
+  /** 95% ishonch oralig'i — θ (logit) shkalasida: trek + oraliq + nuqta. */
+  function intervalHtml(low, high, value) {
+    const left = Number(low);
+    const right = Number(high);
+    const dot = Number(value);
+    if (!Number.isFinite(left) || !Number.isFinite(right) || !Number.isFinite(dot)) {
+      return "";
+    }
+    // Trek oraliq atrofida biroz kengaytiriladi (vizual nafas olish uchun).
+    const span = Math.max(right - left, 0.4);
+    const min = left - span * 0.35;
+    const max = right + span * 0.35;
+    const scale = function (number) {
+      return Math.max(0, Math.min(100, ((number - min) / (max - min)) * 100));
+    };
+    const leftPercent = scale(left);
+    const widthPercent = Math.max(0, scale(right) - leftPercent);
     return (
       '<div class="res-interval">' +
       '<div class="res-interval-head"><span>95% ishonch oralig\'i</span>' +
-      "<b>" + formatScore(low) + " – " + formatScore(high) + "</b></div>" +
+      "<b>" + formatTheta(left) + " … " + formatTheta(right) + "</b></div>" +
       '<div class="res-interval-track">' +
-      '<span class="res-interval-range" style="left:' + left.toFixed(1) +
-      "%;width:" + width.toFixed(1) + '%"></span>' +
-      '<span class="res-interval-dot" style="left:' + dot.toFixed(1) + '%"></span>' +
+      '<span class="res-interval-range" style="left:' + leftPercent.toFixed(1) +
+      "%;width:" + widthPercent.toFixed(1) + '%"></span>' +
+      '<span class="res-interval-dot" style="left:' + scale(dot).toFixed(1) +
+      '%"></span>' +
       "</div></div>"
     );
   }
@@ -798,9 +667,10 @@
     });
     const latest = asc[asc.length - 1];
     const previous = asc.length > 1 ? asc[asc.length - 2] : null;
-    const score = Number(latest.scaled_score);
-    const delta = previous ? score - Number(previous.scaled_score) : null;
-    const level = latest.level || levelCode(score);
+    // Yagona o'lchov — θ (logit). 0–100 shkala ishlatilmaydi.
+    const theta = Number(latest.theta);
+    const delta = previous ? theta - Number(previous.theta) : null;
+    const level = latest.level || levelCode(theta);
     const tone = toneOf(latest);
     const submitted = parseDbTime(latest.submitted_at);
     const total = Number(latest.total_questions) || 0;
@@ -808,10 +678,10 @@
     const best = Math.max.apply(
       null,
       asc.map(function (item) {
-        return Number(item.scaled_score);
+        return Number(item.theta);
       })
     );
-    const isRecord = asc.length > 1 && Math.abs(score - best) < 1e-9;
+    const isRecord = asc.length > 1 && Math.abs(theta - best) < 1e-9;
 
     box.innerHTML =
       '<div class="res-hero ' + tone + '">' +
@@ -823,7 +693,7 @@
       "</div>" +
       '<span class="res-chip">' + App.escape(level) + "</span>" +
       "</div>" +
-      '<div class="res-hero-main">' + ringHtml(score, tone) +
+      '<div class="res-hero-main">' + thetaBlock(theta, level) +
       '<div class="res-hero-side">' + deltaBlock(delta) +
       '<div class="res-hero-level">Daraja: <b>' + App.escape(level) + "</b></div>" +
       (isRecord
@@ -854,11 +724,11 @@
           return;
         }
         const intervalSlot = byId("hero-interval-slot");
-        if (intervalSlot && report && Array.isArray(report.scaled_interval)) {
+        if (intervalSlot && report && Array.isArray(report.theta_interval)) {
           intervalSlot.innerHTML = intervalHtml(
-            report.scaled_interval[0],
-            report.scaled_interval[1],
-            report.scaled_score
+            report.theta_interval[0],
+            report.theta_interval[1],
+            report.theta
           );
         }
         const adviceSlot = byId("hero-advice-slot");
@@ -910,8 +780,8 @@
       '<circle cx="72" cy="28" r="4" fill="currentColor"/>' +
       "</svg>" +
       "<h2>Hali natijalar yo'q</h2>" +
-      '<p class="muted">Birinchi imtihonni topshiring — ball, sertifikat darajasi ' +
-      "va o'sish dinamikasi shu yerda paydo bo'ladi.</p>" +
+      '<p class="muted">Birinchi imtihonni topshiring — θ (bilim darajasi), ' +
+      "sertifikat darajasi va o'sish dinamikasi shu yerda paydo bo'ladi.</p>" +
       '<button type="button" class="res-empty-cta" id="res-go-queue">' +
       "Navbatga o'tish</button>" +
       "</div>"
@@ -938,18 +808,18 @@
       statTile(
         "res-tone-b",
         "trophy",
-        summary.best_scaled === null || summary.best_scaled === undefined
+        summary.best_theta === null || summary.best_theta === undefined
           ? "—"
-          : formatScore(summary.best_scaled),
-        "Eng yaxshi ball"
+          : formatTheta(summary.best_theta) + "<small>logit</small>",
+        "Eng yaxshi θ"
       ) +
       statTile(
         "res-tone-c-plus",
         "trend",
-        summary.average_scaled === null || summary.average_scaled === undefined
+        summary.average_theta === null || summary.average_theta === undefined
           ? "—"
-          : formatScore(summary.average_scaled),
-        "O'rtacha ball"
+          : formatTheta(summary.average_theta) + "<small>logit</small>",
+        "O'rtacha θ"
       ) +
       statTile("res-tone-b-plus", "list", String(summary.attempts || 0), "Urinishlar") +
       statTile("res-tone-a", "target", correct, "To'g'ri javoblar");
@@ -965,74 +835,30 @@
     );
   }
 
-  /** Grafik ustidagi daraja chegaralari (joriy daraja — rangli chip). */
-  function renderScaleLegend() {
-    const box = byId("chart-zones");
-    if (!box) {
-      return;
-    }
-    const metric = state.metric === "theta" ? "theta" : "scaled";
-    box.classList.toggle("hidden", metric !== "scaled");
-    if (metric !== "scaled") {
-      return;
-    }
-
-    let current = "";
-    const published = (state.data && state.data.published) || [];
-    if (published.length) {
-      const latest = published
-        .slice()
-        .sort(function (a, b) {
-          return timeOf(a) - timeOf(b);
-        })
-        .pop();
-      current = latest.level || levelCode(latest.scaled_score);
-    }
-
-    box.innerHTML = LEVELS.map(function (level) {
-      const isCurrent = level.code === current;
-      const threshold = level.code === "NC" ? "&lt;46" : "≥" + level.min;
-      return (
-        '<span class="res-zone ' + level.tone +
-        (isCurrent ? " is-current" : "") + '">' +
-        '<i class="res-zone-dot"></i>' + App.escape(level.code) +
-        " <b>" + threshold + "</b></span>"
-      );
-    }).join("");
-  }
-
   /** Bitta e'lon qilingan imtihon kartasi (timeline elementi). */
-  function itemHtml(item, previousScore, isBest) {
+  function itemHtml(item, previousTheta, isBest) {
     const tone = toneOf(item);
-    const score = Number(item.scaled_score);
-    const level = item.level || levelCode(score);
+    const theta = Number(item.theta);
+    const level = item.level || levelCode(theta);
     const total = Number(item.total_questions) || 0;
     const raw = Number(item.raw_score) || 0;
     const ratio = total ? Math.max(0, Math.min(100, (raw / total) * 100)) : 0;
     const submitted = parseDbTime(item.submitted_at);
-    const theta = Number(item.theta);
     const delta =
-      previousScore === null || previousScore === undefined
+      previousTheta === null || previousTheta === undefined
         ? null
-        : score - Number(previousScore);
+        : theta - Number(previousTheta);
     const metaParts = [formatDate(submitted), raw + "/" + total + " to'g'ri"];
-    if (
-      item.theta !== null &&
-      item.theta !== undefined &&
-      Number.isFinite(theta)
-    ) {
-      metaParts.push("θ " + signed(theta, 2));
-    }
 
     return (
       '<button type="button" class="res-item ' + tone + '" data-exam="' +
-      item.exam_id + '" aria-label="' + App.escape(item.title) + ", " +
-      formatScore(score) + ' ball — batafsil tahlil">' +
+      item.exam_id + '" aria-label="' + App.escape(item.title) + ", θ " +
+      formatTheta(theta) + ' logit — batafsil tahlil">' +
       '<span class="res-item-dot" aria-hidden="true"></span>' +
       '<span class="res-item-top">' +
       '<span class="res-item-title">' + App.escape(item.title) + "</span>" +
-      '<span class="res-item-score">' + formatScore(score) +
-      "<small>ball</small></span></span>" +
+      '<span class="res-item-score">' + formatTheta(theta) +
+      "<small>logit</small></span></span>" +
       '<span class="res-item-meta">' + App.escape(metaParts.join(" · ")) + "</span>" +
       '<span class="res-item-foot">' +
       '<span class="res-mini" aria-hidden="true"><span style="width:' +
@@ -1047,18 +873,19 @@
     );
   }
 
-  /** Oldingi natijaga nisbatan o'zgarish (kichik chip). */
+  /** Oldingi natijaga nisbatan θ o'zgarishi (kichik chip, logit). */
   function deltaBadge(delta) {
     if (delta === null || delta === undefined || !Number.isFinite(Number(delta))) {
       return "";
     }
     const value = Number(delta);
-    const cls = Math.abs(value) < 0.05 ? "flat" : value > 0 ? "up" : "down";
+    const cls = Math.abs(value) < 0.005 ? "flat" : value > 0 ? "up" : "down";
     const arrow =
       cls === "flat" ? "" : icon(cls === "up" ? "arrowUp" : "arrowDown", 11);
-    const text =
-      (value > 0 ? "+" : value < 0 ? "-" : "") + formatScore(Math.abs(value));
-    return '<span class="res-item-delta ' + cls + '">' + arrow + text + "</span>";
+    return (
+      '<span class="res-item-delta ' + cls + '">' + arrow +
+      formatTheta(value) + "</span>"
+    );
   }
 
   /** Kutilayotgan natija kartasi (jonli countdown bilan). */
@@ -1164,13 +991,13 @@
         const se =
           report.standard_error === null
             ? "chekka holat"
-            : Number(report.standard_error).toFixed(3);
-        const interval = report.scaled_interval
+            : Number(report.standard_error).toFixed(2) + " logit";
+        const interval = report.theta_interval
           ? '<div class="profile-row"><span class="label">95% ishonch oralig\'i</span><b>' +
-            formatScore(report.scaled_interval[0]) +
-            " – " +
-            formatScore(report.scaled_interval[1]) +
-            " ball</b></div>"
+            formatTheta(report.theta_interval[0]) +
+            " … " +
+            formatTheta(report.theta_interval[1]) +
+            " logit</b></div>"
           : "";
 
         const subjects = Array.isArray(report.subjects) ? report.subjects : [];
@@ -1193,12 +1020,8 @@
           '<div class="modal-head"><h2>' +
           App.escape(report.title) +
           '</h2><button class="close" type="button">×</button></div>' +
-          '<div class="profile-row"><span class="label">Natija</span><b>' +
-          formatScore(report.scaled_score) +
-          " ball</b></div>" +
           '<div class="profile-row"><span class="label">Bilim darajasi (θ)</span><b>' +
-          (theta >= 0 ? "+" : "") +
-          theta.toFixed(3) +
+          formatTheta(theta) +
           " logit</b></div>" +
           '<div class="profile-row"><span class="label">To\'g\'ri javoblar</span><b>' +
           report.raw_score +
@@ -1230,7 +1053,7 @@
       });
   }
 
-  /** Filtr va metrika tugmalari (bir marta bog'lanadi). */
+  /** Filtr tugmalari (bir marta bog'lanadi). */
   function bindControls() {
     document.querySelectorAll("#results-filters [data-filter]").forEach(function (button) {
       button.addEventListener("click", function () {
@@ -1241,34 +1064,6 @@
         API.haptic("light");
         if (state.data) {
           renderList(state.data);
-        }
-      });
-    });
-
-    document.querySelectorAll("#chart-metrics [data-metric]").forEach(function (button) {
-      button.addEventListener("click", function () {
-        const metric = button.getAttribute("data-metric");
-        if (metric === state.metric) {
-          return;
-        }
-        state.metric = metric === "theta" ? "theta" : "scaled";
-        document
-          .querySelectorAll("#chart-metrics [data-metric]")
-          .forEach(function (other) {
-            const isActive = other === button;
-            other.classList.toggle("active", isActive);
-            other.setAttribute("aria-selected", isActive ? "true" : "false");
-          });
-        const subtitle = byId("chart-sub");
-        if (subtitle) {
-          subtitle.textContent =
-            state.metric === "theta"
-              ? "Bilim darajasi θ, logit shkalasi"
-              : "0–100 ball shkalasi";
-        }
-        API.haptic("light");
-        if (state.data) {
-          renderChart(state.data.chart || {});
         }
       });
     });

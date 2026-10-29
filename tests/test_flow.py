@@ -122,8 +122,9 @@ async def check_session(repos: Repositories, questions: list) -> None:
     stats = await repos.results.stats_for_user(USER_ID)
     assert stats.attempts == 1 and stats.best_scaled is not None
     assert await repos.results.count() == 1
-    average = await repos.results.average_scaled()
-    assert average is not None and abs(average - round(estimate.scaled_score, 2)) < 1e-9
+    # DB'da θ 4 xona bilan saqlanadi (`repository`), shuning uchun shu aniqlikda.
+    average = await repos.results.average_theta()
+    assert average is not None and abs(average - round(estimate.theta, 4)) < 1e-9
     print("[OK] Natija bazaga yozildi, statistika to'g'ri o'qildi")
 
     # --- Hisobot matnlari -------------------------------------------------
@@ -147,7 +148,7 @@ async def check_session(repos: Repositories, questions: list) -> None:
 
     check_html("history", texts.results_history(rows, stats, "Aziz Karimov"))
     check_html("history empty", texts.results_history([], UserStats(), "Aziz"))
-    check_html("admin", texts.admin_stats(1, 20, 1, 55.0, 0))
+    check_html("admin", texts.admin_stats(1, 20, 1, 0.55, 0))
     check_html("no_questions", texts.no_questions())
     print(
         f"[OK] Barcha matnlar yaroqli: HTML muvozanatli, tahlil {len(chunks)} ta "

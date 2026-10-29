@@ -71,7 +71,7 @@ class StudentRow:
     """PDF jadvalidagi bitta o'quvchi satri."""
 
     name: str
-    score: float  # umumiy ball (0..91)
+    theta: float  # θ (logit) — Rasch modelining yagona o'lchovi
     level: str  # A+ / A / B+ / B / C+ / C / NC
     algebra: float | None  # algebra bo'limi balli
     geometry: float | None  # geometriya bo'limi balli
@@ -112,7 +112,7 @@ COLUMNS: tuple[tuple[str, float, str], ...] = (
     ("Ism-familiya", 62, "L"),
     ("Algebra", 24, "C"),
     ("Geometriya", 24, "C"),
-    ("Ball", 22, "C"),
+    ("θ (logit)", 22, "C"),
     ("Daraja", 21, "C"),
     ("To'g'ri", 27, "C"),
 )
@@ -246,7 +246,7 @@ def build_results_pdf(
             str(row.name),
             _fmt(row.algebra),
             _fmt(row.geometry),
-            f"{row.score:.1f}",
+            f"{row.theta:+.2f}",
             str(row.level),
             f"{row.correct}/{row.total}",
         )

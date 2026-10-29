@@ -48,7 +48,7 @@ def welcome(full_name: str, questions_per_test: int) -> str:
         "📊 <b>Natija nima beradi?</b>\n"
         "• nechta to'g'ri javob berganingiz (xom ball);\n"
         "• Rasch modeli bo'yicha bilim darajangiz <b>θ (theta, logit)</b>;\n"
-        "• 0–100 shkaladagi ball va uning aniqligi (ishonch oralig'i).\n\n"
+        "• θ ning aniqligi — standart xato va 95% ishonch oralig'i.\n\n"
         "Kerakli bo'limni tanlang 👇"
     )
 
@@ -77,12 +77,13 @@ def help_text(is_admin: bool = False) -> str:
         ]
     lines += [
         "",
-        "📊 Natijalar, ball va batafsil tahlil — <b>Mini App</b> ning "
+        "📊 Natijalar va batafsil tahlil — <b>Mini App</b> ning "
         "«Natijalar» bo'limida.",
         "",
         "ℹ️ Javoblar faqat <b>Web App</b> orqali va belgilangan vaqt oralig'ida "
         "qabul qilinadi. Har bir imtihonga javob <b>bir marta</b> yuboriladi. "
-        "Natija Rasch modeli bo'yicha θ va 0–100 ball ko'rinishida e'lon qilinadi.",
+        "Natija Rasch modeli bo'yicha θ (logit), 95% ishonch oralig'i va "
+        "sertifikat darajasi ko'rinishida e'lon qilinadi.",
     ]
     return "\n".join(lines)
 
@@ -490,8 +491,9 @@ def about() -> str:
         "Javoblar asosida maksimal ishonchlilik (MLE) bahosi <b>Newton-Raphson</b>\n"
         "usulida topiladi:\n\n"
         "<code>θ ← θ + Σ(u − P) / Σ P(1 − P)</code>\n\n"
-        "So'ng θ 0–100 shkalaga chiziqli o'tkaziladi:\n"
-        "<code>−3 logit → 0 ball,  0 → 50 ball,  +3 → 100 ball</code>\n\n"
+        "Natija <b>θ (logit)</b> ko'rinishida, uning <b>95% ishonch oralig'i</b> va\n"
+        "sertifikat darajasi (NC … A+) bilan birga ko'rsatiladi. Rasch modelida\n"
+        "\"aniq ball\" tushunchasi yo'q — shuning uchun 0–100 shkala ishlatilmaydi.\n\n"
         "⚠️ <b>Muhim izoh:</b> bu loyihada savollarning qiyinchiligi (b) o'qituvchi\n"
         "tomonidan oldindan belgilangan (muallif bahosi). To'liq rasmiy IRT\n"
         "tahlilida b parametrlari katta guruh javoblari asosida statistik\n"
@@ -594,19 +596,15 @@ def result_summary(
         1 for q in questions if answers.get(q.question_id, SKIPPED).upper() == SKIPPED
     )
     level = rasch.ability_level(estimate.scaled_score)
-    accuracy = (
-        f"±{estimate.scaled_error:.1f} ball"
-        if estimate.scaled_error is not None
-        else "aniqlanmagan (chegara holati)"
-    )
-    interval = estimate.scaled_interval
+    interval = estimate.theta_interval
     interval_line = (
-        f"• 95% ishonch oralig'i: <b>{interval[0]:.0f} – {interval[1]:.0f}</b> ball\n"
+        "• 95% ishonch oralig'i: "
+        f"<b>{_sign(interval[0])} … {_sign(interval[1])}</b> logit\n"
         if interval
         else ""
     )
     se_line = (
-        f"• Standart xato (SE): {estimate.standard_error:.2f} logit  →  {accuracy}\n"
+        f"• Standart xato (SE): {estimate.standard_error:.2f} logit\n"
         if estimate.standard_error is not None
         else ""
     )
@@ -621,7 +619,7 @@ def result_summary(
         f"🎯 Bilim darajasi (θ): <b>{_sign(estimate.theta)} logit</b>\n"
         f"{se_line}"
         f"{interval_line}"
-        f"🏅 0–100 shkalada: <b>{estimate.scaled_score:.0f} ball</b> — {level}\n"
+        f"🏅 Daraja: <b>{level}</b>\n"
         f"{SEP}\n"
         f"{_extreme_note(estimate)}"
         "🧠 <b>Bu raqamlar nimani bildiradi?</b>\n"
@@ -714,11 +712,13 @@ def results_history(
         SEP,
         f"👤 {_safe(full_name)}",
         f"🎯 Urinishlar soni: <b>{stats.attempts}</b>",
-        f"🏆 Eng yaxshi ball: <b>{stats.best_scaled:.0f}</b>"
-        + (f" (θ = {_sign(stats.best_theta)})" if stats.best_theta is not None else ""),
-        f"📈 O'rtacha ball: <b>{stats.average_scaled:.1f}</b>"
-        if stats.average_scaled is not None
-        else "📈 O'rtacha ball: —",
+        "🏆 Eng yaxshi natija: <b>"
+        + (
+            f"θ = {_sign(stats.best_theta)} logit"
+            if stats.best_theta is not None
+            else "—"
+        )
+        + "</b>",
         f"✅ Jami to'g'ri javoblar: <b>{stats.total_correct} / {stats.total_questions}</b>"
         + (
             f" ({100 * stats.total_correct / stats.total_questions:.0f}%)"
@@ -732,15 +732,16 @@ def results_history(
     for index, result in enumerate(results, start=1):
         theta = _sign(result.theta_score)
         date = (result.date or "")[:16]
+        level = rasch.ability_level(result.final_scaled_score)
         lines.append(
             f"{index}. {date} — {result.raw_score}/{result.total_questions} · "
-            f"θ = {theta} · <b>{result.final_scaled_score:.0f} ball</b>"
+            f"θ = {theta} logit · <b>{level}</b>"
         )
 
     lines.append(SEP)
     lines.append(
-        "📌 Eslatma: bir xil xom ball turli testlarda turli ballga olib kelishi "
-        "mumkin — buni savollar to'plamining qiyinligi belgilaydi."
+        "📌 Eslatma: bir xil xom ball turli testlarda turli θ berishi mumkin — "
+        "buni savollar to'plamining qiyinligi belgilaydi."
     )
     return "\n".join(lines)
 
@@ -752,17 +753,17 @@ def admin_stats(
     users: int,
     questions: int,
     attempts: int,
-    average_scaled: float | None,
+    average_theta: float | None,
     active_sessions: int,
     exams: int = 0,
     submissions: int = 0,
     solution_files: int = 0,
 ) -> str:
-    """`/stats` komandasi uchun umumiy statistika."""
+    """`/stats` komandasi uchun umumiy statistika (0–100 shkala ko'rsatilmaydi)."""
     average_line = (
-        f"📈 O'rtacha scaled ball (mashq rejimi): <b>{average_scaled:.1f}</b>"
-        if average_scaled is not None
-        else "📈 O'rtacha scaled ball (mashq rejimi): —"
+        f"📈 O'rtacha θ (mashq rejimi): <b>{_sign(average_theta)} logit</b>"
+        if average_theta is not None
+        else "📈 O'rtacha θ (mashq rejimi): —"
     )
     submissions_line = (
         f"📥 Imtihonlarga yuborilgan javoblar: <b>{submissions}</b>\n" if submissions else ""
@@ -1151,16 +1152,6 @@ def submission_accepted(
     return "\n".join(lines)
 
 
-def _score_bar(score: float, segments: int = 10) -> str:
-    """0–100 ballni 10 bo'lakli ixcham chiziq ko'rinishida beradi."""
-    try:
-        value = float(score)
-    except (TypeError, ValueError):
-        value = 0.0
-    filled = max(0, min(segments, round(value / (100.0 / segments))))
-    return "▰" * filled + "▱" * (segments - filled)
-
-
 def _level_emoji(level: str) -> str:
     """Daraja uchun bitta tushunarli belgi (rang o'rniga)."""
     return {
@@ -1179,19 +1170,19 @@ def result_ready(
     full_name: str,
     report: Mapping[str, object],
 ) -> str:
-    """Natija e'lon qilinganda yuboriladigan boy karta (Rasch ko'rsatkichlari).
+    """Natija e'lon qilinganda yuboriladigan karta (faqat Rasch ko'rsatkichlari).
 
-    `report` — `services.grading.build_report()` natijasi. Xabar sodda, lekin
-    barcha muhim ma'lumotni beradi: ball, daraja, to'g'ri javoblar, θ va
-    95% ishonch oralig'i.
+    `report` — `services.grading.build_report()` natijasi. Xabarda **faqat**
+    θ (logit), uning 95% ishonch oralig'i, xom ball va sertifikat darajasi bor:
+    0–100 shkala **ko'rsatilmaydi** (Rasch modelida "aniq ball" tushunchasi yo'q).
     """
-    score = float(report.get("scaled_score") or 0.0)
     level = str(report.get("ability_level") or "")
     theta = float(report.get("theta") or 0.0)
     raw = int(report.get("raw_score") or 0)
     total = int(report.get("total_questions") or 0)
     advice = str(report.get("advice") or "")
-    interval = report.get("scaled_interval")
+    interval = report.get("theta_interval")
+    se = report.get("standard_error")
 
     lines = [
         "🎉 <b>Natijangiz e'lon qilindi!</b>",
@@ -1199,17 +1190,19 @@ def result_ready(
         f"📌 {_safe(title)}",
         f"👤 {_safe(full_name)}",
         "",
-        f"🎯 <b>{score:.1f} / 100 ball</b>",
-        f"<code>{_score_bar(score)}</code>",
-        f"{_level_emoji(level)} Daraja: <b>{_safe(level)}</b>",
-        f"✅ To'g'ri javoblar: <b>{raw} / {total}</b>",
-        f"🧠 Bilim darajasi (θ): <b>{_sign(theta)} logit</b>",
+        f"🎯 Bilim darajasi (θ): <b>{_sign(theta)} logit</b>",
     ]
     if isinstance(interval, (list, tuple)) and len(interval) == 2:
         lines.append(
             "📏 95% ishonch oralig'i: "
-            f"<b>{float(interval[0]):.1f} – {float(interval[1]):.1f}</b> ball"
+            f"<b>{_sign(float(interval[0]))} … {_sign(float(interval[1]))}</b> logit"
         )
+    if se is not None:
+        lines.append(f"± Standart xato (SE): <b>{float(se):.2f}</b> logit")
+    lines += [
+        f"✅ To'g'ri javoblar: <b>{raw} / {total}</b>",
+        f"{_level_emoji(level)} Daraja: <b>{_safe(level)}</b>",
+    ]
     if advice:
         lines += ["", f"💡 {_safe(advice)}"]
 

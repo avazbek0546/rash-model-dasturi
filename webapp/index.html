@@ -61,7 +61,7 @@
 
       <!-- ================= 2. NATIJALAR ================= -->
       <section id="tab-results" class="tab-panel">
-        <!-- Hero: eng so'nggi natija (ball, daraja, o'sish, 95% interval) -->
+        <!-- Hero: eng so'nggi natija (θ, daraja, o'sish, 95% interval) -->
         <div id="results-hero" class="res-hero-slot">
           <div class="res-skeleton res-skeleton-hero"></div>
         </div>
@@ -79,17 +79,9 @@
           <div class="res-card-head">
             <div>
               <h2>Natijalar dinamikasi</h2>
-              <p class="res-card-sub" id="chart-sub">0–100 ball shkalasi</p>
-            </div>
-            <div class="res-seg" id="chart-metrics" role="tablist"
-                 aria-label="Grafik ko'rsatkichi">
-              <button type="button" class="res-seg-btn active" data-metric="scaled"
-                      role="tab" aria-selected="true">Ball</button>
-              <button type="button" class="res-seg-btn" data-metric="theta"
-                      role="tab" aria-selected="false">θ</button>
+              <p class="res-card-sub" id="chart-sub">θ (logit) shkalasi</p>
             </div>
           </div>
-          <div class="res-scale" id="chart-zones" aria-label="Daraja chegaralari"></div>
           <div class="chart-wrap"><canvas id="results-chart"></canvas></div>
           <div id="chart-fallback" class="hidden"></div>
         </div>
