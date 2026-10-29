@@ -246,6 +246,17 @@ async def check_published_results(repos: Repositories, client: TestClient, exam_
     assert payload["scaled_score"] is not None, payload
     assert payload["scaled_interval"] is not None, payload
     assert set(payload["subject_balls"]) == {"algebra", "geometry"}, payload
+    assert (
+        round(
+            sum(
+                value
+                for value in payload["subject_balls"].values()
+                if value is not None
+            ),
+            1,
+        )
+        == round(payload["scaled_score"], 1)
+    ), payload["subject_balls"]
     print(
         f"[OK] Batafsil hisobot: {payload['raw_score']}/{QUESTIONS} → "
         f"ball = {payload['scaled_score']:.2f}, "

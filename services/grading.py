@@ -635,10 +635,9 @@ def build_report(exam: Exam, submission: ExamSubmission) -> dict[str, Any]:
     subject_scores = subjects.summarize(
         (result.question_number, result.is_correct) for result in results
     )
-    subject_balls = subjects.scaled_scores(
-        (result.question_number, result.is_correct, result.difficulty)
-        for result in results
-    )
+    # Alohida fan θ si hisoblanmaydi: umumiy sertifikat bali fanlar o'rtasida
+    # to'g'ri javoblar ulushiga qarab taqsimlanadi (yig'indi = umumiy ball).
+    subject_balls = subjects.allocate_total_ball(scaled_score, subject_scores)
 
     return {
         "exam_id": exam.exam_id,

@@ -21,9 +21,7 @@ tegishli (:func:`subject_of_position`).
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable
-
-from services import rasch
+from typing import Any, Iterable, Mapping, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -98,44 +96,67 @@ def summarize(items: Iterable[tuple[int, bool]]) -> list[dict[str, Any]]:
     ]
 
 
-def scaled_scores(
-    items: Iterable[tuple[int, bool, float]],
+def allocate_total_ball(
+    total_ball: float,
+    summaries: Sequence[Mapping[str, Any]],
 ) -> dict[str, float | None]:
-    """Har bir fan uchun **Rasch bo'yicha 0–100 ball** (umumiy ball bilan bir shkala).
+    """Umumiy sertifikat balini fanlar o'rtasida taqsimlaydi.
 
-    `items` — `(pozitsiya, to'g'rimi, qiyinchilik)` uchliklari. Har bir fan
-    bo'yicha alohida θ baholanadi va `rasch.theta_to_scaled()` orqali 0–100
-    shkalaga o'tkaziladi. Kichik bo'limda θ beqarorroq bo'lishi mumkin — shu
-    sababli hisoblanmasa `None` qaytariladi.
+    **Alohida θ hisoblanmaydi.** Umumiy 0–100 ball olinadi va fanlar bo'yicha
+    to'g'ri javoblar ulushiga qarab bo'linadi:
 
-    Bu **foiz emas**: fan ichidagi savollarning qiyinchiligi ham hisobga
-    olinadi. Shuning uchun Algebra/Geometriya ballari sertifikat bali bilan
-    bir xil shkalada bo'ladi va ularni taqqoslash mumkin.
+        algebra_ball + geometriya_ball = umumiy_ball
+
+    Agar birorta savolga to'g'ri javob bo'lmasa (barcha javob xato/bo'sh),
+    taqsimot fanlardagi elementlar soniga mutanosib bo'ladi — shunda ham
+    yig'indi umumiy ballga teng qoladi.
+
+    `summaries` — `summarize()` natijasi: har bir fan uchun `code`, `correct`,
+    `total`. Savoli yo'q fan (masalan, qisqa testda geometriya bo'lmasa)
+    `None` qaytaradi; bunday fanda taqsimlanadigan ball ham yo'q.
+
+    Qaytaradi:
+        `{fan_kodi: ball}` — 0.1 aniqlikda; mavjud fanlar yig'indisi
+        `round(total_ball, 1)` ga teng.
     """
-    groups: dict[str, list[rasch.ItemResponse]] = {}
-    for position, is_correct, difficulty in items:
-        code = subject_of_position(int(position))
-        if code is None:
-            continue
-        groups.setdefault(code, []).append(
-            rasch.ItemResponse(
-                question_id=int(position),
-                difficulty=float(difficulty),
-                is_correct=bool(is_correct),
-            )
-        )
+    target = round(max(0.0, min(100.0, float(total_ball or 0.0))), 1)
+    rows = {str(row.get("code")): row for row in summaries}
 
-    scores: dict[str, float | None] = {}
+    present: dict[str, int] = {}
+    correct: dict[str, int] = {}
     for code in subject_codes():
-        responses = groups.get(code) or []
-        if not responses:
-            scores[code] = None
+        row = rows.get(code)
+        if row is None:
             continue
-        try:
-            scores[code] = round(
-                rasch.estimate_theta(responses).scaled_score, 1
-            )
-        except Exception:  # pragma: no cover - kutilmagan matematik holat
-            logger.exception("Fan bo'yicha ball hisoblanmadi: %s", code)
-            scores[code] = None
-    return scores
+        total = int(row.get("total") or 0)
+        if total <= 0:
+            continue
+        present[code] = total
+        correct[code] = max(0, min(total, int(row.get("correct") or 0)))
+
+    result: dict[str, float | None] = {code: None for code in subject_codes()}
+    if not present:
+        return result
+
+    codes = [code for code in subject_codes() if code in present]
+    total_items = sum(present.values())
+    total_correct = sum(correct.values())
+    weights = {
+        code: (
+            correct[code] / total_correct
+            if total_correct > 0
+            else present[code] / total_items
+        )
+        for code in codes
+    }
+
+    # Yaxlitlashda yig'indi aniq saqlanishi uchun oxirgi fanga qoldiq beriladi.
+    allocated = 0.0
+    for index, code in enumerate(codes):
+        if index == len(codes) - 1:
+            value = round(target - allocated, 1)
+        else:
+            value = round(target * weights[code], 1)
+            allocated += value
+        result[code] = max(0.0, min(100.0, value))
+    return result

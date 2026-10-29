@@ -546,6 +546,17 @@ asosiy o'lchov — sertifikat bali, diagramma ham shu bali bo'yicha chiziladi.
 Sertifikat darajasi (NC … A+) quyidagi chegaralar bo'yicha aniqlanadi:
 `<46 → NC`, `46 → C`, `50 → C+`, `55 → B`, `60 → B+`, `65 → A`, `70 → A+`.
 
+**Algebra/geometriya ballari alohida θ emas.** Umumiy sertifikat bali fanlar
+bo'yicha to'g'ri javoblar ulushiga qarab taqsimlanadi:
+
+```text
+algebra_ball + geometriya_ball = sertifikat_bal
+```
+
+Shu sababli fan ballari yig'indisi har doim umumiy ballga teng bo'ladi va
+hech bir fan umumiy baldan oshib ketmaydi. Agar birorta to'g'ri javob bo'lmasa,
+taqsimot fanlardagi savollar soniga mutanosib bo'ladi.
+
 ### Nega bu "7/10 = 70%" dan yaxshiroq?
 
 Rasch modelida xom ball — **bir xil savollar to'plami uchun** — `θ` uchun
@@ -621,7 +632,7 @@ Testlar `pytest` talab qilmaydi, oddiy `python` bilan ishlaydi:
 python tests/test_rasch.py        # model matematikasi (10 test)
 python tests/test_answer_key.py   # kalit formatlari + Rasch kengaytmasi
 python tests/test_exam_flow.py    # sxema → repository → hayot sikli → baholash
-python tests/test_subjects.py     # algebra/geometriya Rasch ballari (0–100, foiz emas)
+python tests/test_subjects.py     # algebra/geometriya ballari umumiy ballga taqsimlanadi
 python tests/test_solutions.py    # 🔍 Test tahlili: solutions jadvali, izoh, sahifalash
 python tests/test_webapp_auth.py  # initData imzosi, muddati, buzuq holatlar
 python tests/test_api.py          # /api/* (aiohttp test client, tarmoqsiz)

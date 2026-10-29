@@ -290,9 +290,20 @@ async def check_lifecycle(repos: Repositories) -> None:
     assert report["scaled_score"] is not None
     assert report["scaled_interval"] is not None
     assert set(report["subject_balls"]) == {"algebra", "geometry"}, report
+    assert (
+        round(
+            sum(
+                value
+                for value in report["subject_balls"].values()
+                if value is not None
+            ),
+            1,
+        )
+        == round(report["scaled_score"], 1)
+    ), report["subject_balls"]
     print(
         f"[OK] Hisobot: {report['ability_level']}, ball = {report['scaled_score']:.2f}, "
-        f"95% interval = {report['scaled_interval']} (ball)"
+        f"fanlar yig'indisi = {report['subject_balls']}"
     )
 
     # "Navbat" ro'yxati: faol imtihon birinchi turadi

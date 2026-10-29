@@ -5,7 +5,9 @@ Tekshiriladi:
     2. Chegara: 40 → algebra, 41 → geometriya;
     3. Elementlar bo'yicha: algebra **35**, geometriya **20** (jami 55;
        a/b qismlar alohida element);
-    4. `summarize` to'g'ri sonlarni va tartibni qaytaradi.
+    4. `summarize` to'g'ri sonlarni va tartibni qaytaradi;
+    5. `allocate_total_ball` umumiy ballni fanlarga taqsimlaydi va yig'indi
+       umumiy ballga teng bo'ladi (alohida fan θ si hisoblanmaydi).
 
 Ishga tushirish:
     python tests/test_subjects.py
@@ -21,7 +23,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-import config  # noqa: E402
 from services import subjects  # noqa: E402
 
 
@@ -108,35 +109,48 @@ def check_summarize() -> None:
     print("[OK] Jamlanma: algebra 35 element, geometriya 20 element (jami 55)")
 
 
-def check_scaled_scores() -> None:
-    """Fan bo'yicha Rasch ballari (0–100; foiz emas)."""
-    items = []
-    for position in range(1, 46):
-        parts = ("a", "b") if position >= 36 else ("",)
-        for _part in parts:
-            items.append((position, True, 0.0))
-
-    scores = subjects.scaled_scores(items)
-    assert set(scores) == {"algebra", "geometry"}, scores
-    # Hammasi to'g'ri → har bir fan uchun ham yuqori cap (91.0).
-    assert abs(float(scores["algebra"]) - config.SCALED_CAP_MAX) < 1e-6, scores
-    assert abs(float(scores["geometry"]) - config.SCALED_CAP_MAX) < 1e-6, scores
-
+def check_allocate_total_ball() -> None:
+    """Umumiy ball fanlarga taqsimlanadi; yig'indi umumiy ballga teng."""
     mixed = [
-        (position, position not in (36, 41), 0.0)
-        for position, _is_correct, _difficulty in items
+        {"code": "algebra", "label": "Algebra", "correct": 33, "total": 35},
+        {"code": "geometry", "label": "Geometriya", "correct": 18, "total": 20},
     ]
-    mixed_scores = subjects.scaled_scores(mixed)
-    for code, score in mixed_scores.items():
-        assert score is not None, (code, mixed_scores)
-        assert config.SCALED_CAP_MIN <= score <= config.SCALED_CAP_MAX, (
-            code,
-            score,
-        )
+    balls = subjects.allocate_total_ball(29.7, mixed)
+    assert set(balls) == {"algebra", "geometry"}, balls
+    assert balls["algebra"] is not None and balls["geometry"] is not None, balls
+    assert abs((balls["algebra"] + balls["geometry"]) - 29.7) < 1e-9, balls
+    assert balls["algebra"] > balls["geometry"], balls  # 33/51 vs 18/51
+    assert max(balls.values()) <= 29.7, balls
 
-    empty = subjects.scaled_scores([])
+    all_correct = [
+        {"code": "algebra", "label": "Algebra", "correct": 35, "total": 35},
+        {"code": "geometry", "label": "Geometriya", "correct": 20, "total": 20},
+    ]
+    balls = subjects.allocate_total_ball(29.7, all_correct)
+    assert abs((balls["algebra"] + balls["geometry"]) - 29.7) < 1e-9, balls
+    # 35/55 va 20/55 nisbatida: 18.9 + 10.8
+    assert abs(balls["algebra"] - 18.9) < 1e-9, balls
+    assert abs(balls["geometry"] - 10.8) < 1e-9, balls
+
+    no_correct = [
+        {"code": "algebra", "label": "Algebra", "correct": 0, "total": 35},
+        {"code": "geometry", "label": "Geometriya", "correct": 0, "total": 20},
+    ]
+    balls = subjects.allocate_total_ball(29.7, no_correct)
+    assert abs((balls["algebra"] + balls["geometry"]) - 29.7) < 1e-9, balls
+    assert abs(balls["algebra"] - 18.9) < 1e-9, balls
+
+    one_subject_empty = [
+        {"code": "algebra", "label": "Algebra", "correct": 4, "total": 4},
+        {"code": "geometry", "label": "Geometriya", "correct": 0, "total": 0},
+    ]
+    balls = subjects.allocate_total_ball(29.7, one_subject_empty)
+    assert balls["geometry"] is None, balls
+    assert abs(balls["algebra"] - 29.7) < 1e-9, balls
+
+    empty = subjects.allocate_total_ball(29.7, [])
     assert empty == {"algebra": None, "geometry": None}, empty
-    print("[OK] Fan ballari: Rasch bo'yicha 0–100 (foiz emas), bo'sh — None")
+    print("[OK] Fan ballari: umumiy ball taqsimlandi (yig'indi = 29.7)")
 
 
 def main() -> None:
@@ -145,7 +159,7 @@ def main() -> None:
     print("=" * 72)
     check_ranges()
     check_summarize()
-    check_scaled_scores()
+    check_allocate_total_ball()
     print("=" * 72)
     print("Barcha subject tekshiruvlari muvaffaqiyatli o'tdi ✅")
     print("=" * 72)

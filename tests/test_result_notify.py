@@ -144,7 +144,7 @@ def check_text_builder() -> None:
         "scaled_interval": [58.3, 75.9],
         "raw_score": 3,
         "total_questions": 5,
-        "subject_balls": {"algebra": 70.5, "geometry": 63.2},
+        "subject_balls": {"algebra": 50.0, "geometry": 17.1},
         "advice": "Sertifikat B darajasi. Qiyinroq savollar ustida ishlang.",
     }
     ready = texts.result_ready(
@@ -160,8 +160,13 @@ def check_text_builder() -> None:
     assert "To'g'ri javoblar:</b> 3 / 5" in ready, ready
     assert "θ (logit):</b> +0.42" in ready, ready
     assert "Sertifikat darajasi:</b> B" in ready, ready
-    assert "Algebra:</b> 70.5 ball" in ready, ready
-    assert "Geometriya:</b> 63.2 ball" in ready, ready
+    assert "Algebra:</b> 50.0 ball" in ready, ready
+    assert "Geometriya:</b> 17.1 ball" in ready, ready
+    assert round(
+        report["subject_balls"]["algebra"]
+        + report["subject_balls"]["geometry"],
+        1,
+    ) == 67.1
     assert "Standart xato" not in ready, ready
     assert KEY not in ready and "A2B3" not in ready, ready
     print("[OK] Natija xabari: sertifikat bali + 5 ko'rsatkich, 95% interval yo'q")
