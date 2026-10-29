@@ -17,6 +17,9 @@ from services.rasch import RaschEstimate
 
 SEP = "━━━━━━━━━━━━━━━━━━"
 
+#: Telegram bitta xabari uchun xavfsiz chegara (haqiqiy limit — 4096 belgi).
+MESSAGE_LIMIT = 4000
+
 
 def _sign(value: float) -> str:
     """Musbat songa '+' qo'shadi: +0.42 / -1.10."""
@@ -1102,6 +1105,23 @@ def solution_link_prompt(*, title: str, test_code: str, label: str) -> str:
 # ---------------------------------------------------------------------------
 # «Yakunlash» natijasi (bot xabari) — javob kalitisiz, tugmali grid bilan
 # ---------------------------------------------------------------------------
+def _marks_grid(marks: Sequence[tuple[str, bool]], per_line: int = 5) -> str:
+    """✅/❌ panjarasi — faqat savol belgisi va natija (kalit **yo'q**).
+
+    Monospace (`<code>`) ichida beriladi: raqamlar ustun bo'lib turadi.
+    Har qatorda `per_line` ta belgi — tor ekranlarda ham sig'adi.
+    """
+    cells = [
+        f"{_safe(label)} {'✅' if is_correct else '❌'}"
+        for label, is_correct in marks
+    ]
+    lines = [
+        "  ".join(cells[index : index + per_line])
+        for index in range(0, len(cells), per_line)
+    ]
+    return "<code>" + "\n".join(lines) + "</code>"
+
+
 def submission_accepted(
     *,
     title: str,
@@ -1109,23 +1129,49 @@ def submission_accepted(
     answered: int,
     total: int,
     result_local: str,
+    marks: Sequence[tuple[str, bool]] | None = None,
 ) -> str:
-    """Javob qabul qilinganini tasdiqlovchi xabar (natija hali YOPIQ).
+    """Javob qabul qilinganini tasdiqlovchi xabar (+ ixtiyoriy ✅/❌ tekshiruv).
 
-    Muhim: bu xabarda to'g'ri/xato sanoq yoki savollar gridi **yo'q** —
-    natija faqat `result_time` kelgach alohida yuboriladi (imtihon tozaligi).
+    `marks` — `[(savol belgisi, to'g'rimi), ...]`; yakunlashdan keyin darhol
+    hisoblanadi (`services.feedback`). Xabarda **faqat** ✅/❌ va sanoq bor:
+    to'g'ri javob varianti, θ va 0–100 ball **ko'rsatilmaydi** — kalit
+    `result_time` gacha yopiq qoladi. Javobsiz savol ham ❌ bo'lib chiqadi
+    (Rasch bo'yicha u 0 ball).
+
+    `marks` berilmasa (masalan, kalit buzuq bo'lsa) — avvalgi oddiy matn:
+    qabul xabari hech qachon feedback hisoblashga bog'liq bo'lib qolmaydi.
     """
-    return (
-        "✅ <b>Javoblaringiz qabul qilindi</b>\n"
-        f"{SEP}\n"
-        f"👤 {_safe(full_name)}\n"
-        f"📌 {_safe(title)}\n"
-        f"📝 Belgilangan: <b>{answered} / {total}</b> savol\n"
-        f"⏰ Natija e'lon qilinishi: <b>{_safe(result_local)}</b>\n"
-        f"{SEP}\n"
-        "Natija tayyor bo'lgach <b>shu chatga avtomatik</b> yuboriladi.\n"
-        "Holatni ilovaning «Natijalar» bo'limida ham kuzatishingiz mumkin."
+    head = [
+        "✅ <b>Javoblaringiz qabul qilindi</b>",
+        SEP,
+        f"👤 {_safe(full_name)}",
+        f"📌 {_safe(title)}",
+        f"📝 Belgilangan: <b>{answered} / {total}</b> savol",
+    ]
+    tail = [
+        f"⏰ Natija e'lon qilinishi: <b>{_safe(result_local)}</b>",
+        SEP,
+        "Natija tayyor bo'lgach <b>shu chatga avtomatik</b> yuboriladi.",
+        "Holatni ilovaning «Natijalar» bo'limida ham kuzatishingiz mumkin.",
+    ]
+
+    if not marks:
+        return "\n".join([*head, *tail])
+
+    correct = sum(1 for _label, is_correct in marks if is_correct)
+    counts = f"✅ To'g'ri: <b>{correct}</b> · ❌ Xato: <b>{len(marks) - correct}</b>"
+    note = (
+        "🔒 To'g'ri javoblar ko'rsatilmaydi — faqat qaysi savol "
+        "to'g'ri yoki xato ekani ma'lum qilinadi."
     )
+
+    text = "\n".join([*head, counts, _marks_grid(marks), note, *tail])
+    if len(text) <= MESSAGE_LIMIT:
+        return text
+    # Kutilmagan darajada uzun ro'yxat (masalan, juda ko'p qism) — panjara
+    # tashlab yuboriladi, sanoq qoladi: Telegram limitidan oshmasligi shart.
+    return "\n".join([*head, counts, note, *tail])
 
 
 def _score_bar(score: float, segments: int = 10) -> str:

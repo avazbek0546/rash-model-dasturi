@@ -375,8 +375,11 @@ O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab:
    * kod topilmasa → `404`; oyna hali boshlanmagan yoki tugagan → `403`;
    * takroriy yuborish → `409` (har bir imtihonga javob **bir marta** yuboriladi);
    * yetishmagan javoblar `X` (noto'g'ri) hisoblanadi;
-   * muvaffaqiyatli yuborilgach **bot chatiga faqat qabul xabari** keladi
-     (to'g'ri/xato sanoq **ko'rsatilmaydi**) va «📊 Natijalar» tugmasi beriladi;
+   * muvaffaqiyatli yuborilgach **bot chatiga qabul xabari + kalitsiz ✅/❌
+     tekshiruv** keladi: har bir savol uchun ✅ yoki ❌ (javobsiz ham ❌),
+     «To'g'ri: 12 · Xato: 33» sanoq va «📊 Natijalar» tugmasi.
+     **To'g'ri javob varianti, θ va ball ko'rsatilmaydi** — ular `result_time`
+     gacha yopiq (`services/feedback.py`);
 3. `end_time` da qabul to'xtaydi va **θ hisoblanadi**, ammo natija `result_time`
    gacha yopiq turadi;
 4. `result_time` da **natija bildirishnomasi** fon vazifasi
@@ -548,6 +551,7 @@ python tests/test_webapp_auth.py  # initData imzosi, muddati, buzuq holatlar
 python tests/test_api.py          # /api/* (aiohttp test client, tarmoqsiz)
 python tests/test_code_error_ux.py # noto'g'ri kod → aniq xato xabari (JS ulanish + API)
 python tests/test_result_notify.py # qabul xabari + result_time natijasi (kalitsiz)
+python tests/test_submission_feedback.py # yakunlashdan keyingi ✅/❌ (kalit/θ oshkor emas)
 python tests/test_admin_api.py    # /api/v2/me + /api/v2/admin/* (yechimlar paneli)
 python tests/test_flow.py         # eski mashq rejimi + router/klaviatura
 python tests/test_bot_flow.py     # botning TO'LIQ oqimi (Telegram'siz)

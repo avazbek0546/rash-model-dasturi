@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any, Sequence
 
 import config
@@ -290,6 +290,98 @@ async def _apply_shrinkage(
     return new_context, new_item_level
 
 
+@dataclass(frozen=True, slots=True)
+class ScoringSetup:
+    """Imtihonni baholash uchun tayyor kontekstlar (yagona manba).
+
+    `grade_exam` ham, yakunlashdan keyingi tezkor tekshiruv
+    (`services/feedback.py`) ham **shu** obyektdan foydalanadi — kalit manbasi
+    (legacy `exams.answer_key` yoki `form_versions.answer_key`) ikki joyda
+    turlicha talqin qilinmasligi uchun.
+    """
+
+    context: scoring.ScoringContext
+    item_level_context: scoring.ScoringContext | None
+    session: dict[str, Any] | None
+    form_version_id: int | None
+
+
+async def prepare_scoring(repos: Repositories, exam: Exam) -> ScoringSetup:
+    """Imtihon → baholash konteksti (legacy + item-level), sessiya va forma.
+
+    Qadamlar:
+
+    1. `exams.answer_key` asosida legacy kontekst quriladi va **tekshiriladi**
+       (kalit buzuq bo'lsa `AnswerKeyError` — jim o'tib ketmaydi);
+    2. test kodi bo'yicha item-level sessiya izlanadi (`exam_sessions`);
+    3. sessiya bo'lsa, `form_versions.answer_key` (A–F + sonli blok) legacy
+       kalitdan **ustun** qo'yiladi. Forma kaliti buzuq bo'lsa — log yoziladi
+       va legacy kalit ishlatiladi (baholash to'xtamaydi).
+
+    Raises:
+        answer_key.AnswerKeyError: legacy kalit buzuq bo'lsa.
+    """
+    context = scoring.ScoringContext.from_exam(exam)
+    scoring.validate_context(context)  # kalit buzuq bo'lsa — shu yerda to'xtaydi
+
+    session = await repos.sessions.get_by_test_code(exam.test_code)
+    form_version_id = (
+        int(session["form_version_id"])
+        if session is not None and session.get("form_version_id")
+        else None
+    )
+
+    item_level_context: scoring.ScoringContext | None = None
+    if form_version_id is not None:
+        form_version = await repos.forms.get_version(form_version_id)
+        form_key = str((form_version or {}).get("answer_key") or "")
+        if form_key:
+            candidate = context.with_answer_key(form_key)
+            try:
+                scoring.validate_context(candidate)
+            except answer_key.AnswerKeyError:
+                logger.exception(
+                    "Item-level kalit buzuq — legacy kalit ishlatiladi "
+                    "(form_version_id=%s)",
+                    form_version_id,
+                )
+            else:
+                item_level_context = candidate
+
+    return ScoringSetup(
+        context=context,
+        item_level_context=item_level_context,
+        session=session,
+        form_version_id=form_version_id,
+    )
+
+
+async def resolve_grading_answers(
+    repos: Repositories, exam: Exam, submission: ExamSubmission
+) -> tuple[str, scoring.ScoringContext]:
+    """Javob matni va faol kontekst — **baholash bilan aynan bir xil mantiq**.
+
+    Manba tanlovi `_resolve_answers` da (item-level `responses` to'liq bo'lsa —
+    o'sha, aks holda `user_answers`). Shrinkaj (agar yoqilgan bo'lsa) bu yerda
+    qo'llanmaydi: u faqat `b` larni o'zgartiradi, ya'ni **qaysi savol to'g'ri**
+    ekaniga ta'sir qilmaydi (θ va ball uchun ahamiyatli).
+
+    Raises:
+        answer_key.AnswerKeyError: kalit yoki javoblar formati buzuq bo'lsa.
+    """
+    setup = await prepare_scoring(repos, exam)
+    answers, _source, _attempt, active_context = await _resolve_answers(
+        repos,
+        exam,
+        submission,
+        session=setup.session,
+        form_version_id=setup.form_version_id,
+        context=setup.context,
+        item_level_context=setup.item_level_context,
+    )
+    return answers, active_context
+
+
 async def grade_exam(
     repos: Repositories,
     exam: Exam,
@@ -341,39 +433,14 @@ async def grade_exam(
     else:
         submissions = await repos.answers.list_ungraded(exam.exam_id)
 
-    context = scoring.ScoringContext.from_exam(exam)
-    scoring.validate_context(context)  # kalit buzuq bo'lsa — shu yerda to'xtaydi
-
-    # Item-level manzil: shu test kodi uchun sessiya bo'lsa (item-level oqim),
-    # javoblar `responses` dan o'qilishi va snapshot yozilishi mumkin. Eski
-    # imtihonlarda sessiya bo'lmaydi — shunda faqat `user_answers` oqimi.
-    session = await repos.sessions.get_by_test_code(exam.test_code)
-    form_version_id = (
-        int(session["form_version_id"])
-        if session is not None and session.get("form_version_id")
-        else None
-    )
+    # Kalit (legacy yoki form-version) + sessiya/forma — yagona manba
+    # `prepare_scoring` da; `_resolve_answers` ham shu kontekstlardan foydalanadi.
+    setup = await prepare_scoring(repos, exam)
+    context = setup.context
+    item_level_context = setup.item_level_context
+    session = setup.session
+    form_version_id = setup.form_version_id
     computed_by = "regrade" if regrade else "system"
-
-    # Item-level kalit: forma versiyasidagi kalit legacy `exams.answer_key` dan
-    # farq qilishi mumkin (MVP kaliti: A–F + sonli blok). Kalit buzuq bo'lsa —
-    # legacy kalit ishlatiladi (grading to'xtamaydi).
-    item_level_context: scoring.ScoringContext | None = None
-    if form_version_id is not None:
-        form_version = await repos.forms.get_version(form_version_id)
-        form_key = str((form_version or {}).get("answer_key") or "")
-        if form_key:
-            candidate = context.with_answer_key(form_key)
-            try:
-                scoring.validate_context(candidate)
-            except answer_key.AnswerKeyError:
-                logger.exception(
-                    "Item-level kalit buzuq — legacy kalit ishlatiladi "
-                    "(form_version_id=%s)",
-                    form_version_id,
-                )
-            else:
-                item_level_context = candidate
 
     # Shrinkaj (agar yoqilgan bo'lsa): `b` larni javob ma'lumoti bilan aralashtiramiz
     # (o'qituvchi bahosi — kichik N uchun tayanch). `b` o'zgarsa, kontekst yangilanadi.

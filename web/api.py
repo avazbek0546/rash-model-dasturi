@@ -34,7 +34,15 @@ import config
 import notify
 from database.models import SKIPPED, Exam, ExamStatus, User
 from database.repository import AlreadySubmittedError, Repositories
-from services import answer_key, exam_service, form_layout, grading, rasch, webapp_auth
+from services import (
+    answer_key,
+    exam_service,
+    feedback,
+    form_layout,
+    grading,
+    rasch,
+    webapp_auth,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -268,18 +276,49 @@ async def list_exams(request: web.Request) -> web.Response:
     )
 
 
+async def _submission_marks(
+    repos: Repositories, exam: Exam, user_id: int
+) -> list[tuple[str, bool]] | None:
+    """Yakunlashdan keyingi tezkor tekshiruv: `[(savol belgisi, to'g'rimi)]`.
+
+    **Faqat** ✅/❌ — to'g'ri javob varianti, o'quvchi javobi, θ va ball
+    qaytarilmaydi (`services.feedback`). Shu sababli kalit `result_time`
+    gacha yopiq qoladi.
+
+    Xatolik (kalit buzuq, javob topilmadi, item-level manba buzuq va h.k.)
+    javobni qabul qilishni **to'xtatmaydi**: `None` qaytadi va bot oddiy
+    qabul xabarini yuboradi.
+    """
+    try:
+        submission = await repos.answers.get(user_id, exam.exam_id)
+        if submission is None:
+            return None
+        result = await feedback.build_submission_feedback(repos, exam, submission)
+        return [(item.label, item.is_correct) for item in result.items]
+    except Exception:  # feedback hech qachon submit'ni buzmasligi kerak
+        logger.exception(
+            "Tezkor tekshiruv yasalmadi: user_id=%s, exam_id=%s",
+            user_id,
+            exam.exam_id,
+        )
+        return None
+
+
 async def _send_submission_ack(
     request: web.Request,
     repos: Repositories,
     user: dict[str, Any],
     exam: Exam,
     answered: int,
+    *,
+    marks: list[tuple[str, bool]] | None = None,
 ) -> None:
     """Javob qabul qilinganini bot chatiga tasdiqlaydi.
 
-    Ataylab **faqat qabul xabari**: to'g'ri/xato sanoq natija `result_time`
-    kelguncha oshkor qilinmaydi (imtihon tozaligi). Natija xabarini alohida
-    fon vazifasi yuboradi (`notify.result_notification_loop`).
+    Xabarda **faqat** ✅/❌ belgilari va sanoq bo'ladi: to'g'ri javob varianti
+    oshkor qilinmaydi (imtihon tozaligi). To'liq natija (θ, ball, kalit) esa
+    alohida fon vazifasi orqali `result_time` kelgach yuboriladi
+    (`notify.result_notification_loop`).
     """
     bot = get_bot(request)
     if bot is None:
@@ -293,6 +332,7 @@ async def _send_submission_ack(
             full_name=full_name,
             exam=exam,
             answered=answered,
+            marks=marks,
         )
     except Exception:  # xabar xatosi javobni buzmasligi kerak
         logger.exception(
@@ -312,6 +352,10 @@ async def submit_answers(request: web.Request) -> web.Response:
       * MVP kartochkalari: `{pozitsiya: qiymat}` (1–32 → "A"…"D",
         33–35 → "A"…"F", 36–45 → sonli matn);
       * eski (zaxira) usul: `"1A2B3C"` ko'rinishidagi satr.
+
+    Javob saqlangach bot chatiga **kalitsiz** ✅/❌ tekshiruv yuboriladi: qaysi
+    savol to'g'ri, qaysi biri xato (javobsiz ham xato) — to'g'ri javob varianti
+    va θ/ball esa `result_time` gacha yopiq qoladi.
     """
     user = await ensure_user(request)
     repos = repositories(request)
@@ -365,8 +409,12 @@ async def submit_answers(request: web.Request) -> web.Response:
         exam.total_questions,
     )
 
-    # O'quvchiga faqat "qabul qilindi" xabari (natija sanoqlarisiz) yuboriladi.
-    await _send_submission_ack(request, repos, user, exam, answered)
+    # Tezkor tekshiruv: faqat ✅/❌ (kalit, o'quvchi javobi, θ va ball yo'q).
+    # Xatolik bo'lsa `None` — qabul xabari baribir yuboriladi.
+    marks = await _submission_marks(repos, exam, user["user_id"])
+
+    # O'quvchiga qabul xabari + kalitsiz ✅/❌ belgilari yuboriladi.
+    await _send_submission_ack(request, repos, user, exam, answered, marks=marks)
 
     return web.json_response(
         {

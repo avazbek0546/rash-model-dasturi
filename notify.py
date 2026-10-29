@@ -2,7 +2,9 @@
 
 Ikki xil xabar bor:
 1. **Qabul xabari** (`send_submission_accepted`) — javob yuborilgandan keyin
-   darhol. Unda to'g'ri/xato sanoq **yo'q** (imtihon tozaligi).
+   darhol. Unda **faqat** ✅/❌ belgilari (qaysi savol to'g'ri/xato) bo'ladi;
+   to'g'ri javob varianti, θ va ball **ko'rsatilmaydi** — kalit `result_time`
+   gacha yopiq qoladi.
 2. **Natija xabari** (`send_result_ready`) — faqat `result_time` kelgach,
    `notify_due_results` fon vazifasi orqali. Ball, daraja, θ va 95% interval
    ko'rsatiladi; xabar bir marta ketadi (`user_answers.notified_at`).
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Sequence
 
 from aiogram import Bot
 from aiogram.exceptions import (
@@ -86,11 +89,14 @@ async def send_submission_accepted(
     full_name: str,
     exam: Exam,
     answered: int,
+    marks: Sequence[tuple[str, bool]] | None = None,
 ) -> bool:
-    """Javob qabul qilinganini tasdiqlaydi — natija sanoqlarisiz.
+    """Javob qabul qilinganini tasdiqlaydi (+ ixtiyoriy ✅/❌ tekshiruv).
 
-    Bu xabar `result_time` dan oldin yuboriladi, shuning uchun unda
-    to'g'ri/xato ma'lumoti bo'lmasligi shart.
+    `marks` — `[(savol belgisi, to'g'rimi), ...]` (`services.feedback` dan).
+    Xabar `result_time` dan oldin ketadi, shuning uchun unda **faqat** ✅/❌ va
+    sanoq bo'ladi: to'g'ri javob varianti, θ va ball hech qachon qo'shilmaydi.
+    `marks` berilmasa — oddiy qabul xabari (feedback hisoblanmagan holat).
     """
     text = texts.submission_accepted(
         title=exam.title,
@@ -98,6 +104,7 @@ async def send_submission_accepted(
         answered=answered,
         total=exam.total_questions,
         result_local=exam_service.format_local(exam.result_time),
+        marks=marks,
     )
     try:
         await bot.send_message(

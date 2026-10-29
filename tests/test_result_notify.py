@@ -1,10 +1,11 @@
 """Natija bildirishnomalari testi (tarmoqsiz).
 
 Tekshiriladi:
-    1. `texts.submission_accepted` — faqat qabul xabari, to'g'ri/xato YO'Q;
+    1. `texts.submission_accepted` — markssiz oddiy qabul xabari; marks bilan
+       esa faqat ✅/❌ (to'g'ri javob varianti YO'Q);
     2. `texts.result_ready` — boy natija kartasi (ball, daraja, θ, interval);
     3. `notify.send_result_ready` — xabar + WebApp/«Savollar tahlili» tugmalari;
-    4. `POST /api/submit` — faqat qabul xabari yuboriladi (natija sanoqlarisiz);
+    4. `POST /api/submit` — qabul xabari + kalitsiz ✅/❌ belgilari;
     5. `notify.notify_due_results` — `result_time` kelgach bir marta yuboradi
        va `notified_at` ni belgilaydi.
 
@@ -100,7 +101,7 @@ def make_exam() -> Exam:
 
 
 def check_text_builder() -> None:
-    """Qabul xabari sanoqsiz; natija kartasi boy va kalitsiz."""
+    """Qabul xabari: markssiz — sanoqsiz; marks bilan — faqat ✅/❌, kalitsiz."""
     accepted = texts.submission_accepted(
         title="RASH EXAM — 12-fevral",
         full_name="Dilnoza Karimova",
@@ -112,6 +113,36 @@ def check_text_builder() -> None:
     assert "3 / 5" in accepted and "12-fevral 14:00" in accepted, accepted
     assert "To'g'ri" not in accepted and "Xato" not in accepted, accepted
     assert KEY not in accepted, accepted
+
+    # Tezkor tekshiruv (marks): faqat qaysi savol to'g'ri/xato — kalit YO'Q.
+    marked = texts.submission_accepted(
+        title="RASH EXAM — 12-fevral",
+        full_name="Dilnoza Karimova",
+        answered=3,
+        total=5,
+        result_local="12-fevral 14:00",
+        marks=[("1", True), ("2", True), ("3", True), ("4", False), ("5", False)],
+    )
+    assert "✅ To'g'ri: <b>3</b>" in marked, marked
+    assert "❌ Xato: <b>2</b>" in marked, marked
+    assert "1 ✅" in marked and "4 ❌" in marked, marked
+    assert "<code>" in marked and "</code>" in marked, marked
+    grid = marked.split("<code>", 1)[1].split("</code>", 1)[0]
+    assert "A" not in grid and "B" not in grid, grid  # javob varianti oshkor emas
+    assert KEY not in marked, marked
+
+    # Juda ko'p savol (kutilmagan holat) — xabar Telegram limitidan oshmaydi.
+    huge = texts.submission_accepted(
+        title="Katta imtihon",
+        full_name="Dilnoza Karimova",
+        answered=900,
+        total=900,
+        result_local="12-fevral 14:00",
+        marks=[(str(index), index % 2 == 0) for index in range(1, 901)],
+    )
+    assert len(huge) <= texts.MESSAGE_LIMIT, len(huge)
+    assert "✅ To'g'ri: <b>450</b>" in huge, huge[:200]
+    assert "<code>" not in huge, "juda uzun panjara tashlab yuborilishi kerak"
 
     report = {
         "scaled_score": 57.0,
@@ -133,7 +164,7 @@ def check_text_builder() -> None:
     assert "3 / 5" in ready and "θ" in ready, ready
     assert "49.6 – 64.4" in ready, ready
     assert KEY not in ready and "A2B3" not in ready, ready
-    print("[OK] Matnlar: qabul xabari sanoqsiz; natija kartasi boy va kalitsiz")
+    print("[OK] Matnlar: qabul xabari (markssiz) sanoqsiz; marks bilan faqat ✅/❌")
 
 
 def check_result_locked() -> None:
@@ -227,17 +258,22 @@ async def check_submit_and_notify(repos: Repositories) -> None:
         )
         assert response.status == 200, (response.status, await response.text())
 
-    # 1) Submitda faqat qabul xabari — to'g'ri/xato KO'RINMAYDI.
+    # 1) Submitda qabul xabari + kalitsiz ✅/❌ (to'g'ri javob varianti YO'Q).
     assert len(bot.messages) == 1, bot.messages
     ack = bot.messages[0]
     assert "Javoblaringiz qabul qilindi" in ack["text"], ack
-    assert "To'g'ri" not in ack["text"] and "Xato" not in ack["text"], ack
+    assert "✅ To'g'ri: <b>4</b>" in ack["text"], ack
+    assert "❌ Xato: <b>1</b>" in ack["text"], ack
+    assert "1 ✅" in ack["text"] and "3 ❌" in ack["text"], ack
     assert KEY not in ack["text"], ack
+    assert "ball" not in ack["text"] and "θ" not in ack["text"], ack
+    grid = ack["text"].split("<code>", 1)[1].split("</code>", 1)[0]
+    assert "A" not in grid and "B" not in grid, grid
     ack_buttons = [b for row in ack["reply_markup"].inline_keyboard for b in row]
     assert any(
         b.web_app is not None and "tab=results" in b.web_app.url for b in ack_buttons
     ), ack_buttons
-    print("[OK] /api/submit → faqat qabul xabari (natija sanoqlarisiz)")
+    print("[OK] /api/submit → qabul xabari + kalitsiz ✅/❌ belgilari")
 
     # 2) Natija vaqti kelgach: baholash + fon bildirishnomasi.
     await repos.exams.update_times(
