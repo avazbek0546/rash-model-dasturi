@@ -88,9 +88,14 @@ HEADERS = {"X-Init-Data": build_init_data(STUDENT)}
 
 
 def mark_lines(message: str) -> list[str]:
-    """Xabardagi ✅/❌ qatorlari (sarlavha va bo'sh qatorlarsiz)."""
+    """Xabardagi ✅/❌ qatorlari (sarlavha, ajratgich va sanoqsiz)."""
     _head, _sep, body = message.partition("\n\n")
-    return [line for line in body.splitlines() if line.strip()]
+    return [line for line in body.splitlines() if line.endswith(("✅", "❌"))]
+
+
+def summary_of(message: str) -> str:
+    """Xabarning oxirgi qatori — yakuniy sanoq (`<jami>/<to'g'ri>`)."""
+    return message.splitlines()[-1]
 
 
 def check_text_no_leak(message: str, key_letters: str) -> None:
@@ -146,6 +151,7 @@ async def check_legacy_feedback(repos: Repositories) -> None:
     assert len(bot.messages) == 1, bot.messages
     ack = bot.messages[0]["text"]
     assert mark_lines(ack) == ["1 ✅", "2 ✅", "3 ✅", "4 ✅", "5 ❌"], ack
+    assert summary_of(ack) == "<b>5/4</b>", ack  # jami / to'g'ri
     check_text_no_leak(ack, "ABCD")
 
     # θ/ball hali hisoblanmagan — natija vaqti kelmagan.
@@ -236,6 +242,7 @@ async def check_item_level_key(repos: Repositories) -> None:
     ack = bot.messages[0]["text"]
     # Legacy kalit bilan bu yerda faqat 1 ta ✅ bo'lardi (4-savol = A).
     assert mark_lines(ack) == [f"{index} ✅" for index in range(1, 6)], ack
+    assert summary_of(ack) == "<b>5/5</b>", ack
     check_text_no_leak(ack, "ABCD")
 
     submission = await repos.answers.get(STUDENT["id"], exam_id)

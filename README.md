@@ -376,9 +376,10 @@ O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab:
    * takroriy yuborish → `409` (har bir imtihonga javob **bir marta** yuboriladi);
    * yetishmagan javoblar `X` (noto'g'ri) hisoblanadi;
    * muvaffaqiyatli yuborilgach **bot chatiga qisqa xabar** keladi: bitta
-     sarlavha («✅ Javoblaringiz qabul qilindi») va har bir savol **alohida
-     qatorda** — `1 ✅`, `2 ❌`, … (javobsiz ham ❌), «📊 Natijalar» tugmasi
-     bilan. Boshqa matn yo'q: **to'g'ri javob varianti, θ va ball
+     sarlavha («✅ Javoblaringiz qabul qilindi»), har bir savol **alohida
+     qatorda** — `1 ✅`, `2 ❌`, … (javobsiz ham ❌), oxirida ajratgich va
+     yakuniy sanoq `<jami>/<to'g'ri>` (masalan `55/39`), «📊 Natijalar»
+     tugmasi bilan. Boshqa matn yo'q: **to'g'ri javob varianti, θ va ball
      ko'rsatilmaydi** — ular `result_time` gacha yopiq (`services/feedback.py`);
 3. `end_time` da qabul to'xtaydi va **θ hisoblanadi**, ammo natija `result_time`
    gacha yopiq turadi;

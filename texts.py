@@ -1115,11 +1115,14 @@ def submission_accepted(
 
     * bitta sarlavha — «✅ Javoblaringiz qabul qilindi»;
     * (bo'lsa) savollar ro'yxati — **har bir savol alohida qatorda**:
-      `1 ✅`, `2 ❌`, … (bir ustun; uzun ro'yxat ham o'qishga qulay).
+      `1 ✅`, `2 ❌`, … (bir ustun; uzun ro'yxat ham o'qishga qulay);
+    * ro'yxatdan keyin ajratgich va yakuniy sanoq — `<jami>/<to'g'ri>`,
+      masalan `55/39` (55 element, 39 tasi to'g'ri).
 
     `marks` — `[(savol belgisi, to'g'rimi), ...]`; yakunlashdan keyin darhol
     hisoblanadi (`services.feedback`). Javobsiz savol ham ❌ bo'lib chiqadi
-    (Rasch bo'yicha u 0 ball).
+    (Rasch bo'yicha u 0 ball) va yakuniy sanoqda "to'g'ri emas" sifatida
+    hisobga olinadi.
 
     Boshqa **hech qanday** matn yo'q: to'g'ri javob varianti, o'quvchi javobi,
     θ, ball, ism-familiya va vaqt ko'rsatilmaydi — kalit `result_time` gacha
@@ -1129,17 +1132,22 @@ def submission_accepted(
     if not marks:
         return head
 
+    correct = sum(1 for _label, is_correct in marks if is_correct)
+    summary = f"<b>{len(marks)}/{correct}</b>"
     lines = [head, ""]
-    used = len(head) + 1
+    # Sarlavha + bo'sh qator + ajratgich + yakuniy sanoq (+ "…" zaxirasi) uchun
+    # joy oldindan band qilinadi — xabar Telegram limitidan oshmasligi shart.
+    used = len(head) + 1 + len(SEP) + 1 + len(summary) + 4
     for label, is_correct in marks:
         line = f"{_safe(label)} {'✅' if is_correct else '❌'}"
-        # Xabar Telegram limitidan oshmasligi shart. Amalda 45 savol + qismlar
-        # (≈65 qator) limitga bemalol sig'adi — bu faqat himoya.
+        # Amalda 45 savol + qismlar (≈65 qator) limitga bemalol sig'adi —
+        # bu faqat himoya: xabar hech qachon 4096 belgidan oshmasligi kerak.
         if used + len(line) + 1 > MESSAGE_LIMIT:
             lines.append("…")
             break
         lines.append(line)
         used += len(line) + 1
+    lines.extend([SEP, summary])
     return "\n".join(lines)
 
 

@@ -106,24 +106,34 @@ def check_text_builder() -> None:
     accepted = texts.submission_accepted()
     assert accepted == "✅ <b>Javoblaringiz qabul qilindi</b>", accepted
 
-    # 2) marks bilan — har bir savol ALOHIDA qatorda, boshqa matn YO'Q.
+    # 2) marks bilan — har bir savol ALOHIDA qatorda + yakuniy sanoq.
     marked = texts.submission_accepted(
         marks=[("1", True), ("2", True), ("3", True), ("4", False), ("5", False)]
     )
     head, sep, body = marked.partition("\n\n")
     assert head == "✅ <b>Javoblaringiz qabul qilindi</b>", head
     assert sep == "\n\n", marked
-    assert body.splitlines() == ["1 ✅", "2 ✅", "3 ✅", "4 ❌", "5 ❌"], body
+    assert body.splitlines() == [
+        "1 ✅",
+        "2 ✅",
+        "3 ✅",
+        "4 ❌",
+        "5 ❌",
+        texts.SEP,
+        "<b>5/3</b>",  # jami / to'g'ri
+    ], body
     for letter in ("A", "B", "C", "D"):
         assert f" {letter}" not in body, body  # javob varianti oshkor emas
     assert KEY not in marked, marked
 
-    # 3) Juda ko'p savol (kutilmagan holat) — xabar Telegram limitidan oshmaydi.
+    # 3) Juda ko'p savol (kutilmagan holat) — xabar limitidan oshmaydi:
+    #    ro'yxat qisqartiriladi, lekin yakuniy sanoq saqlanadi.
     huge = texts.submission_accepted(
         marks=[(str(index), index % 2 == 0) for index in range(1, 901)]
     )
     assert len(huge) <= texts.MESSAGE_LIMIT, len(huge)
-    assert huge.endswith("…"), huge[-20:]
+    assert "…" in huge, huge[-40:]
+    assert huge.endswith("<b>900/450</b>"), huge[-40:]
 
     report = {
         "scaled_score": 57.0,
@@ -181,7 +191,12 @@ async def check_notify_send() -> None:
     assert len(bot.messages) == 1, bot.messages
     ack = bot.messages[0]
     assert ack["text"].startswith("✅ <b>Javoblaringiz qabul qilindi</b>"), ack
-    assert ack["text"].splitlines()[2:] == ["1 ✅", "2 ❌"], ack["text"]
+    assert ack["text"].splitlines()[2:] == [
+        "1 ✅",
+        "2 ❌",
+        texts.SEP,
+        "<b>2/1</b>",  # jami / to'g'ri
+    ], ack["text"]
     assert KEY not in ack["text"], ack
     assert ack["reply_markup"] is not None, ack
     ack_buttons = [b for row in ack["reply_markup"].inline_keyboard for b in row]
@@ -245,7 +260,15 @@ async def check_submit_and_notify(repos: Repositories) -> None:
     head, sep, body = text.partition("\n\n")
     assert head == "✅ <b>Javoblaringiz qabul qilindi</b>", text
     assert sep == "\n\n", text
-    assert body.splitlines() == ["1 ✅", "2 ✅", "3 ❌", "4 ✅", "5 ✅"], text
+    assert body.splitlines() == [
+        "1 ✅",
+        "2 ✅",
+        "3 ❌",
+        "4 ✅",
+        "5 ✅",
+        texts.SEP,
+        "<b>5/4</b>",  # jami / to'g'ri
+    ], text
     assert KEY not in text, text
     assert "ball" not in text and "θ" not in text, text
     ack_buttons = [b for row in ack["reply_markup"].inline_keyboard for b in row]
