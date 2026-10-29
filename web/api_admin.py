@@ -8,6 +8,7 @@ Mini App ichidagi admin bo'limi uchun endpoint'lar::
     POST /api/v2/admin/exams/{id}/schedule  — vaqtlarni o'zgartirish
     GET  /api/v2/admin/exams/{id}/participants — qatnashchilar ro'yxati
     POST /api/v2/admin/exams/{id}/regrade   — qayta baholash
+    POST /api/v2/admin/exams/{id}/report-send — PDF ni adminga chatda yuborish
     GET  /api/v2/admin/exams/{id}/solutions — «🎬 Yechimlar» qamrovi
     POST /api/v2/admin/solutions/delete     — bitta yechimni o'chirish
 
@@ -29,8 +30,10 @@ import hashlib
 import hmac
 import logging
 import time
+from html import escape as html_escape
 from typing import Any
 
+from aiogram.types import BufferedInputFile
 from aiohttp import web
 
 import config
@@ -433,6 +436,83 @@ async def report_pdf_view(request: web.Request) -> web.Response:
     )
 
 
+async def report_send(request: web.Request) -> web.Response:
+    """PDF hisobotni adminga Telegram chatda yuboradi.
+
+    Mini App'dagi «📄 PDF» tugmasi shu endpoint'ni chaqiradi: fayl brauzer
+    yuklamasi sifatida emas, **bot orqali** adminga shaxsiy chatda keladi.
+    Shu tufayli PDF Telegram'da saqlanadi — WebView yuklamasi iOS'da
+    saqlanmay, Android'da ko'rinmas papkaga tushib qolmaydi.
+    """
+    user = await ensure_admin(request)
+    repos = repositories(request)
+    bot = get_bot(request)
+    if bot is None:
+        raise ApiError(503, "Bot ishlamayapti — PDF ni chatga yuborib bo'lmaydi.")
+    try:
+        exam_id = int(request.match_info["exam_id"])
+    except (KeyError, ValueError) as exc:
+        raise ApiError(400, "Imtihon ID si noto'g'ri.") from exc
+    exam = await repos.exams.get(exam_id)
+    if exam is None:
+        raise ApiError(404, "Imtihon topilmadi.")
+
+    try:
+        report = await report_data.build_exam_report(repos, exam)
+        data = report_pdf.build_results_pdf(
+            title=report.title,
+            test_code=report.test_code,
+            date_text=report.date_text,
+            participants=report.participants,
+            students=report.students,
+        )
+    except report_pdf.ReportError as exc:
+        raise ApiError(500, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("PDF hisobot yasalmadi: exam_id=%s", exam_id)
+        raise ApiError(
+            500, "Hisobotni yasashda xatolik yuz berdi. Keyinroq qayta urinib ko'ring."
+        ) from exc
+
+    filename = f"natijalar-{exam.test_code}.pdf"
+    try:
+        await bot.send_document(
+            chat_id=int(user["user_id"]),
+            document=BufferedInputFile(data, filename=filename),
+            caption=(
+                f"📄 «{html_escape(str(exam.title))}» — natijalar\n"
+                f"O'quvchilar: <b>{report.participants}</b> ta"
+            ),
+        )
+    except Exception as exc:
+        logger.exception(
+            "PDF hisobotni chatga yuborib bo'lmadi: exam_id=%s, admin=%s",
+            exam_id,
+            user["user_id"],
+        )
+        raise ApiError(
+            502,
+            "PDF ni chatga yuborib bo'lmadi. Bot bilan chatni ochib /start "
+            "bosganingizni tekshirib, qayta urinib ko'ring.",
+        ) from exc
+
+    logger.info(
+        "PDF hisobot chatga yuborildi: exam_id=%s, kod=%s, o'quvchilar=%d, admin=%s",
+        exam_id,
+        exam.test_code,
+        report.participants,
+        user["user_id"],
+    )
+    return web.json_response(
+        {
+            "ok": True,
+            "sent": True,
+            "participants": report.participants,
+            "filename": filename,
+        }
+    )
+
+
 # ---------------------------------------------------------------------------
 # «🎬 Yechimlar» bo'limi (admin): qamrov (video/rasm) va o'chirish
 # ---------------------------------------------------------------------------
@@ -568,6 +648,8 @@ def setup_routes(app: web.Application) -> None:
     router.add_get("/api/v2/admin/exams/{exam_id}/participants", exam_participants)
     router.add_post("/api/v2/admin/exams/{exam_id}/regrade", regrade_exam)
     router.add_post("/api/v2/admin/exams/{exam_id}/report-link", report_link)
+    # Mini App «📄 PDF» tugmasi: fayl brauzerga emas, adminga chatga yuboriladi.
+    router.add_post("/api/v2/admin/exams/{exam_id}/report-send", report_send)
     # «🎬 Yechimlar» bo'limi (admin). Fayl (video/rasm) faqat bot orqali
     # yuklanadi — `file_id` ni Telegram Bot API beradi.
     router.add_get("/api/v2/admin/exams/{exam_id}/solutions", exam_solutions)

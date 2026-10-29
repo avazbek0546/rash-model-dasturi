@@ -113,7 +113,7 @@
           '" title="Video/rasm yechimlar">🎬 Yechim</button>' +
           '<button type="button" class="report" data-exam="' +
           row.exam_id +
-          '" title="PDF hisobot">📄 PDF</button>' +
+          '" title="PDF hisobotni chatga yuborish">📄 PDF</button>' +
           '<button type="button" class="ghost regrade" data-exam="' +
           row.exam_id +
           '" title="Qayta baholash">🔄 Baholash</button>' +
@@ -336,71 +336,13 @@
   }
 
   /**
-   * Blob'ni fayl sifatida yuklab oladi (Telegram WebView'da ham ishlaydi).
+   * «📄 PDF» — o'quvchilar natijalari hisobotini adminga Telegram chatda
+   * yuboradi.
    *
-   * Nega `openLink` emas? Havolani to'g'ridan-to'g'ri ochishda server xato
-   * qaytarsa (`{"ok": false, "error": ...}`) foydalanuvchi brauzerda xom JSON
-   * ko'rib qolardi. Endi fayl avval `fetch` bilan olinadi: xato bo'lsa —
-   * tushunarli popup, muvaffaqiyat bo'lsa — yuklab olish.
-   */
-  function downloadBlob(blob, filename) {
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = filename || "natijalar.pdf";
-    anchor.rel = "noopener";
-    anchor.style.display = "none";
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    // WebView faylni ulgurguncha URL'ni darhol bo'shatmaymiz.
-    window.setTimeout(function () {
-      URL.revokeObjectURL(objectUrl);
-    }, 60000);
-  }
-
-  /** `Content-Disposition` sarlavhasidan fayl nomini oladi. */
-  function filenameOf(response, fallback) {
-    try {
-      const header = response.headers.get("Content-Disposition") || "";
-      const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
-      if (match && match[1]) {
-        return decodeURIComponent(match[1]);
-      }
-    } catch (error) {
-      /* sarlavha o'qilmasa — zaxira nom ishlatiladi */
-    }
-    return fallback || "natijalar.pdf";
-  }
-
-  /**
-   * PDF havolasidan faqat **yo'lni** ajratib oladi (`/api/v2/report/<token>`).
-   *
-   * Telegram Mini App har doim HTTPS sahifada ochiladi. Server esa proksi
-   * (Railway, Cloudflare Tunnel, ngrok) ortida `http://...` manzil qaytarishi
-   * mumkin — brauzer bunday so'rovni «aralash kontent» deb bloklaydi va
-   * `fetch` faqat "Failed to fetch" beradi. Shu sababli fayl joriy sahifaning
-   * o'z origin'ida yuklanadi; token o'zi imzolangan, domen muhim emas.
-   */
-  function reportTarget(link) {
-    const raw = (link && (link.path || link.url)) || "";
-    if (!raw) {
-      return "";
-    }
-    try {
-      const parsed = new URL(String(raw), window.location.href);
-      return parsed.pathname + parsed.search;
-    } catch (error) {
-      return String(raw);
-    }
-  }
-
-  /**
-   * «📄 PDF» — o'quvchilar natijalari hisobotini yuklab oladi.
-   *
-   * Ikki qadam: (1) vaqtinchalik havola olinadi; (2) fayl `fetch` bilan
-   * yuklanadi. Shu tufayli server xatosi (masalan, shrift topilmasa) xom JSON
-   * ko'rinishida ochilib qolmaydi — foydalanuvchiga aniq xabar chiqadi.
+   * Faylni WebView orqali «yuklab olish» ishonchsiz: iOS Telegram'da umuman
+   * saqlanmaydi, Android'da ko'rinmas papkaga tushadi. Shu sababli PDF ni
+   * **botning o'zi** adminga shaxsiy chatda yuboradi — fayl chatda turadi va
+   * uni topish/forward qilish oson.
    */
   async function report(examId) {
     const button = document.querySelector('.report[data-exam="' + examId + '"]');
@@ -408,45 +350,20 @@
       button.disabled = true;
     }
     try {
-      const link = await API.post(
-        "/api/v2/admin/exams/" + examId + "/report-link",
+      const result = await API.post(
+        "/api/v2/admin/exams/" + examId + "/report-send",
         {}
       );
-      const target = reportTarget(link);
-      if (!target) {
-        throw new Error("PDF havolasi olinmadi. Qayta urinib ko'ring.");
-      }
-
-      let response;
-      try {
-        response = await fetch(target, { cache: "no-store" });
-      } catch (error) {
-        // `fetch` tarmoq/aralash kontent xatosida faqat "Failed to fetch"
-        // beradi — foydalanuvchiga tushunarli sabab ko'rsatamiz.
-        throw new Error(
-          "PDF serverdan olinmadi (tarmoq xatosi). " +
-            "Internet aloqasini tekshirib, qayta urinib ko'ring."
-        );
-      }
-      if (!response.ok) {
-        let message = "";
-        try {
-          const payload = await response.json();
-          message = payload && payload.error ? String(payload.error) : "";
-        } catch (error) {
-          message = "";
-        }
-        throw new Error(message || "PDF yasalmadi (HTTP " + response.status + ").");
-      }
-
-      const blob = await response.blob();
-      if (!blob || blob.size === 0) {
-        throw new Error("PDF bo'sh keldi. Qayta urinib ko'ring.");
-      }
-      downloadBlob(blob, filenameOf(response, "natijalar-" + examId + ".pdf"));
-      App.setNotice("success", "📄 PDF yuklab olindi.", true);
+      const count = result && result.participants;
+      App.setNotice(
+        "success",
+        "📄 PDF bot chatiga yuborildi" +
+          (typeof count === "number" ? " (" + count + " o'quvchi)." : "."),
+        true
+      );
     } catch (error) {
-      const message = error && error.message ? error.message : "PDF yuklab bo'lmadi.";
+      const message =
+        error && error.message ? error.message : "PDF yuborib bo'lmadi.";
       App.setNotice("error", message, false);
       App.alert(message);
     } finally {

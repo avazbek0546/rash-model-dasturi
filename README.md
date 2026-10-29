@@ -464,17 +464,18 @@ qo'shimcha **«⚙️ Test yaratish»** tabi ko'rinadi:
 | `GET` | `/api/v2/admin/exams/{id}/participants` | Kim qatnashgani: ism, `@username`, ID, vaqt; jami soni |
 | `POST` | `/api/v2/admin/exams/{id}/regrade` | Imtihonni qayta baholash |
 | `POST` | `/api/v2/admin/exams/{id}/report-link` | PDF hisobot uchun bir martalik havola (`url` + `path`) |
+| `POST` | `/api/v2/admin/exams/{id}/report-send` | PDF hisobotni adminga **Telegram chatda** yuborish |
 | `GET` | `/api/v2/admin/exams/{id}/solutions` | «🎬 Yechimlar» qamrovi: savollar, tur, `missing[]`, `bot_username` |
 | `POST` | `/api/v2/admin/solutions/delete` | Bitta savol yechimini o'chirish |
 
 > `ADMIN_ID`/`ADMIN_IDS` (yoki `/admins` orqali qo'shilgan) bo'lmagan
 > foydalanuvchi barcha admin endpoint'larida **403** oladi.
 
-> `report-link` javobida ikkita manzil bor: `url` — to'liq (ommaviy) manzil,
-> `path` — shu serverdagi yo'l. Mini App PDF ni **`path`** bo'yicha, ya'ni
-> sahifaning o'z origin'ida (`https://...`) yuklaydi — proksi (Railway,
-> Cloudflare Tunnel) ortida `url` `http://...` bo'lib qolsa ham brauzer uni
-> «aralash kontent» deb bloklamaydi (`Failed to fetch` chiqmaydi).
+> `report-link` — PDF faylning o'zi uchun vaqtinchalik havola (`url` — to'liq
+> manzil, `path` — shu serverdagi yo'l). Mini App'dagi «📄 PDF» tugmasi esa
+> `report-send` ni chaqiradi: PDF **bot orqali adminga shaxsiy chatda**
+> yuboriladi. Shu tufayli WebView'da «yuklab olish» muammosi yo'q — fayl
+> iOS'da ham, Android'da ham Telegram chatida turadi va uni topish oson.
 
 > Yechim faqat **video yoki rasm** (`file_id`) bo'ladi va faqat **bot orqali**
 > yuklanadi — `file_id` ni Telegram Bot API beradi. Matnli yechim endpoint'i

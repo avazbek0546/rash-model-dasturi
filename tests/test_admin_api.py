@@ -5,7 +5,8 @@ Tekshiriladi:
     2. admin endpoint'lari oddiy o'quvchini **403** bilan rad etadi;
     3. admin test yarata oladi (`exams` + `exam_sessions`);
     4. noto'g'ri kalitda **400** va qisman yozuv qolmaydi;
-    5. ro'yxat (`GET /api/v2/admin/exams`) yaratilgan testni ko'rsatadi.
+    5. ro'yxat (`GET /api/v2/admin/exams`) yaratilgan testni ko'rsatadi;
+    6. PDF hisobot: havola/fayl + `report-send` orqali chatga yuborish.
 
 Ishga tushirish:
     python tests/test_admin_api.py
@@ -59,6 +60,30 @@ def init_data(user: dict) -> str:
 ADMIN_HEADERS = {"X-Init-Data": init_data(ADMIN)}
 STUDENT_HEADERS = {"X-Init-Data": init_data(STUDENT)}
 
+
+class FakeBot:
+    """`send_document` ni ushlab qoluvchi soxta bot (tarmoqsiz)."""
+
+    def __init__(self) -> None:
+        self.documents: list[dict] = []
+
+    async def send_document(
+        self,
+        chat_id: int,
+        document: object,
+        caption: str = "",
+        **kwargs: object,
+    ) -> None:
+        self.documents.append(
+            {
+                "chat_id": int(chat_id),
+                "data": getattr(document, "data", b""),
+                "filename": getattr(document, "filename", ""),
+                "caption": caption,
+                **kwargs,
+            }
+        )
+
 VALID_BODY = {
     "title": "Web admin testi",
     "test_code": "WEBA01",
@@ -73,7 +98,8 @@ VALID_BODY = {
 
 async def run_checks(repos: Repositories) -> None:
     """Sxemani bir marta ochib, barcha endpoint'larni tekshiradi."""
-    app = create_app(repos)
+    bot = FakeBot()
+    app = create_app(repos, bot=bot)
     async with TestClient(TestServer(app)) as client:
         # 1) /me — admin va oddiy o'quvchi
         admin_me = await (await client.get("/api/v2/me", headers=ADMIN_HEADERS)).json()
@@ -181,7 +207,28 @@ async def run_checks(repos: Repositories) -> None:
             "yaroqsiz token 403"
         )
 
-        # 7) «🎬 Yechimlar»: qamrov → video yechim (bot file_id) → o'chirish
+        # 7) PDF ni chatga yuborish: o'quvchi 403, admin → bot.send_document
+        send_url = f"/api/v2/admin/exams/{exam.exam_id}/report-send"
+        denied_send = await client.post(send_url, headers=STUDENT_HEADERS)
+        assert denied_send.status == 403, denied_send.status
+
+        sent = await client.post(send_url, headers=ADMIN_HEADERS)
+        assert sent.status == 200, (sent.status, await sent.text())
+        sent_payload = await sent.json()
+        assert sent_payload["sent"] is True, sent_payload
+        assert sent_payload["participants"] == 1, sent_payload
+        assert len(bot.documents) == 1, bot.documents
+        document = bot.documents[0]
+        assert document["chat_id"] == ADMIN["id"], document
+        assert document["data"][:4] == b"%PDF", document["data"][:8]
+        assert document["filename"] == "natijalar-WEBA01.pdf", document
+        assert "<b>1</b>" in document["caption"], document
+        print(
+            f"[OK] PDF chatga yuborildi: {document['filename']} "
+            f"({len(document['data'])} bayt, chat={document['chat_id']})"
+        )
+
+        # 8) «🎬 Yechimlar»: qamrov → video yechim (bot file_id) → o'chirish
         sol_url = f"/api/v2/admin/exams/{exam.exam_id}/solutions"
         denied_sol = await client.get(sol_url, headers=STUDENT_HEADERS)
         assert denied_sol.status == 403, denied_sol.status
