@@ -5,10 +5,12 @@ Router'lar ro'yxati va ularning tartibi muhim:
     2. registration   — birinchi kirishda ism/familiyani so'rash
     3. webapp         — /app (Mini App'ni ochish)
     4. admin_exam     — /new_exam ustasi (faqat o'qituvchi)
-    5. admin          — /stats, /exams (faqat o'qituvchi)
-    6. admin_solution — /add_solution va video/media yechim yuklash (o'qituvchi)
-    7. analysis       — «🔍 Test tahlili» bo'limi (o'quvchi)
-    8. fallback       — boshqa barcha xabarlar (ENG OXIRGI bo'lishi shart)
+    5. admin          — /stats, /exams, /participants (faqat o'qituvchi)
+    6. admin_manage   — /admins paneli (adminlarni boshqarish)
+    7. admin_chat     — /admin_chat va admin chatga kirishni qo'riqlash
+    8. admin_solution — /add_solution va video/media yechim yuklash (o'qituvchi)
+    9. analysis       — «🔍 Test tahlili» bo'limi (o'quvchi)
+    10. fallback      — boshqa barcha xabarlar (ENG OXIRGI bo'lishi shart)
 
 Eski "mashq rejimi" (chatda savol-javob) arxivga o'tkazildi: `handlers/test.py`,
 `handlers/results.py`, `handlers/about.py` va `services/test_session.py` fayllari
@@ -21,6 +23,7 @@ from aiogram import Router
 
 from handlers import (
     admin,
+    admin_chat,
     admin_exam,
     admin_manage,
     admin_solution,
@@ -45,6 +48,7 @@ def setup_routers() -> Router:
         admin_exam,
         admin,
         admin_manage,
+        admin_chat,
         admin_solution,
         analysis,
         fallback,

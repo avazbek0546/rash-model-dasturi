@@ -306,12 +306,12 @@ button:disabled {
   letter-spacing: 0.5px;
 }
 
-/* Uchta amal tugmasi HAR QANDAY telefonda sig'ishi shart: 3 ustunli grid.
+/* Beshta amal tugmasi HAR QANDAY telefonda sig'ishi shart: 2 ustunli grid.
    `minmax(0, 1fr)` + `min-width: 0` — tugma matnidan kichraya oladi;
    `white-space: normal` — kerak bo'lsa 2 qatorga o'raladi (kesilmaydi). */
 .admin-card .actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -325,11 +325,32 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+@media (min-width: 480px) {
+  .admin-card .actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* Eng tor ekranlar (320–359 px): tugmalar ustma-ust — hech narsa kesilmaydi. */
 @media (max-width: 359px) {
   .admin-card .actions {
     grid-template-columns: 1fr;
   }
+}
+
+/* --- Admin paneli: vaqtni tahrirlash formasi ------------------------------ */
+.exam-editor {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(128, 128, 128, 0.28);
+}
+
+.exam-editor .field {
+  margin-bottom: 8px;
+}
+
+.exam-editor .btn-row {
+  margin-top: 4px;
 }
 
 /* --- Sana/vaqt maydonlari (admin panel) ---------------------------------- */

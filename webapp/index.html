@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Rasch imtihon platformasi</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=21" />
+    <link rel="stylesheet" href="/static/css/style.css?v=22" />
     <!-- Telegram Web App SDK — Telegram faqat HTTPS sahifalarda beradi. -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
@@ -189,7 +189,22 @@
         </div>
         <div class="card">
           <h2>Imtihonlar</h2>
+          <p class="muted">
+            ⏰ <b>Vaqt</b> tugmasi bilan boshlanish/tugash/natija vaqtini
+            o'zgartirasiz. 👥 <b>Qatnashchilar</b> tugmasi kim va nechta
+            kishi qatnashganini ko'rsatadi.
+          </p>
           <div id="admin-exams"><div class="spinner"></div></div>
+        </div>
+        <div class="card hidden" id="participants-card">
+          <h2>👥 Qatnashchilar — <span id="participants-title"></span></h2>
+          <p class="muted" id="participants-meta"></p>
+          <div id="participants-list"></div>
+          <div class="btn-row">
+            <button type="button" id="participants-close" class="ghost">
+              Yopish
+            </button>
+          </div>
         </div>
         <div class="card">
           <h2>🎬 Yechimlar (test tahlili)</h2>
@@ -258,7 +273,7 @@
     <script src="/static/js/queue.js?v=18"></script>
     <script src="/static/js/results.js?v=5"></script>
     <script src="/static/js/profile.js?v=4"></script>
-    <script src="/static/js/admin.js?v=9"></script>
+    <script src="/static/js/admin.js?v=10"></script>
     <script src="/static/js/app.js?v=7"></script>
   </body>
 </html>

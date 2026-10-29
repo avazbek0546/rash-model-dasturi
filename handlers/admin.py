@@ -142,6 +142,59 @@ async def cmd_itemstats(message: Message, repos: Repositories) -> None:
         await message.answer(chunk)
 
 
+@router.message(Command("participants"))
+async def cmd_participants(message: Message, repos: Repositories) -> None:
+    """`/participants [TEST_KODI]` — qatnashganlar ro'yxati (faqat admin).
+
+    Kod berilmasa — oxirgi imtihonlar va ularning qatnashchilar soni
+    ko'rsatiladi. Kod berilsa — kim qatnashgani (ism, @username, ID, vaqt)
+    va jami nechta ekani yuboriladi. Xabar kerak bo'lsa bo'laklarga bo'linadi.
+    """
+    if message.from_user is None:
+        return
+
+    if not is_admin(message.from_user.id):
+        log_denied("/participants", message.from_user.id, message.from_user.full_name)
+        await message.answer(texts.not_admin())
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        exams = await repos.exams.list_all(limit=10)
+        rows = [
+            {
+                "test_code": exam.test_code,
+                "title": exam.title,
+                "submissions": await repos.answers.count_for_exam(exam.exam_id),
+            }
+            for exam in exams
+        ]
+        for chunk in texts.participants_exams_chunks(rows):
+            await message.answer(chunk)
+        return
+
+    code = parts[1].strip()
+    exam = await repos.exams.get_by_code(code)
+    if exam is None:
+        await message.answer(f"«{escape(code)}» test kodi topilmadi.")
+        return
+
+    participants = await repos.answers.list_participants(exam.exam_id)
+    logger.info(
+        "Qatnashchilar ro'yxati: test_code=%s, jami=%d, admin=%s",
+        exam.test_code,
+        len(participants),
+        message.from_user.id,
+    )
+    for chunk in texts.participants_chunks(
+        title=exam.title,
+        test_code=exam.test_code,
+        participants=participants,
+        total_questions=exam.total_questions,
+    ):
+        await message.answer(chunk)
+
+
 @router.message(Command("exams"))
 async def cmd_exams(message: Message, repos: Repositories) -> None:
     """Imtihonlar ro'yxati va o'chirish tugmalari (faqat admin)."""

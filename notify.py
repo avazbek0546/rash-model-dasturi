@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Sequence
+from typing import Any, Sequence
 
 from aiogram import Bot
 from aiogram.exceptions import (
@@ -31,7 +31,7 @@ import texts
 from database.models import Exam, ExamSubmission
 from database.repository import Repositories
 from keyboards.inline import AnalysisCallback
-from services import exam_service, grading
+from services import admin_chat, exam_service, grading
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,86 @@ async def send_submission_accepted(
         "Qabul xabari yuborildi: user_id=%s, savollar=%d",
         user_id,
         len(marks or ()),
+    )
+    return True
+
+
+async def send_admin_participant(
+    bot: Bot | None,
+    *,
+    repos: Repositories,
+    exam: Exam,
+    user: dict[str, Any],
+    submitted_local: str | None = None,
+) -> bool:
+    """Yangi qatnashchi haqida admin chatga xabar yuboradi.
+
+    Admin chat `/admin_chat` orqali bog'lanmagan bo'lsa — hech narsa
+    qilmaydi (`False`). Xabar yuborilmasa ham o'quvchining javobi saqlanib
+    qoladi: chaqiruvchi (`web/api.py`) xatolikni yutadi.
+    """
+    if bot is None:
+        return False
+
+    chat_id = await admin_chat.chat_id(repos)
+    if chat_id is None:
+        return False
+
+    user_id = int(user.get("user_id") or 0)
+    saved = await repos.users.get(user_id) if user_id else None
+    full_name = (
+        (saved.full_name if saved and saved.full_name else "")
+        or str(user.get("full_name") or "")
+        or "O'quvchi"
+    )
+    username = (saved.username if saved and saved.username else None) or user.get(
+        "username"
+    )
+    count = await repos.answers.count_for_exam(exam.exam_id)
+    stamp = submitted_local or exam_service.format_local(exam_service.utc_now())
+
+    text = texts.admin_participant(
+        title=str(exam.title),
+        test_code=str(exam.test_code),
+        full_name=full_name,
+        username=str(username) if username else None,
+        user_id=user_id,
+        submitted_local=stamp,
+        count=count,
+    )
+
+    try:
+        await bot.send_message(chat_id=chat_id, text=text)
+    except TelegramForbiddenError:
+        logger.warning(
+            "Admin chatga yuborib bo'lmadi (bot chiqarilgan yoki huquq yo'q): "
+            "chat_id=%s, user_id=%s",
+            chat_id,
+            user_id,
+        )
+        return False
+    except TelegramRetryAfter as exc:
+        logger.warning(
+            "Admin chat rate-limit: retry_after=%s (chat_id=%s)",
+            exc.retry_after,
+            chat_id,
+        )
+        return False
+    except TelegramAPIError:
+        logger.warning(
+            "Admin chatga xabar yuborilmadi: chat_id=%s, user_id=%s",
+            chat_id,
+            user_id,
+            exc_info=True,
+        )
+        return False
+
+    logger.info(
+        "Admin chatga qatnashchi yuborildi: chat_id=%s, user_id=%s, exam_id=%s, jami=%d",
+        chat_id,
+        user_id,
+        exam.exam_id,
+        count,
     )
     return True
 

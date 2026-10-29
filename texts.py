@@ -11,7 +11,7 @@ from __future__ import annotations
 from html import escape
 from typing import Mapping, Sequence
 
-from database.models import SKIPPED, Exam, Question, TestResult, UserStats
+from database.models import SKIPPED, Exam, Participant, Question, TestResult, UserStats
 from services import rasch, solutions
 from services.rasch import RaschEstimate
 
@@ -73,6 +73,8 @@ def help_text(is_admin: bool = False) -> str:
             "/report TEST_KODI — natijalar PDF hisoboti",
             "/add_solution — video/rasm yechim yuklash",
             "/itemstats TEST_KODI — savollar statistikasi",
+            "/participants TEST_KODI — qatnashchilar ro'yxati",
+            "/admin_chat — qatnashchilar guruhini ulash",
             "/admins — adminlarni qo'shish/o'chirish",
         ]
     lines += [
@@ -413,7 +415,7 @@ def exam_list(exams: list[dict]) -> str:
         lines.append(
             f"🆔 #{item['exam_id']} · <b>{_safe(item['title'])}</b>\n"
             f"   <i>{_safe(item['status_title'])}</i> · "
-            f"{item['submissions']} ta javob\n"
+            f"{item['submissions']} ta qatnashchi\n"
             f"   🔑 Kod: <code>{_safe(item['test_code'])}</code> · "
             f"{item['total_questions']} savol\n"
             f"   🗝 Kalit: <code>{_safe(item['answer_key'])}</code>\n"
@@ -422,6 +424,9 @@ def exam_list(exams: list[dict]) -> str:
         )
     lines.append(SEP)
     lines.append("🗑 O'chirish uchun pastdagi tugmani bosing.")
+    lines.append(
+        "⏰ Vaqtni o'zgartirish: Mini App → «⚙️ Test yaratish» → «⏰ Vaqt»."
+    )
     return "\n".join(lines)
 
 
@@ -455,6 +460,223 @@ def exam_delete_confirm(*, title: str, test_code: str, submissions: int) -> str:
         "Bu amal <b>qaytarilmaydi</b> — imtihon va unga tegishli barcha "
         "javoblar o'chadi.\n\n"
         "Davom etishni tasdiqlaysizmi?"
+    )
+
+
+def _submitted_text(value: str | None) -> str:
+    """`user_answers.submitted_at` ni qisqa ko'rinishga keltiradi.
+
+    Qiymat SQLite `datetime('now','localtime')` dan keladi — vaqt zonasi
+    qo'shimchasiz. Shu sababli uni qayta hisoblamaymiz, faqat `T` ni bo'sh
+    joyga almashtiramiz (mavjud natijalar bo'limi bilan bir xil ko'rinish).
+    """
+    clean = str(value or "").strip().replace("T", " ")
+    return clean[:16] if clean else "—"
+
+
+def _chunks(lines: list[str]) -> list[str]:
+    """Qatorlarni Telegram limitidan oshmaydigan xabarlarga bo'ladi."""
+    chunks: list[str] = []
+    current: list[str] = []
+    used = 0
+    for line in lines:
+        if current and used + len(line) + 1 > MESSAGE_LIMIT:
+            chunks.append("\n".join(current))
+            current = []
+            used = 0
+        current.append(line)
+        used += len(line) + 1
+    if current:
+        chunks.append("\n".join(current))
+    return chunks or [""]
+
+
+# ---------------------------------------------------------------------------
+# Admin chat va qatnashchilar
+# ---------------------------------------------------------------------------
+def admin_participant(
+    *,
+    title: str,
+    test_code: str,
+    full_name: str,
+    username: str | None,
+    user_id: int,
+    submitted_local: str,
+    count: int,
+) -> str:
+    """Admin chatga keladigan «yangi qatnashchi» xabari."""
+    mention = _safe(full_name)
+    if username:
+        mention += f" (@{_safe(username)})"
+    return (
+        "👥 <b>Yangi qatnashchi</b>\n"
+        f"{SEP}\n"
+        f"📌 <b>{_safe(title)}</b>\n"
+        f"🔑 Kod: <code>{_safe(test_code)}</code>\n"
+        f"👤 {mention}\n"
+        f"🆔 <code>{int(user_id)}</code>\n"
+        f"🕒 {_safe(submitted_local)}\n"
+        f"{SEP}\n"
+        f"📊 Bu imtihonda jami: <b>{int(count)}</b> ta qatnashchi"
+    )
+
+
+def participants_chunks(
+    *,
+    title: str,
+    test_code: str,
+    participants: Sequence[Participant],
+    total_questions: int = 0,
+) -> list[str]:
+    """`/participants TEST_KODI` — qatnashchilar ro'yxati (bo'laklarga bo'lingan).
+
+    Har bir satr: tartib raqami, ism (@username), Telegram ID, yuborilgan
+    vaqt va (baholangan bo'lsa) to'g'ri javoblar soni.
+    """
+    header = (
+        "👥 <b>Qatnashchilar</b>\n"
+        f"{SEP}\n"
+        f"📌 <b>{_safe(title)}</b>\n"
+        f"🔑 Kod: <code>{_safe(test_code)}</code>\n"
+        f"👤 Jami: <b>{len(participants)}</b> ta"
+    )
+    if not participants:
+        return [header + f"\n{SEP}\nHozircha hech kim javob yubormagan."]
+
+    lines = [header, SEP]
+    for index, item in enumerate(participants, start=1):
+        mention = _safe(item.full_name)
+        if item.username:
+            mention += f" (@{_safe(item.username)})"
+        details = [f"🕒 {_safe(_submitted_text(item.submitted_at))}"]
+        if item.is_graded:
+            details.append(f"✅ {int(item.raw_score or 0)}/{int(total_questions or 0)}")
+        lines.append(
+            f"{index}. {mention} · <code>{int(item.user_id)}</code>\n"
+            f"   " + " · ".join(details)
+        )
+    lines.append(SEP)
+    lines.append(f"📊 Jami: <b>{len(participants)}</b> ta qatnashchi")
+    return _chunks(lines)
+
+
+def participants_exams_chunks(rows: Sequence[Mapping[str, object]]) -> list[str]:
+    """`/participants` (kod berilmagan) — testlar va qatnashchilar soni."""
+    if not rows:
+        return [
+            "👥 <b>Qatnashchilar</b>\n"
+            f"{SEP}\n"
+            "Hozircha imtihon yaratilmagan.\n\n"
+            "Yangi imtihon: /new_exam"
+        ]
+
+    lines = [
+        "👥 <b>Qatnashchilar</b>",
+        SEP,
+        "Batafsil ro'yxat uchun: <code>/participants TEST_KODI</code>",
+        SEP,
+    ]
+    for row in rows:
+        lines.append(
+            f"🔑 <code>{_safe(row.get('test_code'))}</code> · "
+            f"<b>{_safe(row.get('title'))}</b> — "
+            f"<b>{int(row.get('submissions') or 0)}</b> ta qatnashchi"
+        )
+    return _chunks(lines)
+
+
+def admin_chat_instructions(current_chat_id: int | None = None) -> str:
+    """`/admin_chat` (shaxsiy chat) — admin chatni sozlash yo'riqnomasi."""
+    if current_chat_id is not None:
+        status = f"✅ Hozirgi admin chat: <code>{int(current_chat_id)}</code>"
+    else:
+        status = "⚠️ Hozircha admin chat bog'lanmagan."
+    return (
+        "💬 <b>Admin chat</b>\n"
+        f"{SEP}\n"
+        f"{status}\n\n"
+        "Qatnashchilar haqidagi barcha xabarlar bitta maxsus guruhda "
+        "saqlanadi — u yerda kim qatnashgani va jami nechta ekanini "
+        "istalgan payt ko'rasiz.\n\n"
+        "Sozlash:\n"
+        "1️⃣ Telegram'da <b>faqat o'zingiz</b> bo'lgan yangi guruh yarating.\n"
+        "2️⃣ Botni guruhga qo'shing va <b>administrator</b> qiling "
+        "(«Foydalanuvchilarni chetlatish» huquqi bilan).\n"
+        "3️⃣ Guruhda <code>/admin_chat</code> buyrug'ini yuboring.\n\n"
+        "Shundan keyin har bir yangi qatnashchi haqida shu guruhga avtomatik "
+        "xabar keladi. Admin bo'lmagan odam guruhga qo'shilsa — bot uni "
+        "darhol chiqarib yuboradi.\n\n"
+        "🔕 Uzish uchun: <code>/admin_chat off</code>"
+    )
+
+
+def admin_chat_bound(title: str, chat_id: int) -> str:
+    """Admin chat muvaffaqiyatli bog'langanda."""
+    return (
+        "✅ <b>Admin chat bog'landi</b>\n"
+        f"{SEP}\n"
+        f"💬 {_safe(title or 'Guruh')}\n"
+        f"🆔 <code>{int(chat_id)}</code>\n\n"
+        "Endi har bir yangi qatnashchi haqida shu chatga xabar keladi. "
+        "Guruhga faqat adminlar kira oladi — bot qolganlarini chiqarib "
+        "yuboradi.\n\n"
+        "Ro'yxatni botda ham ko'rish: <code>/participants TEST_KODI</code>"
+    )
+
+
+def admin_chat_unbound() -> str:
+    """Admin chat uzilganda."""
+    return (
+        "🔕 <b>Admin chat uzildi.</b>\n"
+        "Endi yangi qatnashchilar haqidagi xabarlar guruhga yuborilmaydi.\n\n"
+        "Qayta ulash: <code>/admin_chat</code>"
+    )
+
+
+def admin_chat_group_only() -> str:
+    """`/admin_chat` guruhdan tashqarida chaqirilganda (masalan kanal)."""
+    return (
+        "ℹ️ Admin chatni ulash uchun buyruqni <b>guruhda</b> yuboring.\n\n"
+        "Guruh yarating → botni administrator qiling → guruhda "
+        "<code>/admin_chat</code> yozing."
+    )
+
+
+def admin_chat_group_admin_required() -> str:
+    """Buyruqni yuborgan odam guruh administratori bo'lmasa."""
+    return (
+        "⛔ Guruhni admin chatga bog'lash uchun avval o'zingiz guruh "
+        "administratori bo'lishingiz kerak."
+    )
+
+
+def admin_chat_restrict_warning() -> str:
+    """Botda «Foydalanuvchilarni chetlatish» huquqi bo'lmasa."""
+    return (
+        "⚠️ <b>Diqqat:</b> botda «Foydalanuvchilarni chetlatish» huquqi yo'q.\n"
+        "Guruh sozlamalari → Administratorlar → bot → "
+        "<b>«Foydalanuvchilarni chetlatish»</b> ni yoqing. Aks holda begona "
+        "odamlar avtomatik chiqarilmaydi (qatnashchilar xabarlari baribir "
+        "keladi)."
+    )
+
+
+def admin_chat_bot_admin_required() -> str:
+    """Bot guruh administratori bo'lmasa."""
+    return (
+        "⚠️ Avval botni guruh <b>administratori</b> qiling "
+        "(«Foydalanuvchilarni chetlatish» huquqi bilan), keyin "
+        "<code>/admin_chat</code> ni qayta yuboring."
+    )
+
+
+def admin_chat_kicked(full_name: str) -> str:
+    """Admin chatdan admin bo'lmagan odam chiqarilganda."""
+    return (
+        "🚫 <b>Ruxsat yo'q</b>\n"
+        f"{_safe(full_name)} adminlar ro'yxatida yo'q — guruhdan "
+        "chiqarildi.\n\n"
+        "Kirish faqat o'qituvchi (admin) uchun."
     )
 
 

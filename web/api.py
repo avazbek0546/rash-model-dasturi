@@ -407,6 +407,21 @@ async def submit_answers(request: web.Request) -> web.Response:
     # O'quvchiga qisqa qabul xabari + kalitsiz ✅/❌ ro'yxati yuboriladi.
     await _send_submission_ack(request, user, marks=marks)
 
+    # Admin chatga «yangi qatnashchi» xabari (agar ulangan bo'lsa).
+    # Bu — yordamchi oqim: xatolik o'quvchining javobini buzmaydi.
+    try:
+        await notify.send_admin_participant(
+            get_bot(request),
+            repos=repos,
+            exam=exam,
+            user=user,
+        )
+    except Exception:  # pragma: no cover - kutilmagan xato javobni to'xtatmasin
+        logger.exception(
+            "Admin chatga qatnashchi xabarini yuborishda xatolik: user_id=%s",
+            user["user_id"],
+        )
+
     return web.json_response(
         {
             "ok": True,

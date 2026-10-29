@@ -16,6 +16,7 @@ from database.models import (
     BotAdmin,
     Exam,
     ExamSubmission,
+    Participant,
     Question,
     Solution,
     TestResult,
@@ -412,6 +413,21 @@ def _to_submission(row: dict) -> ExamSubmission:
     )
 
 
+def _to_participant(row: dict) -> Participant:
+    """`user_answers` + `users` satrini `Participant` modeliga aylantiradi."""
+    theta = row.get("theta")
+    scaled = row.get("scaled_score")
+    return Participant(
+        user_id=int(row["user_id"]),
+        full_name=str(row.get("full_name") or f"#{row['user_id']}"),
+        username=row.get("username"),
+        submitted_at=row.get("submitted_at"),
+        theta=float(theta) if theta is not None else None,
+        scaled_score=float(scaled) if scaled is not None else None,
+        raw_score=row.get("raw_score"),
+    )
+
+
 class ExamRepository:
     """`exams` jadvali bilan ishlash.
 
@@ -585,6 +601,40 @@ class ExamRepository:
         params.append(exam_id)
         await self._db.execute(f"UPDATE exams SET {', '.join(fields)} WHERE exam_id = ?", params)
 
+    async def update_schedule(
+        self,
+        exam_id: int,
+        *,
+        start_time: str,
+        end_time: str,
+        result_time: str,
+        reset_graded_at: bool = False,
+    ) -> None:
+        """Imtihonning uchta vaqtini birga yangilaydi.
+
+        `reset_graded_at=True` bo'lsa `graded_at` tozalanadi — imtihon qayta
+        ochilganda (tugash vaqti kelajakka surilganda) fon baholash yangi
+        javoblarni ham hisoblashi uchun kerak. Eski o'quvchilarning θ si
+        o'chmaydi: ular `user_answers` da saqlanib qoladi.
+        """
+        await self._db.execute(
+            """
+            UPDATE exams
+            SET start_time  = ?,
+                end_time    = ?,
+                result_time = ?,
+                graded_at   = CASE WHEN ? = 1 THEN NULL ELSE graded_at END
+            WHERE exam_id = ?
+            """,
+            (
+                start_time,
+                end_time,
+                result_time,
+                1 if reset_graded_at else 0,
+                int(exam_id),
+            ),
+        )
+
     async def delete(self, exam_id: int) -> None:
         """Imtihonni o'chiradi (javoblar ham CASCADE bilan o'chadi)."""
         await self._db.execute("DELETE FROM exams WHERE exam_id = ?", (exam_id,))
@@ -738,6 +788,26 @@ class ExamAnswerRepository:
                 "SELECT COUNT(*) FROM user_answers WHERE exam_id = ?", (exam_id,), default=0
             )
         )
+
+    async def list_participants(self, exam_id: int) -> list[Participant]:
+        """Imtihonda qatnashgan o'quvchilar (yuborilgan tartibda).
+
+        Ma'lumot `user_answers` (kim, qachon, baho) va `users` (ism,
+        `@username`) jadvallaridan olinadi. Admin paneli va `/participants`
+        buyrug'i shu ro'yxatdan foydalanadi.
+        """
+        rows = await self._db.fetchall(
+            """
+            SELECT ua.user_id, ua.submitted_at, ua.theta, ua.scaled_score,
+                   ua.raw_score, u.full_name, u.username
+            FROM user_answers ua
+            LEFT JOIN users u ON u.user_id = ua.user_id
+            WHERE ua.exam_id = ?
+            ORDER BY ua.id ASC
+            """,
+            (int(exam_id),),
+        )
+        return [_to_participant(row) for row in rows]
 
     async def count(self) -> int:
         """Jami yuborilgan javoblar soni (barcha imtihonlar bo'yicha)."""
@@ -1362,6 +1432,40 @@ class ExamSessionRepository:
                 result_time,
                 status,
                 created_by,
+            ),
+        )
+
+    async def update_schedule(
+        self,
+        session_id: int,
+        *,
+        start_time: str,
+        end_time: str,
+        result_time: str,
+        reset_graded_at: bool = False,
+    ) -> None:
+        """Sessiya vaqt oynasini yangilaydi (Web App oqimi uchun).
+
+        `exams` jadvalidagi vaqtlar bilan birga yangilanishi shart: aks holda
+        v1 API yangi vaqtni ko'rsatib, item-level `/api/v2/*` oqimi eski
+        oynada qolib ketadi.
+        """
+        await self._db.execute(
+            """
+            UPDATE exam_sessions
+            SET start_time  = ?,
+                end_time    = ?,
+                result_time = ?,
+                graded_at   = CASE WHEN ? = 1 THEN NULL ELSE graded_at END,
+                updated_at  = strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now')
+            WHERE session_id = ?
+            """,
+            (
+                start_time,
+                end_time,
+                result_time,
+                1 if reset_graded_at else 0,
+                int(session_id),
             ),
         )
 
@@ -2287,6 +2391,50 @@ class BotAdminRepository:
         )
 
 
+class BotSettingsRepository:
+    """`bot_settings` — botning kalit/qiymat sozlamalari.
+
+    Hozircha bitta kalit ishlatiladi: `admin_chat_id` (qatnashchilar
+    bildirishnomalari yuboriladigan guruh). Deploy qilmasdan `/admin_chat`
+    buyrug'i orqali o'zgartiriladi.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    async def get(self, key: str) -> str | None:
+        """Sozlama qiymatini qaytaradi (bo'lmasa — `None`)."""
+        value = await self._db.fetchvalue(
+            "SELECT value FROM bot_settings WHERE key = ?", (str(key),)
+        )
+        return None if value is None else str(value)
+
+    async def set(self, key: str, value: str) -> None:
+        """Sozlamani yozadi (mavjud bo'lsa — yangilaydi)."""
+        await self._db.execute(
+            """
+            INSERT INTO bot_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT (key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now')
+            """,
+            (str(key), str(value)),
+        )
+
+    async def delete(self, key: str) -> bool:
+        """Sozlamani o'chiradi.
+
+        Returns:
+            True — o'chirildi; False — bunday kalit yo'q edi.
+        """
+        cursor = await self._db.connection.execute(
+            "DELETE FROM bot_settings WHERE key = ?", (str(key),)
+        )
+        await self._db.connection.commit()
+        return cursor.rowcount > 0
+
+
 class Repositories:
     """Barcha repository'larni bitta joyda saqlovchi konteyner.
 
@@ -2317,3 +2465,5 @@ class Repositories:
         # Bot ichidan qo'shilgan adminlar (`/admins` paneli) — `.env` adminlaridan
         # tashqari; ishga tushganda `config.set_db_admins()` ga uzatiladi.
         self.admins = BotAdminRepository(db)
+        # Kalit/qiymat sozlamalari (`bot_settings`) — masalan `admin_chat_id`.
+        self.settings = BotSettingsRepository(db)

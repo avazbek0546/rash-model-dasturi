@@ -48,6 +48,18 @@ class CreatedExam:
     kinds: dict[str, int]
 
 
+@dataclass(frozen=True, slots=True)
+class UpdatedSchedule:
+    """Vaqti o'zgartirilgan imtihon haqida qisqa natija."""
+
+    exam_id: int
+    test_code: str
+    session_id: int | None
+    start_time: str
+    end_time: str
+    result_time: str
+
+
 def normalize_difficulties(raw: Any, total_questions: int) -> list[float]:
     """Qiyinchilikni **logitlar ro'yxatiga** aylantiradi (validatsiya bilan).
 
@@ -205,4 +217,87 @@ async def create_exam(
         form_version_id=form_result.form_version_id,
         session_id=session_id,
         kinds=dict(form_result.kinds),
+    )
+
+
+async def update_exam_times(
+    repos: Repositories,
+    *,
+    exam_id: int,
+    start_time: str,
+    end_time: str,
+    result_time: str,
+) -> UpdatedSchedule:
+    """Yaratilgan imtihonning vaqt oynasini o'zgartiradi.
+
+    Ikki jadval birga yangilanadi:
+
+    * `exams` — botdagi `/exams`, eski v1 API va PDF hisobot manbasi;
+    * `exam_sessions` — Web App item-level oqimi (`/api/v2/*`) vaqt oynasi.
+
+    Agar yangi `end_time` hali kelmagan bo'lsa (imtihon qayta ochiladi),
+    `graded_at` tozalanadi — fon baholash keyin qo'shilgan javoblarni ham
+    hisoblashi uchun. Avvalgi o'quvchilarning natijalari o'chmaydi.
+
+    Args:
+        start_time, end_time, result_time: bazaga yoziladigan **UTC ISO**
+            qiymatlar; tartib `exam_service.validate_schedule` bilan
+            tekshiriladi.
+
+    Raises:
+        ExamAdminError: imtihon topilmasa yoki vaqt tartibi noto'g'ri bo'lsa.
+    """
+    exam = await repos.exams.get(int(exam_id))
+    if exam is None:
+        raise ExamAdminError("Imtihon topilmadi (o'chirilgan bo'lishi mumkin).")
+
+    try:
+        start_dt = exam_service.parse_db_time(str(start_time))
+        end_dt = exam_service.parse_db_time(str(end_time))
+        result_dt = exam_service.parse_db_time(str(result_time))
+        exam_service.validate_schedule(start_dt, end_dt, result_dt)
+    except ValueError as exc:
+        raise ExamAdminError(str(exc)) from exc
+
+    now = exam_service.now_db()
+    reset_graded = str(end_time) > now
+
+    await repos.exams.update_schedule(
+        exam.exam_id,
+        start_time=str(start_time),
+        end_time=str(end_time),
+        result_time=str(result_time),
+        reset_graded_at=reset_graded,
+    )
+
+    session = await repos.sessions.get_by_test_code(exam.test_code)
+    session_id: int | None = None
+    if session is not None:
+        session_id = int(session["session_id"])
+        await repos.sessions.update_schedule(
+            session_id,
+            start_time=str(start_time),
+            end_time=str(end_time),
+            result_time=str(result_time),
+            reset_graded_at=reset_graded,
+        )
+
+    logger.info(
+        "Imtihon vaqti o'zgartirildi: exam_id=%s, kod=%s, start=%s, end=%s, "
+        "result=%s, session_id=%s, graded_reset=%s",
+        exam.exam_id,
+        exam.test_code,
+        start_time,
+        end_time,
+        result_time,
+        session_id,
+        reset_graded,
+    )
+    return UpdatedSchedule(
+        exam_id=exam.exam_id,
+        test_code=exam.test_code,
+        session_id=session_id,
+        start_time=str(start_time),
+        end_time=str(end_time),
+        result_time=str(result_time),
     )

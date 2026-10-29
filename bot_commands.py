@@ -25,5 +25,7 @@ ADMIN_COMMANDS: tuple[BotCommand, ...] = BASE_COMMANDS + (
     BotCommand(command="report", description="PDF natijalar hisoboti"),
     BotCommand(command="add_solution", description="Yechim yuklash"),
     BotCommand(command="itemstats", description="Savollar statistikasi"),
+    BotCommand(command="participants", description="Qatnashchilar ro'yxati"),
+    BotCommand(command="admin_chat", description="Qatnashchilar guruhini ulash"),
     BotCommand(command="admins", description="Adminlarni boshqarish"),
 )

@@ -249,6 +249,8 @@ To'liq yo'riqnoma, tekshirish ro'yxati va xatolar jadvali:
 | `/exams` | Imtihonlar ro'yxati; «🗑» tugmasi bilan o'chirish (javoblar ham o'chadi) |
 | `/stats` | O'quvchilar, imtihonlar, qabul qilingan javoblar va yechimlar statistikasi |
 | `/add_solution` | Video yoki rasm yechim yuklash yo'riqnomasi (quyida) |
+| `/participants [TEST_KODI]` | Qatnashganlar ro'yxati: ism, `@username`, ID, vaqt va jami soni. Kod berilmasa — testlar bo'yicha umumiy son |
+| `/admin_chat` | Qatnashchilar jurnali guruhini ulash (guruhda yuboriladi). `/admin_chat off` — uzish |
 | `/admins` | Adminlarni boshqarish: «➕ Admin qo'shish» (odamning xabarini **forward** qilish kifoya), «🗑» bilan o'chirish |
 | `/cancel` | Ustani istalgan qadamda bekor qilish |
 
@@ -356,11 +358,50 @@ Mini App'dagi **«⚙️ Test yaratish»** tabida har bir imtihon yonida
 Oxirida xulosa ko'rsatiladi va **✅ Yaratish** bosilganda imtihon bazaga
 yoziladi. Keyin o'qituvchi test kodini o'quvchilarga yetkazadi.
 
+### ⏰ Yaratilgan imtihon vaqtini o'zgartirish
+
+Mini App → **«⚙️ Test yaratish»** → **«Imtihonlar»** bo'limida har bir karta
+ostida:
+
+* ▶️ boshlanish, ⏹ tugash, 📢 natija vaqti va **qatnashchilar soni** ko'rinadi;
+* **«⏰ Vaqt»** tugmasi uchta maydonli tahrirlash formasini ochadi — yangi
+  vaqtlarni kiritib **«Saqlash»** bosiladi;
+* server `exams` va `exam_sessions` jadvallarini **birga** yangilaydi, shu
+  sababli botdagi ro'yxat, v1 API va item-level `/api/v2/*` oqimi bir xil
+  vaqt oynasini ko'radi;
+* tugash vaqti kelajakka surilsa, imtihon qayta ochiladi va `graded_at`
+  tozalanadi — keyin qo'shilgan javoblar ham baholanadi. Avvalgi
+  o'quvchilarning natijalari o'chmaydi;
+* noto'g'ri tartib (masalan, tugash boshlanishdan oldin) **400** bilan rad
+  etiladi.
+
+### 💬 Admin chat — qatnashchilar jurnali
+
+Telegram Bot API'da bot **guruh yarata olmaydi**, shu sababli guruhni admin
+o'zi yaratadi, bot esa uni qo'riqlaydi:
+
+1. Telegram'da **faqat o'zingiz** bo'lgan yangi guruh yarating;
+2. botni guruhga qo'shing va **administrator** qiling — «Foydalanuvchilarni
+   chetlatish» huquqi bilan;
+3. guruhda `/admin_chat` yuboring — bot chat ID sini `bot_settings` jadvaliga
+   yozadi (qayta deploy'da ham saqlanadi);
+4. shundan keyin har bir yangi javobda guruhga
+   `👥 Yangi qatnashchi … jami N ta qatnashchi` xabari keladi;
+5. **admin bo'lmagan odam** guruhga qo'shilsa — bot uni darhol chiqarib
+   yuboradi; «so'rov bilan qo'shilish» rejimida esa so'rovni rad etadi;
+6. bog'lanishni uzish: `/admin_chat off`. Kanal uchun zaxira variant —
+   `.env` dagi `ADMIN_CHAT_ID`.
+
+Qatnashchilarni **Mini App** da ham ko'rish mumkin: imtihon kartasidagi
+**«👥 Qatnashchilar»** tugmasi ism, `@username`, ID, yuborilgan vaqt va jami
+sonini ko'rsatadi. Botda xuddi shu ma'lumot: `/participants TEST_KODI`.
+
 ---
 
 ## 🌐 Web App (Mini App)
 
-O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab:
+O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab; adminga
+qo'shimcha **«⚙️ Test yaratish»** tabi ko'rinadi:
 
 | Tab | Nima bor |
 |---|---|
@@ -368,7 +409,7 @@ O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab:
 | **Natijalar** | Natijalar dinamikasi (Chart.js grafigi), o'tgan imtihonlar tarixi va har biri uchun batafsil tahlil (savol-savol, `P(θ)`, SE, 95% interval) |
 | **Offline imtihon** | Hududlar bo'yicha imtihonlar (statik ro'yxat — kelajak uchun tayyor joy) |
 | **Profil** | Ism-familiyani tahrirlash, Telegram ID, ishlangan testlar soni, vaqt zonasi |
-| **⚙️ Test yaratish** | **Faqat admin** uchun: imtihon yaratish ustasi + har bir imtihon yonida **«🎬 Yechim»** paneli (qamrov, video/rasm holati, o'chirish, botga deep-link). Uchta amal tugmasi (yechim, PDF, baholash) tor ekranda ham to'liq sig'adi |
+| **⚙️ Test yaratish** | **Faqat admin** uchun: imtihon yaratish ustasi; har bir karta ostida vaqtlar va qatnashchilar soni; **«⏰ Vaqt»** (vaqtni tahrirlash), **«👥 Qatnashchilar»** (kim qatnashgani), **«🎬 Yechim»** (qamrov, video/rasm, o'chirish, deep-link), **📄 PDF** va **🔄 Baholash** tugmalari |
 
 ### Javoblar qanday topshiriladi
 
@@ -406,9 +447,17 @@ O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab:
 | `GET` | `/api/results/{exam_id}` | Bitta imtihon bo'yicha batafsil hisobot |
 | `GET` | `/api/offline` | Hududiy imtihonlar (statik) |
 | `GET` | `/api/v2/me` | Profil + `is_admin` (admin panelini ko'rsatish uchun) |
-| `GET` | `/api/v2/admin/exams` | Imtihonlar ro'yxati + **yechim qamrovi** (faqat admin) |
+| `GET` | `/api/v2/admin/exams` | Imtihonlar ro'yxati + vaqtlar, qatnashchilar soni va **yechim qamrovi** (faqat admin) |
+| `POST` | `/api/v2/admin/exams` | Yangi test yaratish (kalit + vaqtlar) |
+| `POST` | `/api/v2/admin/exams/{id}/schedule` | Boshlanish/tugash/natija vaqtini o'zgartirish (ikkala jadvalda) |
+| `GET` | `/api/v2/admin/exams/{id}/participants` | Kim qatnashgani: ism, `@username`, ID, vaqt; jami soni |
+| `POST` | `/api/v2/admin/exams/{id}/regrade` | Imtihonni qayta baholash |
+| `POST` | `/api/v2/admin/exams/{id}/report-link` | PDF hisobot uchun bir martalik havola |
 | `GET` | `/api/v2/admin/exams/{id}/solutions` | «🎬 Yechimlar» qamrovi: savollar, tur, `missing[]`, `bot_username` |
 | `POST` | `/api/v2/admin/solutions/delete` | Bitta savol yechimini o'chirish |
+
+> `ADMIN_ID`/`ADMIN_IDS` (yoki `/admins` orqali qo'shilgan) bo'lmagan
+> foydalanuvchi barcha admin endpoint'larida **403** oladi.
 
 > Yechim faqat **video yoki rasm** (`file_id`) bo'ladi va faqat **bot orqali**
 > yuklanadi — `file_id` ni Telegram Bot API beradi. Matnli yechim endpoint'i
@@ -562,6 +611,8 @@ python tests/test_code_error_ux.py # noto'g'ri kod → aniq xato xabari (JS ulan
 python tests/test_result_notify.py # qabul xabari + result_time natijasi (kalitsiz)
 python tests/test_submission_feedback.py # yakunlashdan keyingi ✅/❌ (kalit/θ oshkor emas)
 python tests/test_admin_api.py    # /api/v2/me + /api/v2/admin/* (yechimlar paneli)
+python tests/test_admin_panel.py  # vaqtni tahrirlash + qatnashchilar + admin chat xabari
+python tests/test_admin_chat.py   # /admin_chat + begonalarni chiqarish
 python tests/test_flow.py         # eski mashq rejimi + router/klaviatura
 python tests/test_bot_flow.py     # botning TO'LIQ oqimi (Telegram'siz)
 ```
@@ -637,6 +688,18 @@ inline menyu (reply klaviatura yo'q) → imtihon → savollar gridi → adminnin
 `#javob-rashtest1612-3` hashtagi bilan yuborilishi → matnli yechim va
 qo'llanmaydigan media (audio) rad etilishi → sahifalash va ruxsat nazorati.
 
+**`test_admin_panel.py`** — yangi admin imkoniyatlari: `010_bot_settings`
+migratsiyasi; `POST /api/v2/admin/exams/{id}/schedule` vaqtni `exams` +
+`exam_sessions` da birga yangilashi, noto'g'ri tartibning **400** bo'lishi;
+`GET .../participants` ism/`@username`/sonni qaytarishi; `/api/submit` dan
+keyin bog'langan admin chatga «Yangi qatnashchi» xabari ketishi va unga
+o'quvchi **403** olishi.
+
+**`test_admin_chat.py`** — `/admin_chat` faqat bot admini va guruh
+administratori uchun ishlashi; admin chatga qo'shilgan begona odamning
+`ban → unban` bilan chiqarilishi; adminning tegilmasligi; qo'shilish
+so'rovining rad etilishi.
+
 ---
 
 ## ⚠️ Ma'lum cheklovlar
@@ -659,9 +722,14 @@ qo'llanmaydigan media (audio) rad etilishi → sahifalash va ruxsat nazorati.
 * **Yagona o'lchov — θ (logit):** foydalanuvchi interfeysida (bot, Mini App, PDF)
   0–100 shkala **ko'rsatilmaydi**; u faqat sertifikat darajasi chegaralari uchun
   ichki hisobda ishlatiladi.
-* **Imtihonni tahrirlash yo'q:** `/new_exam` bilan yaratilgan imtihonni faqat
-  o'chirish mumkin (`/exams`); vaqtlarni o'zgartirish hozircha repository
-  darajasida (`ExamRepository.update_times`).
+* **Imtihonning faqat vaqti tahrirlanadi:** Mini App'dagi **«⏰ Vaqt»** orqali
+  boshlanish/tugash/natija vaqtlari o'zgartiriladi (`exams` + `exam_sessions`
+  birga). Nom, test kodi, kalit va savollar sonini o'zgartirish hozircha
+  yo'q — bunday testni o'chirib, qaytadan yaratish kerak.
+* **PDF yuklab olish:** PDF hisobot hozircha **o'zgartirilmagan** (foydalanuvchi
+  so'roviga ko'ra). Telegram WebView'da `download` atributi har doim ham
+  ishlamasligi mumkin; natijalar botga yuborilishi davom etadi. PDF oqimi
+  keyinchalik alohida tuzatiladi.
 * **Qayta baholash qo'lda:** savol kaliti yoki logitlar keyin o'zgartirilsa,
   natijalar avtomatik yangilanmaydi — `grading.grade_exam(..., regrade=True)`
   chaqirilishi kerak.
@@ -683,9 +751,9 @@ qo'llanmaydigan media (audio) rad etilishi → sahifalash va ruxsat nazorati.
    modelga mosligi; savollarning mosligi (item fit).
 4. **Test informatsiya funksiyasi** va `SE` ni samarali hisoblash, adaptiv
    (CAT) test — keyingi savolni o'quvchi `θ` siga moslab tanlash.
-5. **O'qituvchi paneli (kengaytirish):** imtihonni tahrirlash (muddatni
-   uzaytirish, kodni almashtirish), Excel/CSV eksport (user, raw, θ, scaled),
-   guruh hisobotlari va eng qiyin savollar tahlili.
+5. **O'qituvchi paneli (kengaytirish):** imtihon nomi/kodini/kalitini
+   tahrirlash, Excel/CSV eksport (user, raw, θ, scaled), guruh hisobotlari va
+   eng qiyin savollar tahlili.
 6. **Offline (hududiy) imtihonlar:** «Offline imtihon» bo'limini haqiqiy
    ma'lumot bilan to'ldirish (sana, joy, ro'yxatdan o'tish).
 7. **Natija haqida xabarnoma:** `result_time` kelganda ishtirokchilarga bot

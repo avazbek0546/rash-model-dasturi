@@ -98,6 +98,11 @@ _DB_ADMIN_IDS: frozenset[int] = frozenset()
 # Amaldagi to'liq ro'yxat: egasi + bazadan qo'shilganlar.
 ADMIN_IDS: frozenset[int] = OWNER_ADMIN_IDS
 
+# Admin chat: yangi qatnashchi haqidagi xabarlar yuboriladigan guruh/kanal.
+# Asosiy usul — bot ichida `/admin_chat` (bazadagi `bot_settings`); bu env
+# qiymati zaxira sifatida ishlatiladi (masalan kanalni qo'lda ulash uchun).
+ADMIN_CHAT_ID: int | None = _get_int("ADMIN_CHAT_ID")
+
 
 def is_admin(user_id: int | None) -> bool:
     """Foydalanuvchi o'qituvchi (admin) huquqiga egami?"""
@@ -179,7 +184,7 @@ WEBAPP_URL: str = (
 ).rstrip("/")
 # Mini App kesh-buster versiyasi (dizayn/JS o'zgarganda oshiriladi). Bitta joyda
 # saqlanadi — menyu tugmasi, inline tugmalar va natija xabarlari shu yerdan oladi.
-WEBAPP_VERSION: str = _get_str("WEBAPP_VERSION", "26") or "26"
+WEBAPP_VERSION: str = _get_str("WEBAPP_VERSION", "27") or "27"
 # Bulutda konteynerdan tashqaridan ko'rinish uchun `0.0.0.0` shart;
 # lokal ishlab chiqishda esa xavfsizlik uchun `127.0.0.1` qoladi.
 _DEFAULT_WEBAPP_HOST: str = "0.0.0.0" if IS_CLOUD else "127.0.0.1"

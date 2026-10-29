@@ -237,6 +237,36 @@ class ExamSubmission:
         return self.theta is not None
 
 
+@dataclass(slots=True)
+class Participant:
+    """Imtihonda qatnashgan bitta o'quvchi (`user_answers` + `users`).
+
+    Admin panelida «kim qatnashdi?» ro'yxati va admin chatga yuboriladigan
+    xabarlar uchun ishlatiladi. Baho maydonlari (`theta`, `raw_score`) javob
+    hali baholanmagan bo'lsa — `None`.
+    """
+
+    user_id: int
+    full_name: str
+    username: str | None = None
+    submitted_at: str | None = None
+    theta: float | None = None
+    scaled_score: float | None = None
+    raw_score: int | None = None
+
+    @property
+    def is_graded(self) -> bool:
+        """Javob baholanganmi?"""
+        return self.theta is not None
+
+    @property
+    def mention(self) -> str:
+        """Ism va @username ni bitta satrga birlashtiradi."""
+        if self.username:
+            return f"{self.full_name} (@{self.username})"
+        return self.full_name
+
+
 # ---------------------------------------------------------------------------
 # «🔍 Test tahlili» modellari (solutions)
 # ---------------------------------------------------------------------------

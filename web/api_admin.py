@@ -2,12 +2,14 @@
 
 Mini App ichidagi admin bo'limi uchun endpoint'lar::
 
-    GET  /api/v2/me                        — foydalanuvchi + `is_admin`
-    GET  /api/v2/admin/exams               — imtihonlar ro'yxati
-    POST /api/v2/admin/exams               — yangi test yaratish
-    POST /api/v2/admin/exams/{id}/regrade  — qayta baholash
+    GET  /api/v2/me                         — foydalanuvchi + `is_admin`
+    GET  /api/v2/admin/exams                — imtihonlar ro'yxati
+    POST /api/v2/admin/exams                — yangi test yaratish
+    POST /api/v2/admin/exams/{id}/schedule  — vaqtlarni o'zgartirish
+    GET  /api/v2/admin/exams/{id}/participants — qatnashchilar ro'yxati
+    POST /api/v2/admin/exams/{id}/regrade   — qayta baholash
     GET  /api/v2/admin/exams/{id}/solutions — «🎬 Yechimlar» qamrovi
-    POST /api/v2/admin/solutions/delete    — bitta yechimni o'chirish
+    POST /api/v2/admin/solutions/delete     — bitta yechimni o'chirish
 
     Yechim faqat **video yoki rasm** (`file_id`) ko'rinishida bo'ladi; matnli
     yechim qo'llanmaydi. Fayl Mini App'dan emas, **bot orqali** yuklanadi
@@ -67,6 +69,10 @@ def exam_payload(exam: Any, *, now_db: str, submissions: int) -> dict[str, Any]:
         "start_local": exam_service.format_local(exam.start_time),
         "end_local": exam_service.format_local(exam.end_time),
         "result_local": exam_service.format_local(exam.result_time),
+        # `datetime-local` input'lari uchun tayyor qiymatlar (tahrirlash formasi).
+        "start_input": exam_service.format_local(exam.start_time, "%Y-%m-%dT%H:%M"),
+        "end_input": exam_service.format_local(exam.end_time, "%Y-%m-%dT%H:%M"),
+        "result_input": exam_service.format_local(exam.result_time, "%Y-%m-%dT%H:%M"),
         "submissions": int(submissions),
     }
 
@@ -169,6 +175,103 @@ async def create_exam(request: web.Request) -> web.Response:
             "form_id": created.form_id,
             "session_id": created.session_id,
             "kinds": created.kinds,
+        }
+    )
+
+
+def _exam_id(request: web.Request) -> int:
+    """Marshrutdan `exam_id` ni o'qiydi (noto'g'ri bo'lsa — 400)."""
+    try:
+        return int(request.match_info["exam_id"])
+    except (KeyError, ValueError) as exc:
+        raise ApiError(400, "Imtihon ID si noto'g'ri.") from exc
+
+
+async def update_schedule(request: web.Request) -> web.Response:
+    """Yaratilgan imtihonning boshlanish/tugash/natija vaqtlarini o'zgartiradi.
+
+    Vaqtlar `exams` va `exam_sessions` jadvallarida **birga** yangilanadi —
+    botdagi ro'yxat, v1 va item-level (`/api/v2/*`) oqimlari bir xil oynani
+    ko'rishi uchun. Tugash vaqti kelajakka surilsa, imtihon qayta ochiladi
+    va fon baholash yangi javoblarni ham hisoblaydi.
+    """
+    await ensure_admin(request)
+    repos = repositories(request)
+    exam_id = _exam_id(request)
+    body = await read_json(request)
+
+    start_db = _parse_db_time(body, "start_time")
+    end_db = _parse_db_time(body, "end_time")
+    result_db = _parse_db_time(body, "result_time")
+
+    try:
+        await exam_admin.update_exam_times(
+            repos,
+            exam_id=exam_id,
+            start_time=start_db,
+            end_time=end_db,
+            result_time=result_db,
+        )
+    except exam_admin.ExamAdminError as exc:
+        raise ApiError(400, str(exc)) from exc
+
+    exam = await repos.exams.get(exam_id)
+    if exam is None:  # pragma: no cover - update muvaffaqiyatli bo'lsa bo'lmaydi
+        raise ApiError(404, "Imtihon topilmadi.")
+    return web.json_response(
+        {
+            "ok": True,
+            "exam": exam_payload(
+                exam,
+                now_db=exam_service.now_db(),
+                submissions=await repos.answers.count_for_exam(exam.exam_id),
+            ),
+        }
+    )
+
+
+def _submitted_text(value: str | None) -> str:
+    """`submitted_at` ni ro'yxat uchun qisqa ko'rinishga keltiradi."""
+    clean = str(value or "").strip().replace("T", " ")
+    return clean[:16] if clean else "—"
+
+
+async def exam_participants(request: web.Request) -> web.Response:
+    """Imtihonda qatnashganlar ro'yxati va soni (faqat admin).
+
+    Har bir yozuv: Telegram ID, ism (`@username` bilan), yuborilgan vaqt va
+    baholangan bo'lsa — to'g'ri javoblar soni. Baholar `result_time` dan
+    qat'i nazar ko'rsatiladi: bu ma'lumot faqat o'qituvchi uchun.
+    """
+    await ensure_admin(request)
+    repos = repositories(request)
+    exam_id = _exam_id(request)
+    exam = await repos.exams.get(exam_id)
+    if exam is None:
+        raise ApiError(404, "Imtihon topilmadi.")
+
+    participants = await repos.answers.list_participants(exam.exam_id)
+    return web.json_response(
+        {
+            "ok": True,
+            "exam_id": exam.exam_id,
+            "title": exam.title,
+            "test_code": exam.test_code,
+            "count": len(participants),
+            "total_questions": exam.total_questions,
+            "participants": [
+                {
+                    "user_id": item.user_id,
+                    "full_name": item.full_name,
+                    "username": item.username,
+                    "submitted_at": item.submitted_at,
+                    "submitted_at_short": _submitted_text(item.submitted_at),
+                    "graded": item.is_graded,
+                    "raw_score": item.raw_score if item.is_graded else None,
+                    "theta": item.theta if item.is_graded else None,
+                }
+                for item in participants
+            ],
         }
     )
 
@@ -415,6 +518,9 @@ def setup_routes(app: web.Application) -> None:
     router.add_get("/api/v2/me", me)
     router.add_get("/api/v2/admin/exams", list_exams)
     router.add_post("/api/v2/admin/exams", create_exam)
+    # Yaratilgan test vaqtini tahrirlash va qatnashchilarni ko'rish.
+    router.add_post("/api/v2/admin/exams/{exam_id}/schedule", update_schedule)
+    router.add_get("/api/v2/admin/exams/{exam_id}/participants", exam_participants)
     router.add_post("/api/v2/admin/exams/{exam_id}/regrade", regrade_exam)
     router.add_post("/api/v2/admin/exams/{exam_id}/report-link", report_link)
     # «🎬 Yechimlar» bo'limi (admin). Fayl (video/rasm) faqat bot orqali

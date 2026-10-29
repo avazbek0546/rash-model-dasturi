@@ -238,6 +238,7 @@ def check_handlers(questions: list) -> None:
     # bo'lishi kerak (masalan `repos` o'rniga `repositories` yozilsa — xatolik).
     allowed = {
         "message",
+        "update",  # chat_member / chat_join_request (admin_chat) uchun
         "call",
         "query",  # aiogram CallbackQuery uchun muqobil nom (admin_manage'da ishlatiladi)
         "callback_data",
@@ -252,14 +253,16 @@ def check_handlers(questions: list) -> None:
         "fsm_storage",
     }
     checked = 0
+    total_handlers = 0
     for item in routers:
         for observer in item.observers.values():
+            total_handlers += len(observer.handlers)
             for handler in observer.handlers:
                 params = set(inspect.signature(handler.callback).parameters)
                 unknown = params - allowed
                 assert not unknown, f"{handler.callback.__name__}: noma'lum DI {unknown}"
                 checked += 1
-    assert checked == message_handlers + callback_handlers, (checked, message_handlers)
+    assert checked == total_handlers, (checked, total_handlers)
     print(
         f"[OK] Handler'lar: {len(routers)} ta router, {message_handlers} ta message + "
         f"{callback_handlers} ta callback; {checked} ta imzo DI nomlari to'g'ri"

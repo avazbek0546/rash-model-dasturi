@@ -59,6 +59,29 @@
               percent +
               "%)</div>"
             : "";
+        const editor =
+          '<div class="exam-editor hidden" data-exam="' +
+          row.exam_id +
+          '">' +
+          '<label class="field"><span>Boshlanish vaqti</span>' +
+          '<input type="datetime-local" class="edit-start" value="' +
+          App.escape(row.start_input || "") +
+          '" /></label>' +
+          '<label class="field"><span>Tugash vaqti</span>' +
+          '<input type="datetime-local" class="edit-end" value="' +
+          App.escape(row.end_input || "") +
+          '" /></label>' +
+          '<label class="field"><span>Natija vaqti</span>' +
+          '<input type="datetime-local" class="edit-result" value="' +
+          App.escape(row.result_input || "") +
+          '" /></label>' +
+          '<div class="btn-row">' +
+          '<button type="button" class="save-time">Saqlash</button>' +
+          '<button type="button" class="ghost cancel-time">Bekor</button>' +
+          "</div>" +
+          '<p class="muted">Tugash vaqti kelajakka surilsa, imtihon qayta ' +
+          "ochiladi va yangi javoblar ham baholanadi.</p>" +
+          "</div>";
         return (
           '<div class="admin-card">' +
           '<div class="head"><span class="name">' +
@@ -72,9 +95,17 @@
           App.escape(row.test_code) +
           "</b> · " +
           row.total_questions +
-          " savol · " +
-          row.submissions +
-          " javob</div>" +
+          " savol · <b>" +
+          Number(row.submissions || 0) +
+          "</b> qatnashchi</div>" +
+          '<div class="meta">▶️ ' +
+          App.escape(row.start_local) +
+          " → ⏹ " +
+          App.escape(row.end_local) +
+          "</div>" +
+          '<div class="meta">📢 Natijalar: ' +
+          App.escape(row.result_local) +
+          "</div>" +
           coverage +
           '<div class="actions">' +
           '<button type="button" class="solutions" data-exam="' +
@@ -86,7 +117,17 @@
           '<button type="button" class="ghost regrade" data-exam="' +
           row.exam_id +
           '" title="Qayta baholash">🔄 Baholash</button>' +
-          "</div></div>"
+          '<button type="button" class="ghost time" data-exam="' +
+          row.exam_id +
+          '" title="Vaqtlarni o\'zgartirish">⏰ Vaqt</button>' +
+          '<button type="button" class="ghost participants" data-exam="' +
+          row.exam_id +
+          '" data-title="' +
+          App.escape(row.title) +
+          '" title="Qatnashchilar ro\'yxati">👥 Qatnashchilar</button>' +
+          "</div>" +
+          editor +
+          "</div>"
         );
       })
       .join("");
@@ -105,6 +146,141 @@
         openSolutions(Number(button.dataset.exam));
       });
     });
+    root.querySelectorAll(".time").forEach(function (button) {
+      button.addEventListener("click", function () {
+        const card = button.closest(".admin-card");
+        const box = card ? card.querySelector(".exam-editor") : null;
+        if (box) {
+          box.classList.toggle("hidden");
+        }
+      });
+    });
+    root.querySelectorAll(".cancel-time").forEach(function (button) {
+      button.addEventListener("click", function () {
+        const box = button.closest(".exam-editor");
+        if (box) {
+          box.classList.add("hidden");
+        }
+      });
+    });
+    root.querySelectorAll(".save-time").forEach(function (button) {
+      button.addEventListener("click", function () {
+        saveSchedule(button);
+      });
+    });
+    root.querySelectorAll(".participants").forEach(function (button) {
+      button.addEventListener("click", function () {
+        openParticipants(
+          Number(button.dataset.exam),
+          button.dataset.title || ""
+        );
+      });
+    });
+  }
+
+  /** Vaqtlar muharririni saqlaydi (`POST /api/v2/admin/exams/{id}/schedule`). */
+  function saveSchedule(button) {
+    const editor = button.closest(".exam-editor");
+    if (!editor) {
+      return;
+    }
+    const examId = Number(editor.dataset.exam);
+    const body = {
+      start_time: String(
+        (editor.querySelector(".edit-start") || {}).value || ""
+      ).trim(),
+      end_time: String(
+        (editor.querySelector(".edit-end") || {}).value || ""
+      ).trim(),
+      result_time: String(
+        (editor.querySelector(".edit-result") || {}).value || ""
+      ).trim(),
+    };
+    button.disabled = true;
+    API.post("/api/v2/admin/exams/" + examId + "/schedule", body)
+      .then(function () {
+        App.setNotice("success", "⏰ Vaqtlar yangilandi", true);
+        loadExams();
+      })
+      .catch(function (error) {
+        App.setNotice("error", error.message, false);
+      })
+      .then(function () {
+        button.disabled = false;
+      });
+  }
+
+  /** Qatnashchilar ro'yxatini pastdagi panelda ko'rsatadi. */
+  function openParticipants(examId, title) {
+    const card = el("participants-card");
+    const list = el("participants-list");
+    const meta = el("participants-meta");
+    if (!card || !list) {
+      return;
+    }
+    card.classList.remove("hidden");
+    if (el("participants-title")) {
+      el("participants-title").textContent = title || "Imtihon";
+    }
+    if (meta) {
+      meta.textContent = "Yuklanmoqda…";
+    }
+    list.innerHTML = '<div class="spinner"></div>';
+    try {
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) {
+      /* eski WebView'da smooth scroll bo'lmasa — muhim emas */
+    }
+
+    API.get("/api/v2/admin/exams/" + examId + "/participants")
+      .then(function (data) {
+        const rows = (data && data.participants) || [];
+        if (meta) {
+          meta.textContent =
+            "Jami: " + Number((data && data.count) || 0) + " ta qatnashchi";
+        }
+        if (!rows.length) {
+          list.innerHTML =
+            '<p class="muted">Hozircha hech kim javob yubormagan.</p>';
+          return;
+        }
+        list.innerHTML = rows
+          .map(function (item, index) {
+            const username = item.username
+              ? " · @" + App.escape(item.username)
+              : "";
+            const score =
+              item.graded && item.raw_score !== null
+                ? " · ✅ " +
+                  Number(item.raw_score) +
+                  "/" +
+                  Number((data && data.total_questions) || 0)
+                : "";
+            return (
+              '<div class="admin-card">' +
+              '<div class="head"><span class="name">' +
+              (index + 1) +
+              ". " +
+              App.escape(item.full_name) +
+              "</span></div>" +
+              '<div class="meta">ID: ' +
+              App.escape(item.user_id) +
+              username +
+              " · 🕒 " +
+              App.escape(item.submitted_at_short || "—") +
+              score +
+              "</div></div>"
+            );
+          })
+          .join("");
+      })
+      .catch(function (error) {
+        if (meta) {
+          meta.textContent = "";
+        }
+        list.innerHTML =
+          '<p class="muted">' + App.escape(error.message) + "</p>";
+      });
   }
 
   function loadExams() {
@@ -799,6 +975,15 @@
       resetButton.addEventListener("click", function () {
         clearForm();
         clearKeyGrid();
+      });
+    }
+    const closeParticipantsButton = el("participants-close");
+    if (closeParticipantsButton) {
+      closeParticipantsButton.addEventListener("click", function () {
+        const card = el("participants-card");
+        if (card) {
+          card.classList.add("hidden");
+        }
       });
     }
   });
