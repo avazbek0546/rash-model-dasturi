@@ -1,8 +1,10 @@
 """Hisobot uchun ma'lumot yig'ish (bot va Web App admin paneli uchun).
 
-`grading.build_report()` dan foydalanadi — har bir o'quvchi uchun **ball**,
-**daraja**, **algebra/geometriya balli** va **to'g'ri javoblar soni** olinadi.
-Natijalar **ball bo'yicha kamayish tartibida** saralanadi.
+`grading.build_report()` dan foydalanadi — har bir o'quvchi uchun **umumiy
+(sertifikat) ball**, **θ (logit)**, **daraja**, **algebra/geometriya balli**
+va **to'g'ri javoblar soni** olinadi.
+Natijalar **θ bo'yicha kamayish tartibida** saralanadi (u umumiy ball bilan
+bir xil tartibni beradi).
 """
 
 from __future__ import annotations
@@ -56,6 +58,8 @@ async def build_exam_report(repos: Repositories, exam) -> ExamReport:
         students.append(
             StudentRow(
                 name=(user.full_name if user else f"#{submission.user_id}"),
+                # Umumiy (sertifikat) bali — asosiy ko'rsatkich (0..100).
+                total_ball=float(report["scaled_score"]),
                 theta=float(report["theta"]),
                 level=str(report["ability_level"]),
                 algebra=_subject_ball(report, "algebra"),
@@ -65,7 +69,7 @@ async def build_exam_report(repos: Repositories, exam) -> ExamReport:
             )
         )
 
-    # θ bo'yicha kamayish tartibida (0–100 shkala foydalanilmaydi).
+    # θ bo'yicha kamayish tartibida (umumiy ball bilan bir xil tartib).
     students.sort(key=lambda row: row.theta, reverse=True)
     return ExamReport(
         title=str(exam.title),

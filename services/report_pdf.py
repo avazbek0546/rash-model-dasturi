@@ -71,6 +71,7 @@ class StudentRow:
     """PDF jadvalidagi bitta o'quvchi satri."""
 
     name: str
+    total_ball: float | None  # umumiy (sertifikat) bali — 0..100 shkala
     theta: float  # θ (logit) — Rasch modelining yagona o'lchovi
     level: str  # A+ / A / B+ / B / C+ / C / NC
     algebra: float | None  # algebra bo'limi balli
@@ -107,14 +108,17 @@ def resolve_font() -> Path:
 
 
 #: Jadval ustunlari: `(sarlavha, eni_mm, tekislash)` — jami 190 mm (A4).
+#: «Umumiy ball» — asosiy ko'rsatkich (0..100 sertifikat bali), shu sababli
+#: ism-familiyadan keyin turadi; algebra + geometriya yig'indisi shu ballga teng.
 COLUMNS: tuple[tuple[str, float, str], ...] = (
-    ("#", 10, "C"),
-    ("Ism-familiya", 62, "L"),
-    ("Algebra", 24, "C"),
-    ("Geometriya", 24, "C"),
-    ("θ (logit)", 22, "C"),
-    ("Daraja", 21, "C"),
-    ("To'g'ri", 27, "C"),
+    ("#", 9, "C"),
+    ("Ism-familiya", 58, "L"),
+    ("Umumiy ball", 24, "C"),
+    ("Algebra", 20, "C"),
+    ("Geometriya", 21, "C"),
+    ("θ (logit)", 20, "C"),
+    ("Daraja", 18, "C"),
+    ("To'g'ri", 20, "C"),
 )
 
 
@@ -244,6 +248,7 @@ def build_results_pdf(
         values = (
             str(index),
             str(row.name),
+            _fmt(row.total_ball),
             _fmt(row.algebra),
             _fmt(row.geometry),
             f"{row.theta:+.2f}",

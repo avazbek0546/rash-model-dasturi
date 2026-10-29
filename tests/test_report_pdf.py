@@ -33,15 +33,17 @@ BUNDLED_FONT = config.BASE_DIR / "assets" / "fonts" / "DejaVuSans.ttf"
 STUDENTS = [
     report_pdf.StudentRow(
         name="Aliyev Vali",
+        total_ball=86.4,  # algebra + geometriya yig'indisi shu ballga teng
         theta=1.24,
         level="A",
-        algebra=81.2,
-        geometry=75.5,
+        algebra=46.5,
+        geometry=39.9,
         correct=31,
         total=45,
     ),
     report_pdf.StudentRow(
         name="Karimova Dilnoza",
+        total_ball=38.2,
         theta=-0.62,
         level="NC",
         algebra=None,
@@ -66,6 +68,26 @@ def test_resolve_font_prefers_bundled() -> None:
     assert font.is_file(), font
     assert font == BUNDLED_FONT, f"Repodagi shrift o'rniga tanlandi: {font}"
     print(f"[OK] resolve_font() → {font}")
+
+
+def test_columns_include_total_ball() -> None:
+    """Jadvalda «Umumiy ball» ustuni bor va enlar A4 sahifaga sig'adi."""
+    headings = [heading for heading, _width, _align in report_pdf.COLUMNS]
+    assert "Umumiy ball" in headings, headings
+    total_width = sum(width for _heading, width, _align in report_pdf.COLUMNS)
+    assert abs(total_width - 190.0) < 1e-9, total_width
+    print(f"[OK] Ustunlar: {', '.join(headings)} (jami {total_width:.0f} mm)")
+
+
+def test_total_ball_matches_subject_sum() -> None:
+    """Umumiy ball = algebra + geometriya (fanlar yig'indisi)."""
+    first = STUDENTS[0]
+    assert first.algebra is not None and first.geometry is not None
+    assert abs((first.algebra + first.geometry) - first.total_ball) < 1e-9
+    print(
+        f"[OK] Umumiy ball {first.total_ball:.1f} = "
+        f"algebra {first.algebra:.1f} + geometriya {first.geometry:.1f}"
+    )
 
 
 def test_build_results_pdf() -> None:
@@ -119,6 +141,8 @@ def main() -> int:
     tests = [
         test_bundled_font_exists,
         test_resolve_font_prefers_bundled,
+        test_columns_include_total_ball,
+        test_total_ball_matches_subject_sum,
         test_build_results_pdf,
         test_empty_report,
         test_missing_font_raises,
