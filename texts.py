@@ -1105,73 +1105,42 @@ def solution_link_prompt(*, title: str, test_code: str, label: str) -> str:
 # ---------------------------------------------------------------------------
 # «Yakunlash» natijasi (bot xabari) — javob kalitisiz, tugmali grid bilan
 # ---------------------------------------------------------------------------
-def _marks_grid(marks: Sequence[tuple[str, bool]], per_line: int = 5) -> str:
-    """✅/❌ panjarasi — faqat savol belgisi va natija (kalit **yo'q**).
-
-    Monospace (`<code>`) ichida beriladi: raqamlar ustun bo'lib turadi.
-    Har qatorda `per_line` ta belgi — tor ekranlarda ham sig'adi.
-    """
-    cells = [
-        f"{_safe(label)} {'✅' if is_correct else '❌'}"
-        for label, is_correct in marks
-    ]
-    lines = [
-        "  ".join(cells[index : index + per_line])
-        for index in range(0, len(cells), per_line)
-    ]
-    return "<code>" + "\n".join(lines) + "</code>"
-
-
 def submission_accepted(
     *,
-    title: str,
-    full_name: str,
-    answered: int,
-    total: int,
-    result_local: str,
     marks: Sequence[tuple[str, bool]] | None = None,
 ) -> str:
-    """Javob qabul qilinganini tasdiqlovchi xabar (+ ixtiyoriy ✅/❌ tekshiruv).
+    """Javob qabul qilinganini tasdiqlovchi **qisqa** xabar.
+
+    Tarkibi ataylab minimal:
+
+    * bitta sarlavha — «✅ Javoblaringiz qabul qilindi»;
+    * (bo'lsa) savollar ro'yxati — **har bir savol alohida qatorda**:
+      `1 ✅`, `2 ❌`, … (bir ustun; uzun ro'yxat ham o'qishga qulay).
 
     `marks` — `[(savol belgisi, to'g'rimi), ...]`; yakunlashdan keyin darhol
-    hisoblanadi (`services.feedback`). Xabarda **faqat** ✅/❌ va sanoq bor:
-    to'g'ri javob varianti, θ va 0–100 ball **ko'rsatilmaydi** — kalit
-    `result_time` gacha yopiq qoladi. Javobsiz savol ham ❌ bo'lib chiqadi
+    hisoblanadi (`services.feedback`). Javobsiz savol ham ❌ bo'lib chiqadi
     (Rasch bo'yicha u 0 ball).
 
-    `marks` berilmasa (masalan, kalit buzuq bo'lsa) — avvalgi oddiy matn:
-    qabul xabari hech qachon feedback hisoblashga bog'liq bo'lib qolmaydi.
+    Boshqa **hech qanday** matn yo'q: to'g'ri javob varianti, o'quvchi javobi,
+    θ, ball, ism-familiya va vaqt ko'rsatilmaydi — kalit `result_time` gacha
+    yopiq qoladi. `marks` berilmasa (kalit buzuq bo'lsa) — faqat sarlavha.
     """
-    head = [
-        "✅ <b>Javoblaringiz qabul qilindi</b>",
-        SEP,
-        f"👤 {_safe(full_name)}",
-        f"📌 {_safe(title)}",
-        f"📝 Belgilangan: <b>{answered} / {total}</b> savol",
-    ]
-    tail = [
-        f"⏰ Natija e'lon qilinishi: <b>{_safe(result_local)}</b>",
-        SEP,
-        "Natija tayyor bo'lgach <b>shu chatga avtomatik</b> yuboriladi.",
-        "Holatni ilovaning «Natijalar» bo'limida ham kuzatishingiz mumkin.",
-    ]
-
+    head = "✅ <b>Javoblaringiz qabul qilindi</b>"
     if not marks:
-        return "\n".join([*head, *tail])
+        return head
 
-    correct = sum(1 for _label, is_correct in marks if is_correct)
-    counts = f"✅ To'g'ri: <b>{correct}</b> · ❌ Xato: <b>{len(marks) - correct}</b>"
-    note = (
-        "🔒 To'g'ri javoblar ko'rsatilmaydi — faqat qaysi savol "
-        "to'g'ri yoki xato ekani ma'lum qilinadi."
-    )
-
-    text = "\n".join([*head, counts, _marks_grid(marks), note, *tail])
-    if len(text) <= MESSAGE_LIMIT:
-        return text
-    # Kutilmagan darajada uzun ro'yxat (masalan, juda ko'p qism) — panjara
-    # tashlab yuboriladi, sanoq qoladi: Telegram limitidan oshmasligi shart.
-    return "\n".join([*head, counts, note, *tail])
+    lines = [head, ""]
+    used = len(head) + 1
+    for label, is_correct in marks:
+        line = f"{_safe(label)} {'✅' if is_correct else '❌'}"
+        # Xabar Telegram limitidan oshmasligi shart. Amalda 45 savol + qismlar
+        # (≈65 qator) limitga bemalol sig'adi — bu faqat himoya.
+        if used + len(line) + 1 > MESSAGE_LIMIT:
+            lines.append("…")
+            break
+        lines.append(line)
+        used += len(line) + 1
+    return "\n".join(lines)
 
 
 def _score_bar(score: float, segments: int = 10) -> str:

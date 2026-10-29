@@ -375,11 +375,11 @@ O'quvchi `/app` tugmasi orqali ilovani ochadi. Pastda 4 tab:
    * kod topilmasa → `404`; oyna hali boshlanmagan yoki tugagan → `403`;
    * takroriy yuborish → `409` (har bir imtihonga javob **bir marta** yuboriladi);
    * yetishmagan javoblar `X` (noto'g'ri) hisoblanadi;
-   * muvaffaqiyatli yuborilgach **bot chatiga qabul xabari + kalitsiz ✅/❌
-     tekshiruv** keladi: har bir savol uchun ✅ yoki ❌ (javobsiz ham ❌),
-     «To'g'ri: 12 · Xato: 33» sanoq va «📊 Natijalar» tugmasi.
-     **To'g'ri javob varianti, θ va ball ko'rsatilmaydi** — ular `result_time`
-     gacha yopiq (`services/feedback.py`);
+   * muvaffaqiyatli yuborilgach **bot chatiga qisqa xabar** keladi: bitta
+     sarlavha («✅ Javoblaringiz qabul qilindi») va har bir savol **alohida
+     qatorda** — `1 ✅`, `2 ❌`, … (javobsiz ham ❌), «📊 Natijalar» tugmasi
+     bilan. Boshqa matn yo'q: **to'g'ri javob varianti, θ va ball
+     ko'rsatilmaydi** — ular `result_time` gacha yopiq (`services/feedback.py`);
 3. `end_time` da qabul to'xtaydi va **θ hisoblanadi**, ammo natija `result_time`
    gacha yopiq turadi;
 4. `result_time` da **natija bildirishnomasi** fon vazifasi

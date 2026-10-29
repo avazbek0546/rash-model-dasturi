@@ -87,17 +87,19 @@ def build_init_data(user: dict) -> str:
 HEADERS = {"X-Init-Data": build_init_data(STUDENT)}
 
 
-def _grid(message: str) -> str:
-    """Xabardagi `<code>` panjarasini ajratib oladi."""
-    return message.split("<code>", 1)[1].split("</code>", 1)[0]
+def mark_lines(message: str) -> list[str]:
+    """Xabardagi ✅/❌ qatorlari (sarlavha va bo'sh qatorlarsiz)."""
+    _head, _sep, body = message.partition("\n\n")
+    return [line for line in body.splitlines() if line.strip()]
 
 
 def check_text_no_leak(message: str, key_letters: str) -> None:
-    """Xabarda kalit/javob/θ oshkor emasligini tekshiradi."""
-    assert "<code>" in message and "</code>" in message, message
-    grid = _grid(message)
+    """Xabar **faqat** sarlavha + ✅/❌ qatorlaridan iboratligini tekshiradi."""
+    head, sep, body = message.partition("\n\n")
+    assert head == "✅ <b>Javoblaringiz qabul qilindi</b>", message
+    assert sep == "\n\n", message
     for letter in key_letters:
-        assert letter not in grid, (letter, grid)
+        assert letter not in body, (letter, body)  # javob varianti oshkor emas
     assert "ball" not in message and "θ" not in message, message
     assert "javob:" not in message, message
 
@@ -143,10 +145,7 @@ async def check_legacy_feedback(repos: Repositories) -> None:
 
     assert len(bot.messages) == 1, bot.messages
     ack = bot.messages[0]["text"]
-    assert "Javoblaringiz qabul qilindi" in ack, ack
-    assert "✅ To'g'ri: <b>4</b>" in ack, ack
-    assert "❌ Xato: <b>1</b>" in ack, ack
-    assert "1 ✅" in ack and "4 ✅" in ack and "5 ❌" in ack, ack
+    assert mark_lines(ack) == ["1 ✅", "2 ✅", "3 ✅", "4 ✅", "5 ❌"], ack
     check_text_no_leak(ack, "ABCD")
 
     # θ/ball hali hisoblanmagan — natija vaqti kelmagan.
@@ -236,8 +235,7 @@ async def check_item_level_key(repos: Repositories) -> None:
     assert len(bot.messages) == 1, bot.messages
     ack = bot.messages[0]["text"]
     # Legacy kalit bilan bu yerda faqat 1 ta ✅ bo'lardi (4-savol = A).
-    assert "✅ To'g'ri: <b>5</b>" in ack, ack
-    assert "❌ Xato: <b>0</b>" in ack, ack
+    assert mark_lines(ack) == [f"{index} ✅" for index in range(1, 6)], ack
     check_text_no_leak(ack, "ABCD")
 
     submission = await repos.answers.get(STUDENT["id"], exam_id)
@@ -271,8 +269,8 @@ async def check_broken_key(repos: Repositories) -> None:
 
     assert len(bot.messages) == 1, bot.messages
     ack = bot.messages[0]["text"]
-    assert "Javoblaringiz qabul qilindi" in ack, ack
-    assert "<code>" not in ack and "To'g'ri:" not in ack, ack  # belgilarsiz
+    # Belgilar umuman yo'q — faqat sarlavha (fail-open).
+    assert ack == "✅ <b>Javoblaringiz qabul qilindi</b>", ack
 
     submission = await repos.answers.get(STUDENT["id"], exam_id)
     assert submission is not None, "javob saqlanishi kerak (fail-open)"

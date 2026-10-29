@@ -86,26 +86,17 @@ async def send_submission_accepted(
     bot: Bot,
     *,
     user_id: int,
-    full_name: str,
-    exam: Exam,
-    answered: int,
     marks: Sequence[tuple[str, bool]] | None = None,
 ) -> bool:
-    """Javob qabul qilinganini tasdiqlaydi (+ ixtiyoriy ✅/❌ tekshiruv).
+    """Javob qabul qilinganini tasdiqlaydi (+ ixtiyoriy ✅/❌ ro'yxati).
 
-    `marks` — `[(savol belgisi, to'g'rimi), ...]` (`services.feedback` dan).
-    Xabar `result_time` dan oldin ketadi, shuning uchun unda **faqat** ✅/❌ va
-    sanoq bo'ladi: to'g'ri javob varianti, θ va ball hech qachon qo'shilmaydi.
-    `marks` berilmasa — oddiy qabul xabari (feedback hisoblanmagan holat).
+    Xabar minimal: sarlavha va har bir savol uchun **alohida qatorda** ✅/❌
+    (`marks` — `services.feedback` dan). Xabar `result_time` dan oldin ketadi,
+    shuning uchun kalit, θ va ball **qo'shilmaydi** — faqat qaysi savol
+    to'g'ri, qaysi biri xato ekani ko'rsatiladi.
+    `marks` berilmasa — faqat sarlavha (feedback hisoblanmagan holat).
     """
-    text = texts.submission_accepted(
-        title=exam.title,
-        full_name=full_name,
-        answered=answered,
-        total=exam.total_questions,
-        result_local=exam_service.format_local(exam.result_time),
-        marks=marks,
-    )
+    text = texts.submission_accepted(marks=marks)
     try:
         await bot.send_message(
             chat_id=user_id,
@@ -114,18 +105,15 @@ async def send_submission_accepted(
         )
     except TelegramAPIError:
         logger.warning(
-            "Qabul xabarini yuborib bo'lmadi: user_id=%s, exam_id=%s",
+            "Qabul xabarini yuborib bo'lmadi: user_id=%s",
             user_id,
-            exam.exam_id,
             exc_info=True,
         )
         return False
     logger.info(
-        "Qabul xabari yuborildi: user_id=%s, exam_id=%s, javob=%d/%d",
+        "Qabul xabari yuborildi: user_id=%s, savollar=%d",
         user_id,
-        exam.exam_id,
-        answered,
-        exam.total_questions,
+        len(marks or ()),
     )
     return True
 

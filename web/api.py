@@ -306,39 +306,29 @@ async def _submission_marks(
 
 async def _send_submission_ack(
     request: web.Request,
-    repos: Repositories,
     user: dict[str, Any],
-    exam: Exam,
-    answered: int,
     *,
     marks: list[tuple[str, bool]] | None = None,
 ) -> None:
     """Javob qabul qilinganini bot chatiga tasdiqlaydi.
 
-    Xabarda **faqat** ✅/❌ belgilari va sanoq bo'ladi: to'g'ri javob varianti
-    oshkor qilinmaydi (imtihon tozaligi). To'liq natija (θ, ball, kalit) esa
-    alohida fon vazifasi orqali `result_time` kelgach yuboriladi
+    Xabar minimal: sarlavha va har bir savol uchun **alohida qatorda** ✅/❌.
+    To'g'ri javob varianti, θ va ball oshkor qilinmaydi — ular `result_time`
+    kelgach alohida fon vazifasi orqali yuboriladi
     (`notify.result_notification_loop`).
     """
     bot = get_bot(request)
     if bot is None:
         return
     try:
-        saved = await repos.users.get(user["user_id"])
-        full_name = saved.full_name if saved and saved.full_name else user["full_name"]
         await notify.send_submission_accepted(
             bot,
             user_id=user["user_id"],
-            full_name=full_name,
-            exam=exam,
-            answered=answered,
             marks=marks,
         )
     except Exception:  # xabar xatosi javobni buzmasligi kerak
         logger.exception(
-            "Qabul xabarini yuborishda xatolik: user_id=%s, exam_id=%s",
-            user["user_id"],
-            exam.exam_id,
+            "Qabul xabarini yuborishda xatolik: user_id=%s", user["user_id"]
         )
 
 
@@ -413,8 +403,8 @@ async def submit_answers(request: web.Request) -> web.Response:
     # Xatolik bo'lsa `None` — qabul xabari baribir yuboriladi.
     marks = await _submission_marks(repos, exam, user["user_id"])
 
-    # O'quvchiga qabul xabari + kalitsiz ✅/❌ belgilari yuboriladi.
-    await _send_submission_ack(request, repos, user, exam, answered, marks=marks)
+    # O'quvchiga qisqa qabul xabari + kalitsiz ✅/❌ ro'yxati yuboriladi.
+    await _send_submission_ack(request, user, marks=marks)
 
     return web.json_response(
         {

@@ -101,48 +101,29 @@ def make_exam() -> Exam:
 
 
 def check_text_builder() -> None:
-    """Qabul xabari: markssiz — sanoqsiz; marks bilan — faqat ✅/❌, kalitsiz."""
-    accepted = texts.submission_accepted(
-        title="RASH EXAM — 12-fevral",
-        full_name="Dilnoza Karimova",
-        answered=3,
-        total=5,
-        result_local="12-fevral 14:00",
-    )
-    assert "Javoblaringiz qabul qilindi" in accepted, accepted
-    assert "3 / 5" in accepted and "12-fevral 14:00" in accepted, accepted
-    assert "To'g'ri" not in accepted and "Xato" not in accepted, accepted
-    assert KEY not in accepted, accepted
+    """Qabul xabari: faqat sarlavha + bir ustunli ✅/❌ ro'yxati."""
+    # 1) markssiz (feedback hisoblanmagan) — faqat sarlavha, ortiqcha matn yo'q.
+    accepted = texts.submission_accepted()
+    assert accepted == "✅ <b>Javoblaringiz qabul qilindi</b>", accepted
 
-    # Tezkor tekshiruv (marks): faqat qaysi savol to'g'ri/xato — kalit YO'Q.
+    # 2) marks bilan — har bir savol ALOHIDA qatorda, boshqa matn YO'Q.
     marked = texts.submission_accepted(
-        title="RASH EXAM — 12-fevral",
-        full_name="Dilnoza Karimova",
-        answered=3,
-        total=5,
-        result_local="12-fevral 14:00",
-        marks=[("1", True), ("2", True), ("3", True), ("4", False), ("5", False)],
+        marks=[("1", True), ("2", True), ("3", True), ("4", False), ("5", False)]
     )
-    assert "✅ To'g'ri: <b>3</b>" in marked, marked
-    assert "❌ Xato: <b>2</b>" in marked, marked
-    assert "1 ✅" in marked and "4 ❌" in marked, marked
-    assert "<code>" in marked and "</code>" in marked, marked
-    grid = marked.split("<code>", 1)[1].split("</code>", 1)[0]
-    assert "A" not in grid and "B" not in grid, grid  # javob varianti oshkor emas
+    head, sep, body = marked.partition("\n\n")
+    assert head == "✅ <b>Javoblaringiz qabul qilindi</b>", head
+    assert sep == "\n\n", marked
+    assert body.splitlines() == ["1 ✅", "2 ✅", "3 ✅", "4 ❌", "5 ❌"], body
+    for letter in ("A", "B", "C", "D"):
+        assert f" {letter}" not in body, body  # javob varianti oshkor emas
     assert KEY not in marked, marked
 
-    # Juda ko'p savol (kutilmagan holat) — xabar Telegram limitidan oshmaydi.
+    # 3) Juda ko'p savol (kutilmagan holat) — xabar Telegram limitidan oshmaydi.
     huge = texts.submission_accepted(
-        title="Katta imtihon",
-        full_name="Dilnoza Karimova",
-        answered=900,
-        total=900,
-        result_local="12-fevral 14:00",
-        marks=[(str(index), index % 2 == 0) for index in range(1, 901)],
+        marks=[(str(index), index % 2 == 0) for index in range(1, 901)]
     )
     assert len(huge) <= texts.MESSAGE_LIMIT, len(huge)
-    assert "✅ To'g'ri: <b>450</b>" in huge, huge[:200]
-    assert "<code>" not in huge, "juda uzun panjara tashlab yuborilishi kerak"
+    assert huge.endswith("…"), huge[-20:]
 
     report = {
         "scaled_score": 57.0,
@@ -194,15 +175,14 @@ async def check_notify_send() -> None:
     accepted = await notify.send_submission_accepted(
         bot,
         user_id=USER["id"],
-        full_name="Dilnoza Karimova",
-        exam=exam,
-        answered=3,
+        marks=[("1", True), ("2", False)],
     )
     assert accepted is True, accepted
     assert len(bot.messages) == 1, bot.messages
     ack = bot.messages[0]
-    assert "Javoblaringiz qabul qilindi" in ack["text"], ack
-    assert "To'g'ri" not in ack["text"] and "Xato" not in ack["text"], ack
+    assert ack["text"].startswith("✅ <b>Javoblaringiz qabul qilindi</b>"), ack
+    assert ack["text"].splitlines()[2:] == ["1 ✅", "2 ❌"], ack["text"]
+    assert KEY not in ack["text"], ack
     assert ack["reply_markup"] is not None, ack
     ack_buttons = [b for row in ack["reply_markup"].inline_keyboard for b in row]
     assert any(b.text == "📊 Natijalar" for b in ack_buttons), ack_buttons
@@ -230,7 +210,7 @@ async def check_notify_send() -> None:
     assert any(
         b.web_app is not None and "tab=results" in b.web_app.url for b in buttons
     ), buttons
-    print("[OK] notify: qabul xabari sanoqsiz, natija kartasi boy va kalitsiz")
+    print("[OK] notify: qabul xabari minimal (✅/❌), natija kartasi boy va kalitsiz")
 
 
 async def check_submit_and_notify(repos: Repositories) -> None:
@@ -258,22 +238,21 @@ async def check_submit_and_notify(repos: Repositories) -> None:
         )
         assert response.status == 200, (response.status, await response.text())
 
-    # 1) Submitda qabul xabari + kalitsiz ✅/❌ (to'g'ri javob varianti YO'Q).
+    # 1) Submitda qisqa qabul xabari + kalitsiz ✅/❌ (har biri alohida qatorda).
     assert len(bot.messages) == 1, bot.messages
     ack = bot.messages[0]
-    assert "Javoblaringiz qabul qilindi" in ack["text"], ack
-    assert "✅ To'g'ri: <b>4</b>" in ack["text"], ack
-    assert "❌ Xato: <b>1</b>" in ack["text"], ack
-    assert "1 ✅" in ack["text"] and "3 ❌" in ack["text"], ack
-    assert KEY not in ack["text"], ack
-    assert "ball" not in ack["text"] and "θ" not in ack["text"], ack
-    grid = ack["text"].split("<code>", 1)[1].split("</code>", 1)[0]
-    assert "A" not in grid and "B" not in grid, grid
+    text = ack["text"]
+    head, sep, body = text.partition("\n\n")
+    assert head == "✅ <b>Javoblaringiz qabul qilindi</b>", text
+    assert sep == "\n\n", text
+    assert body.splitlines() == ["1 ✅", "2 ✅", "3 ❌", "4 ✅", "5 ✅"], text
+    assert KEY not in text, text
+    assert "ball" not in text and "θ" not in text, text
     ack_buttons = [b for row in ack["reply_markup"].inline_keyboard for b in row]
     assert any(
         b.web_app is not None and "tab=results" in b.web_app.url for b in ack_buttons
     ), ack_buttons
-    print("[OK] /api/submit → qabul xabari + kalitsiz ✅/❌ belgilari")
+    print("[OK] /api/submit → qisqa xabar + kalitsiz ✅/❌ (har biri alohida qatorda)")
 
     # 2) Natija vaqti kelgach: baholash + fon bildirishnomasi.
     await repos.exams.update_times(
