@@ -605,36 +605,6 @@
     );
   }
 
-  /** 95% ishonch oralig'i — sertifikat bali shkalasida: trek + oraliq + nuqta. */
-  function intervalHtml(low, high, value) {
-    const left = Number(low);
-    const right = Number(high);
-    const dot = Number(value);
-    if (!Number.isFinite(left) || !Number.isFinite(right) || !Number.isFinite(dot)) {
-      return "";
-    }
-    // Trek oraliq atrofida biroz kengaytiriladi (vizual nafas olish uchun).
-    const span = Math.max(right - left, 2.0);
-    const min = left - span * 0.35;
-    const max = right + span * 0.35;
-    const scale = function (number) {
-      return Math.max(0, Math.min(100, ((number - min) / (max - min)) * 100));
-    };
-    const leftPercent = scale(left);
-    const widthPercent = Math.max(0, scale(right) - leftPercent);
-    return (
-      '<div class="res-interval">' +
-      '<div class="res-interval-head"><span>95% ishonch oralig\'i</span>' +
-      "<b>" + formatScore(left) + " … " + formatScore(right) + "</b></div>" +
-      '<div class="res-interval-track">' +
-      '<span class="res-interval-range" style="left:' + leftPercent.toFixed(1) +
-      "%;width:" + widthPercent.toFixed(1) + '%"></span>' +
-      '<span class="res-interval-dot" style="left:' + scale(dot).toFixed(1) +
-      '%"></span>' +
-      "</div></div>"
-    );
-  }
-
   /** Bosh karta: eng so'nggi natija (yoki kutilayotgan natija / bo'sh holat). */
   function renderHero(data) {
     const box = byId("results-hero");
@@ -709,7 +679,6 @@
         ? '<span class="res-record">' + icon("trophy", 12) + "Shaxsiy rekord</span>"
         : "") +
       "</div></div>" +
-      '<div id="hero-interval-slot"></div>' +
       '<div id="hero-advice-slot"></div>' +
       '<button type="button" class="res-hero-cta" data-exam="' + latest.exam_id + '">' +
       icon("chart", 15) + "Batafsil tahlil" + icon("chevron", 15) +
@@ -724,21 +693,13 @@
     fillHeroDetail(latest.exam_id);
   }
 
-  /** Hero uchun qo'shimcha aniqlik: 95% interval va daraja tavsiyasi. */
+  /** Hero uchun qo'shimcha: daraja tavsiyasi (95% interval hozircha yashirilgan). */
   function fillHeroDetail(examId) {
     const token = state.heroToken;
     API.get("/api/results/" + examId)
       .then(function (report) {
         if (token !== state.heroToken) {
           return;
-        }
-        const intervalSlot = byId("hero-interval-slot");
-        if (intervalSlot && report && Array.isArray(report.scaled_interval)) {
-          intervalSlot.innerHTML = intervalHtml(
-            report.scaled_interval[0],
-            report.scaled_interval[1],
-            report.scaled_score
-          );
         }
         const adviceSlot = byId("hero-advice-slot");
         if (adviceSlot && report && report.advice) {
@@ -1019,13 +980,6 @@
         const score = scoreOf(report);
         const subjects = Array.isArray(report.subjects) ? report.subjects : [];
         const subjectBalls = report.subject_balls || {};
-        const scoreInterval = Array.isArray(report.scaled_interval)
-          ? '<div class="profile-row"><span class="label">95% ishonch oralig&#39;i (ball)</span><b>' +
-            formatScore(report.scaled_interval[0]) +
-            " … " +
-            formatScore(report.scaled_interval[1]) +
-            " ball</b></div>"
-          : "";
         const subjectRows = subjects
           .map(function (row) {
             const ball = subjectBalls[row.code];
@@ -1049,7 +1003,6 @@
           '<div class="profile-row"><span class="label">Sertifikat bali</span><b>' +
           formatScore(score) +
           " ball</b></div>" +
-          scoreInterval +
           '<div class="profile-row"><span class="label">To\'g\'ri javoblar</span><b>' +
           report.raw_score +
           " / " +

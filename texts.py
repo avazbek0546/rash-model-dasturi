@@ -1397,17 +1397,17 @@ def result_ready(
     """Natija e'lon qilinganda yuboriladigan karta.
 
     `report` — `services.grading.build_report()` natijasi. Xabarda foydalanuvchi
-    uchun zarur bo'lgan **olti ko'rsatkich** bor: sertifikat bali (95%
-    ishonch oralig'i bilan), to'g'ri javoblar soni, θ (logit), sertifikat
-    darajasi, algebra balli va geometriya balli. Ortiqcha texnik ko'rsatkichlar
-    (SE, θ intervali, tavsiya) bu xabarga qo'shilmaydi.
+    uchun zarur bo'lgan ko'rsatkichlar bor: sertifikat bali, to'g'ri javoblar
+    soni, θ (logit), sertifikat darajasi, algebra balli va geometriya balli.
+    95% ishonch oralig'i hozircha ko'rsatilmaydi — u foydalanuvchini
+    chalkashtirishi mumkin (keyinchalik alohida qo'shilishi mumkin). SE, θ
+    intervali va tavsiya ham bu xabarga qo'shilmaydi.
     """
     level = str(report.get("ability_level") or "")
     theta = float(report.get("theta") or 0.0)
     raw = int(report.get("raw_score") or 0)
     total = int(report.get("total_questions") or 0)
     scaled = report.get("scaled_score")
-    scaled_interval = report.get("scaled_interval")
     subject_balls = report.get("subject_balls") or {}
 
     def ball(value: object) -> str:
@@ -1417,26 +1417,13 @@ def result_ready(
         except (TypeError, ValueError):
             return "—"
 
-    score_line = f"🎯 <b>Sertifikat bali:</b> {ball(scaled)}"
-    if isinstance(scaled_interval, (list, tuple)) and len(scaled_interval) == 2:
-        try:
-            low = float(scaled_interval[0])
-            high = float(scaled_interval[1])
-        except (TypeError, ValueError):
-            pass
-        else:
-            score_line += f" (95%: {low:.1f}–{high:.1f} ball)"
-    else:
-        # Chekka holat (SE yo'q) — oraliq mavjud emas, lekin joyi ko'rinadi.
-        score_line += " (95%: —)"
-
     lines = [
         "🎉 <b>Natijangiz e'lon qilindi!</b>",
         SEP,
         f"📌 {_safe(title)}",
         f"👤 {_safe(full_name)}",
         "",
-        score_line,
+        f"🎯 <b>Sertifikat bali:</b> {ball(scaled)}",
         f"✅ <b>To'g'ri javoblar:</b> {raw} / {total}",
         f"🧮 <b>θ (logit):</b> {_sign(theta)}",
         f"{_level_emoji(level)} <b>Sertifikat darajasi:</b> {_safe(level)}",

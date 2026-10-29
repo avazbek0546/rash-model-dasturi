@@ -153,18 +153,18 @@ def check_text_builder() -> None:
         report=report,
     )
     assert "Natijangiz e'lon qilindi" in ready, ready
-    # Foydalanuvchiga kerakli olti ko'rsatkich — ortiqcha texnik maydonlarsiz.
+    # Asosiy ko'rsatkich — sertifikat bali; 95% interval hozircha ko'rsatilmaydi.
     assert "Sertifikat bali:</b> 67.1 ball" in ready, ready
-    assert "(95%: 58.3–75.9 ball)" in ready, ready
+    assert "95%" not in ready, ready
+    assert "ishonch oralig'i" not in ready, ready
     assert "To'g'ri javoblar:</b> 3 / 5" in ready, ready
     assert "θ (logit):</b> +0.42" in ready, ready
     assert "Sertifikat darajasi:</b> B" in ready, ready
     assert "Algebra:</b> 70.5 ball" in ready, ready
     assert "Geometriya:</b> 63.2 ball" in ready, ready
     assert "Standart xato" not in ready, ready
-    assert "ishonch oralig'i" not in ready, ready
     assert KEY not in ready and "A2B3" not in ready, ready
-    print("[OK] Natija xabari: 6 ko'rsatkich, ortiqcha texnik maydonlarsiz")
+    print("[OK] Natija xabari: sertifikat bali + 5 ko'rsatkich, 95% interval yo'q")
 
 
 def check_result_locked() -> None:
@@ -228,7 +228,7 @@ async def check_notify_send() -> None:
     assert message["chat_id"] == USER["id"], message
     assert "Natijangiz e'lon qilindi" in message["text"], message
     assert "Sertifikat bali:" in message["text"], message
-    assert "(95%:" in message["text"], message
+    assert "95%" not in message["text"], message
     assert "To'g'ri javoblar:" in message["text"], message
     assert "θ (logit):" in message["text"], message
     assert "Sertifikat darajasi:" in message["text"], message

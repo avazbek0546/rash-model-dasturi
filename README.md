@@ -6,10 +6,12 @@ topshiradi. Baholash **Rasch modeli (Item Response Theory, 1PL)** asosida
 bajariladi — har bir savolning qiyinchiligi (`b`, logit) hisobga olinadi,
 o'quvchining bilim darajasi (`θ`, logit) **maksimal ishonchlilik
 (MLE / Newton-Raphson)** usulida topiladi. Foydalanuvchiga asosiy natija —
-**sertifikat bali (0–100)** va uning 95% ishonch oralig'i; u bilan birga xom
-ball (nechta to'g'ri), θ (logit), sertifikat darajasi (NC … A+) hamda algebra
-va geometriya ballari ko'rsatiladi. 0–100 — bu oddiy foiz emas: u θ dan
-chiziqli o'tkaziladi va savollar qiyinchiligini hisobga oladi.
+**sertifikat bali (0–100)**; u bilan birga xom ball (nechta to'g'ri), θ
+(logit), sertifikat darajasi (NC … A+) hamda algebra va geometriya ballari
+ko'rsatiladi. 95% ishonch oralig'i hozircha foydalanuvchiga **ko'rsatilmaydi**
+(chalkashtirmasligi uchun; keyinchalik alohida qo'shilishi mumkin). 0–100 — bu
+oddiy foiz emas: u θ dan chiziqli o'tkaziladi va savollar qiyinchiligini
+hisobga oladi.
 Natijalar faqat o'qituvchi belgilagan vaqtda e'lon qilinadi.
 
 * Til: **Python 3.10+** (3.14 da sinovdan o'tgan)
@@ -407,7 +409,7 @@ qo'shimcha **«⚙️ Test yaratish»** tabi ko'rinadi:
 | Tab | Nima bor |
 |---|---|
 | **Navbat** | Test kodini kiritish, javoblar varag'i (`1A2B3C…`), faol/kutilayotgan imtihonlar ro'yxati va taymer |
-| **Natijalar** | **Sertifikat bali dinamikasi** (0–100, Chart.js), o'tgan imtihonlar tarixi; asosiy ko'rsatkich — sertifikat bali, uning 95% ishonch oralig'i, to'g'ri javoblar, sertifikat darajasi, algebra/geometriya ballari; har bir imtihon bo'yicha savol-savol tahlil |
+| **Natijalar** | **Sertifikat bali dinamikasi** (0–100, Chart.js), o'tgan imtihonlar tarixi; asosiy ko'rsatkich — sertifikat bali, to'g'ri javoblar, sertifikat darajasi, algebra/geometriya ballari; har bir imtihon bo'yicha savol-savol tahlil |
 | **Offline imtihon** | Hududlar bo'yicha imtihonlar (statik ro'yxat — kelajak uchun tayyor joy) |
 | **Profil** | Ism-familiyani tahrirlash, Telegram ID, ishlangan testlar soni, vaqt zonasi |
 | **⚙️ Test yaratish** | **Faqat admin** uchun: imtihon yaratish ustasi; har bir karta ostida vaqtlar va qatnashchilar soni; **«⏰ Vaqt»** (vaqtni tahrirlash), **«👥 Qatnashchilar»** (kim qatnashgani), **«🎬 Yechim»** (qamrov, video/rasm, o'chirish, deep-link), **📄 PDF** va **🔄 Baholash** tugmalari |
@@ -431,7 +433,7 @@ qo'shimcha **«⚙️ Test yaratish»** tabi ko'rinadi:
 4. `result_time` da **natija bildirishnomasi** fon vazifasi
    (`notify.result_notification_loop`) har bir o'quvchiga bir marta quyidagi
    **olti ko'rsatkichli** kartani yuboradi:
-   * sertifikat bali (0–100) va uning **95% ishonch oralig'i**;
+   * sertifikat bali (0–100);
    * to'g'ri javoblar soni (`raw / total`);
    * θ (logit);
    * sertifikat darajasi (NC … A+);
@@ -535,10 +537,11 @@ ya'ni `−3 logit → 0 ball`, `0 → 50 ball`, `+3 → 100 ball`
 (natija `[0, 100]` oralig'iga siqiladi; chet qiymatlar 9–91 ga qisiladi).
 
 Bu **foiz emas** va u savollarning qiyinchiligini hisobga oladi. Foydalanuvchi
-uchun asosiy ko'rsatkich — shu **sertifikat bali** va uning 95% ishonch
-oralig'i. θ (logit) botdagi natija xabarida qo'shimcha texnik ko'rsatkich
-sifatida qoladi; Mini App'ning «Natijalarim» bo'limida esa asosiy o'lchov —
-sertifikat bali, diagramma ham shu bali bo'yicha chiziladi.
+uchun asosiy ko'rsatkich — shu **sertifikat bali**. 95% ishonch oralig'i
+hozircha foydalanuvchiga ko'rsatilmaydi (u chalkashtirishi mumkin; keyinchalik
+alohida qo'shilishi mumkin). θ (logit) botdagi natija xabarida qo'shimcha
+texnik ko'rsatkich sifatida qoladi; Mini App'ning «Natijalarim» bo'limida esa
+asosiy o'lchov — sertifikat bali, diagramma ham shu bali bo'yicha chiziladi.
 
 Sertifikat darajasi (NC … A+) quyidagi chegaralar bo'yicha aniqlanadi:
 `<46 → NC`, `46 → C`, `50 → C+`, `55 → B`, `60 → B+`, `65 → A`, `70 → A+`.
@@ -556,7 +559,8 @@ bergan ikki o'quvchi bir xil `θ` oladi. Farq **turli to'plamlarda** ko'rinadi:
 
 Bu raqamlar `tests/test_rasch.py` dagi test bilan tasdiqlangan: bir xil "5/10"
 natija savollar qiyinligiga qarab **butunlay boshqa ma'no** beradi. Qo'shimcha
-ustunlik: har bir baho `SE` (aniqlik) va ishonch oralig'i bilan keladi.
+ustunlik: har bir baho `SE` (aniqlik) va ishonch oralig'i bilan hisoblanadi
+(hozircha foydalanuvchiga faqat sertifikat bali ko'rsatiladi).
 
 > ⚠️ **Halol izoh:** bu loyihada `b` qiymatlari o'qituvchi tomonidan oldindan
 > belgilangan (muallif bahosi). To'liq rasmiy IRT tahlilida `b` parametrlari
