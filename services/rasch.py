@@ -318,7 +318,8 @@ def estimate_theta_eap(
     -------------
     * MLE da 0/55 yoki 55/55 kabi chekka holatlar uchun chekli yechim yo'q
       (θ = ±THETA_BOUND ga majburan qisiladi). EAP da normal prior tufayli
-      yechim **har doim chekli**: 55/55 → θ≈2.45 → 90.78 ball, 0/55 → 9 ball.
+      yechim **har doim chekli**: 55/55 → θ≈2.45 → 90.86 ball (production
+      referensi 90.78), 0/55 → 9 ball.
     * EAP posterior **o'rtachasi** va **standart chetlanishi** (SE) ni beradi —
       bu o'lchov aniqligini to'g'riroq ko'rsatadi.
     * Prior `N(prior_mean, prior_sd²)`; `prior_sd` test populyatsiyasiga

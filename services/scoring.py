@@ -467,7 +467,7 @@ def estimate_theta(
     """θ ni baholaydi — kontekstdagi `theta_method` bo'yicha.
 
     * `eap` — `rasch.estimate_theta_eap()` (production Rasch 1PL; ekstremallar
-      ham chekli: 55/55 → 90.78, 0/55 → 9);
+      ham chekli: 55/55 → ≈90.86, 0/55 → 9);
     * `mle` — `rasch.estimate_theta()` (eski xulq, orqaga moslik).
 
     EAP uchun faqat prior/panjara parametrlari uzatiladi; MLE uchun qolgan

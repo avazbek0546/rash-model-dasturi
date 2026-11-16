@@ -327,8 +327,8 @@ THETA_METHOD: str = (_get_str("THETA_METHOD", "auto") or "auto").lower()
 
 # EAP (Expected A Posteriori) prior va integratsiya panjarasi.
 # Prior — normal taqsimot: N(EAP_PRIOR_MEAN, EAP_PRIOR_SD²).
-# `EAP_PRIOR_SD` test populyatsiyasiga moslanadi (PDFda latent dispersiya 1.040;
-# 55/55 → 90.78 uchun amalda ~0.56 ishlatiladi — config orqali sozlanadi).
+# `EAP_PRIOR_SD` test populyatsiyasiga moslanadi (PDFda latent dispersiya 1.040).
+# 0.53 → 55/55 ≈ 90.86 ball; production referensi 90.78 (farq 0.08 ball).
 EAP_PRIOR_MEAN: float = _get_float("EAP_PRIOR_MEAN", 0.0)
 EAP_PRIOR_SD: float = _get_float("EAP_PRIOR_SD", 0.53)
 EAP_GRID_MIN: float = _get_float("EAP_GRID_MIN", -6.0)

@@ -4,7 +4,8 @@ Tekshiriladi:
     1. `data/item_banks/m3rash25.json` — 55 item, 35 algebra + 20 geometriya;
     2. `ScoringContext.from_exam()` per-item `b` bo'lsa **EAP** ni tanlaydi;
     3. `36a` va `36b` **alohida** `b` oladi (pozitsiya `b` sini meros olmaydi);
-    4. 55/55 → 90.78 atrofida (EAP, chekli), 0/55 → 9.00, 48/55 → 91 emas;
+    4. 55/55 → ≈90.86 (production 90.78 atrofida; EAP, chekli), 0/55 → 9.00,
+       48/55 → 91 emas;
     5. 45 pozitsiyali eski `b` — MLE (orqaga moslik);
     6. `build_report()` `total_items=55`, `raw_score` va `scaled_score` to'g'ri.
 
