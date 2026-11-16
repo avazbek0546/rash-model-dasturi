@@ -437,6 +437,19 @@ def _b_checksum(context: ScoringContext) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def b_checksum(context: ScoringContext) -> str:
+    """Baholashda ishlatilgan `b` to'plamining barqaror hash'i.
+
+    Offline import shablonida va partiya yozuvida shu hash saqlanadi. Import
+    paytida joriy kontekst hash'i bilan solishtiriladi — `b` jimgina
+    o'zgargan bo'lsa, noto'g'ri natija yozilmaydi.
+
+    Bu funksiya `_b_checksum()` ning **ochiq** ko'rinishi; algoritm bitta
+    joyda qoladi (takroriy nusxa yaratilmaydi).
+    """
+    return _b_checksum(context)
+
+
 @dataclass(frozen=True, slots=True)
 class SnapshotItem:
     """`scoring_snapshot_items` satrining **tayyor** ko'rinishi (hozir yozilmaydi).

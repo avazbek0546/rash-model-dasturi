@@ -19,5 +19,8 @@ tzdata>=2024.1
 # kutubxonalarini talab qilmaydi.
 fpdf2>=2.7.0
 
+# Offline mock Excel shabloni va import (faqat admin uchun). Sof Python.
+openpyxl>=3.1,<4.0
+
 # Eslatma: Rasch modeli (IRT) hisob-kitoblari sof Python "math" modulida
 # bajariladi, shu sababli numpy/scipy kerak emas.

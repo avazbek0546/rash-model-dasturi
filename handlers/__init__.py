@@ -9,8 +9,9 @@ Router'lar ro'yxati va ularning tartibi muhim:
     6. admin_manage   — /admins paneli (adminlarni boshqarish)
     7. admin_chat     — /admin_chat va admin chatga kirishni qo'riqlash
     8. admin_solution — /add_solution va video/media yechim yuklash (o'qituvchi)
-    9. analysis       — «🔍 Test tahlili» bo'limi (o'quvchi)
-    10. fallback      — boshqa barcha xabarlar (ENG OXIRGI bo'lishi shart)
+    9. admin_offline  — /offline_* Excel import, reyting va PDF (faqat admin)
+    10. analysis      — «🔍 Test tahlili» bo'limi (o'quvchi)
+    11. fallback      — boshqa barcha xabarlar (ENG OXIRGI bo'lishi shart)
 
 Eski "mashq rejimi" (chatda savol-javob) arxivga o'tkazildi: `handlers/test.py`,
 `handlers/results.py`, `handlers/about.py` va `services/test_session.py` fayllari
@@ -26,6 +27,7 @@ from handlers import (
     admin_chat,
     admin_exam,
     admin_manage,
+    admin_offline,
     admin_solution,
     analysis,
     fallback,
@@ -50,6 +52,7 @@ def setup_routers() -> Router:
         admin_manage,
         admin_chat,
         admin_solution,
+        admin_offline,
         analysis,
         fallback,
     ):

@@ -78,6 +78,35 @@ class StudentRow:
     geometry: float | None  # geometriya bo'limi balli
     correct: int  # to'g'ri javoblar soni
     total: int  # jami savol (element) soni
+    # Offline/online birlashgan hisobot uchun ixtiyoriy maydonlar. Mavjud
+    # `build_results_pdf()` chaqiruvlari o'zgarmaydi (default qiymatlar).
+    source: str = ""
+    student_code: str = ""
+    standard_error: float | None = None
+    rank: int | None = None
+    included: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class ReportMeta:
+    """Birlashgan/offline PDF uchun hisobot metadatasini saqlaydi."""
+
+    title: str
+    test_code: str
+    date_text: str
+    subtitle: str
+    participants: int
+    offline_count: int
+    online_count: int
+    excluded_count: int
+    b_source: str
+    b_checksum: str
+    key_fingerprint: str
+    engine_version: str
+    form_version_id: int | None
+    batch_ids: str
+    ranking_rule: str
+    generated_at: str
 
 
 @lru_cache(maxsize=1)
@@ -119,6 +148,34 @@ COLUMNS: tuple[tuple[str, float, str], ...] = (
     ("θ (logit)", 20, "C"),
     ("Daraja", 18, "C"),
     ("To'g'ri", 20, "C"),
+)
+
+#: Birlashgan hisobot ustunlari — jami 190 mm.
+COMBINED_COLUMNS: tuple[tuple[str, float, str], ...] = (
+    ("#", 8, "C"),
+    ("Ism-familiya", 56, "L"),
+    ("Manba", 15, "C"),
+    ("Ball", 18, "C"),
+    ("Algebra", 16, "C"),
+    ("Geometriya", 17, "C"),
+    ("θ", 14, "C"),
+    ("SE", 12, "C"),
+    ("Daraja", 13, "C"),
+    ("To'g'ri", 21, "C"),
+)
+
+#: Faqat offline hisobot ustunlari — jami 190 mm.
+OFFLINE_COLUMNS: tuple[tuple[str, float, str], ...] = (
+    ("#", 8, "C"),
+    ("Kod", 18, "L"),
+    ("Ism-familiya", 50, "L"),
+    ("Ball", 17, "C"),
+    ("Algebra", 16, "C"),
+    ("Geometriya", 17, "C"),
+    ("θ", 14, "C"),
+    ("SE", 12, "C"),
+    ("Daraja", 13, "C"),
+    ("To'g'ri", 25, "C"),
 )
 
 
@@ -264,3 +321,184 @@ def build_results_pdf(
         _text(pdf, 6, "Hozircha natija yo'q.", size=9)
 
     return bytes(pdf.output())
+
+
+# ---------------------------------------------------------------------------
+# Birlashgan (offline + online) va faqat offline hisobotlar
+# ---------------------------------------------------------------------------
+def _se_text(value: float | None) -> str:
+    return "—" if value is None else f"{float(value):.2f}"
+
+
+def _short_name(value: str, limit: int) -> str:
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _draw_report_title(pdf, meta: ReportMeta) -> None:
+    pdf.set_text_color(*BLACK)
+    _text(pdf, 9, "RASH EXAM — NATIJALAR", size=16, align="C")
+    _text(pdf, 7, str(meta.title), size=12, align="C")
+    _text(pdf, 6, str(meta.subtitle), size=10, align="C")
+    _text(
+        pdf,
+        6,
+        f"Kod: {meta.test_code}   ·   Sana: {meta.date_text}   ·   "
+        f"Reytingda: {meta.participants}",
+        size=9,
+        align="C",
+    )
+    pdf.ln(1)
+
+
+def _draw_counts(pdf, meta: ReportMeta) -> None:
+    pdf.set_text_color(*BLACK)
+    _text(
+        pdf,
+        5.5,
+        f"Oflayn: {meta.offline_count}   ·   Onlayn: {meta.online_count}   ·   "
+        f"Chiqarilgan online: {meta.excluded_count}   ·   "
+        f"Jami reytingda: {meta.participants}",
+        size=8,
+        align="C",
+    )
+    pdf.ln(1)
+
+
+def _draw_meta_block(pdf, meta: ReportMeta) -> None:
+    pdf.set_text_color(*BLACK)
+    _text(pdf, 5, "Hisobot parametrlari", size=9)
+    pdf.set_font("main", size=7.5)
+    lines = (
+        f"b manbasi: {meta.b_source}   ·   b fingerprint: {meta.b_checksum[:16]}…",
+        f"Kalit fingerprint: {meta.key_fingerprint[:16]}…   ·   "
+        f"Engine: {meta.engine_version}   ·   Forma: {meta.form_version_id}",
+        f"Partiyalar: {meta.batch_ids}   ·   Yaratilgan: {meta.generated_at}",
+        f"Reyting qoidasi: {meta.ranking_rule}",
+    )
+    for line in lines:
+        pdf.cell(0, 4.5, text=line)
+        pdf.ln(4.5)
+    pdf.ln(1)
+
+
+def _draw_table_header(pdf, columns: tuple[tuple[str, float, str], ...]) -> None:
+    pdf.set_font("main", size=8)
+    pdf.set_fill_color(*HEADER_BG)
+    pdf.set_text_color(*WHITE)
+    pdf.set_draw_color(*BORDER)
+    for heading, width, align in columns:
+        pdf.cell(width, 7, text=heading, border=1, align=align, fill=True)
+    pdf.ln(7)
+
+
+def _page_header(
+    pdf, meta: ReportMeta, columns: tuple[tuple[str, float, str], ...]
+) -> None:
+    pdf.set_text_color(*BLACK)
+    _text(pdf, 6, f"{meta.title} — {meta.subtitle}", size=10, align="C")
+    _draw_table_header(pdf, columns)
+
+
+def _table_values(
+    row: StudentRow, index: int, *, offline_only: bool
+) -> tuple[str, ...]:
+    rank = str(row.rank if row.rank is not None else index)
+    if offline_only:
+        return (
+            rank,
+            str(row.student_code),
+            _short_name(row.name, 28),
+            _fmt(row.total_ball),
+            _fmt(row.algebra),
+            _fmt(row.geometry),
+            f"{row.theta:+.2f}",
+            _se_text(row.standard_error),
+            str(row.level),
+            f"{row.correct}/{row.total}",
+        )
+    return (
+        rank,
+        _short_name(row.name, 34),
+        "Oflayn" if row.source == "offline" else "Onlayn",
+        _fmt(row.total_ball),
+        _fmt(row.algebra),
+        _fmt(row.geometry),
+        f"{row.theta:+.2f}",
+        _se_text(row.standard_error),
+        str(row.level),
+        f"{row.correct}/{row.total}",
+    )
+
+
+def _draw_students_table(
+    pdf,
+    students: list[StudentRow],
+    columns: tuple[tuple[str, float, str], ...],
+    meta: ReportMeta,
+    *,
+    offline_only: bool,
+) -> None:
+    if not students:
+        pdf.set_text_color(*BLACK)
+        _text(pdf, 6, "Hozircha natija yo'q.", size=9)
+        return
+    for index, row in enumerate(students, start=1):
+        if pdf.get_y() > 262:
+            pdf.add_page()
+            _page_header(pdf, meta, columns)
+        color = LEVEL_COLORS.get(row.level)
+        pdf.set_fill_color(*(color or WHITE))
+        pdf.set_text_color(*BLACK)
+        pdf.set_font("main", size=8)
+        pdf.set_draw_color(*BORDER)
+        values = _table_values(row, index, offline_only=offline_only)
+        for (_heading, width, align), value in zip(columns, values):
+            pdf.cell(width, 6.2, text=value, border=1, align=align, fill=color is not None)
+        pdf.ln(6.2)
+
+
+def _build_unified_pdf(
+    meta: ReportMeta,
+    students: list[StudentRow],
+    columns: tuple[tuple[str, float, str], ...],
+    *,
+    offline_only: bool,
+) -> bytes:
+    pdf = _fpdf()
+    pdf.add_page()
+    _draw_report_title(pdf, meta)
+    _draw_counts(pdf, meta)
+    _draw_chart(pdf, _level_counts(students))
+    _draw_meta_block(pdf, meta)
+    pdf.set_text_color(*BLACK)
+    _text(pdf, 7, "Reyting", size=12)
+    _draw_table_header(pdf, columns)
+    _draw_students_table(pdf, students, columns, meta, offline_only=offline_only)
+    pdf.ln(2)
+    pdf.set_font("main", size=7)
+    pdf.set_text_color(*BLACK)
+    pdf.cell(
+        0,
+        4,
+        text=(
+            f"b: {meta.b_source} / {meta.b_checksum[:12]}…   ·   "
+            f"kalit: {meta.key_fingerprint[:12]}…   ·   "
+            f"engine: {meta.engine_version}   ·   partiya: {meta.batch_ids}"
+        ),
+    )
+    return bytes(pdf.output())
+
+
+def build_combined_results_pdf(
+    *, meta: ReportMeta, students: list[StudentRow]
+) -> bytes:
+    """Offline + online umumiy reyting PDF."""
+    return _build_unified_pdf(meta, students, COMBINED_COLUMNS, offline_only=False)
+
+
+def build_offline_results_pdf(
+    *, meta: ReportMeta, students: list[StudentRow]
+) -> bytes:
+    """Faqat offline ishtirokchilar PDF."""
+    return _build_unified_pdf(meta, students, OFFLINE_COLUMNS, offline_only=True)

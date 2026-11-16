@@ -350,6 +350,103 @@ def analysis_exams_kb(window: Any) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+class OfflineAdminCallback(CallbackData, prefix="offl"):
+    """Offline mock import tugmalari (faqat admin)."""
+
+    action: str
+    exam_id: int = 0
+    batch_id: int = 0
+    participant_id: int = 0
+    user_id: int = 0
+
+
+def offline_menu_kb(exam_id: int) -> InlineKeyboardMarkup:
+    """Bitta imtihon uchun offline amallar."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="📥 Shablon",
+        callback_data=OfflineAdminCallback(action="template", exam_id=exam_id),
+    )
+    builder.button(
+        text="📤 Excel yuklash",
+        callback_data=OfflineAdminCallback(action="import", exam_id=exam_id),
+    )
+    builder.button(
+        text="📚 Import tarixi",
+        callback_data=OfflineAdminCallback(action="batches", exam_id=exam_id),
+    )
+    builder.button(
+        text="📄 PDF hisobotlar",
+        callback_data=OfflineAdminCallback(action="report", exam_id=exam_id),
+    )
+    builder.button(
+        text="🔗 Bog'lash",
+        callback_data=OfflineAdminCallback(action="links", exam_id=exam_id),
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def offline_preview_kb(batch_id: int) -> InlineKeyboardMarkup:
+    """Preview: tasdiqlash yoki bekor qilish."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="✅ Tasdiqlash",
+        callback_data=OfflineAdminCallback(action="confirm", batch_id=batch_id),
+        style="success",
+    )
+    builder.button(
+        text="❌ Bekor qilish",
+        callback_data=OfflineAdminCallback(action="cancel", batch_id=batch_id),
+        style="danger",
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def offline_cancel_kb(batch_id: int) -> InlineKeyboardMarkup:
+    """Xatoli preview uchun faqat bekor qilish."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="❌ Bekor qilish",
+        callback_data=OfflineAdminCallback(action="cancel", batch_id=batch_id),
+        style="danger",
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def offline_link_kb(participant_id: int, user_id: int, exam_id: int) -> InlineKeyboardMarkup:
+    """Bitta nomzodni tasdiqlash."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="✅ Bog'lash",
+        callback_data=OfflineAdminCallback(
+            action="link_confirm",
+            exam_id=exam_id,
+            participant_id=participant_id,
+            user_id=user_id,
+        ),
+        style="success",
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def offline_unlink_kb(participant_id: int, exam_id: int) -> InlineKeyboardMarkup:
+    """Bog'lanishni bekor qilish."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="🔓 Bog'lanishni bekor qilish",
+        callback_data=OfflineAdminCallback(
+            action="unlink", exam_id=exam_id, participant_id=participant_id
+        ),
+        style="danger",
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def analysis_questions_kb(
     units: Sequence[solutions.QuestionUnit], *, exam_id: int, page: int = 1
 ) -> InlineKeyboardMarkup:

@@ -11,6 +11,12 @@ import sqlite3
 from typing import Any, Iterable, Mapping, Sequence
 
 from database.db import Database
+from database.offline_repository import (
+    OfflineAttemptRepository,
+    OfflineDecisionRepository,
+    OfflineImportRepository,
+    OfflineParticipantRepository,
+)
 from database.models import (
     PART_WHOLE,
     BotAdmin,
@@ -2467,3 +2473,8 @@ class Repositories:
         self.admins = BotAdminRepository(db)
         # Kalit/qiymat sozlamalari (`bot_settings`) — masalan `admin_chat_id`.
         self.settings = BotSettingsRepository(db)
+        # Offline mock import (011 migratsiya) — mavjud onlayn jadvallarga tegmaydi.
+        self.offline_batches = OfflineImportRepository(db)
+        self.offline_participants = OfflineParticipantRepository(db)
+        self.offline_attempts = OfflineAttemptRepository(db)
+        self.offline_decisions = OfflineDecisionRepository(db)

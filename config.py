@@ -267,6 +267,19 @@ DIFFICULTY_SHRINKAGE_ENABLED: bool = _get_bool("DIFFICULTY_SHRINKAGE_ENABLED", F
 DIFFICULTY_SHRINK_K: float = _get_float("DIFFICULTY_SHRINK_K", 30.0)
 
 # ---------------------------------------------------------------------------
+# Offline mock import (011 migratsiya)
+# ---------------------------------------------------------------------------
+# Feature flag: False bo'lsa, offline handlerlar ishlamaydi va tizim avvalgidek
+# qoladi. Standart True — yangi imkoniyat darhol ishlatilishi uchun.
+OFFLINE_IMPORT_ENABLED: bool = _get_bool("OFFLINE_IMPORT_ENABLED", True)
+# Bitta Excel fayldagi maksimal o'quvchi qatorlari va fayl hajmi.
+OFFLINE_IMPORT_MAX_ROWS: int = _get_int("OFFLINE_IMPORT_MAX_ROWS", 2000) or 2000
+OFFLINE_IMPORT_MAX_MB: int = _get_int("OFFLINE_IMPORT_MAX_MB", 5) or 5
+# Shablon va reyting qoidasi versiyalari (hisobot metadata uchun).
+OFFLINE_TEMPLATE_VERSION: str = _get_str("OFFLINE_TEMPLATE_VERSION", "1") or "1"
+OFFLINE_RANKING_RULE_VERSION: str = _get_str("OFFLINE_RANKING_RULE_VERSION", "v1") or "v1"
+
+# ---------------------------------------------------------------------------
 # Ifodani saqlash (Phase 1 — expression preservation)
 # ---------------------------------------------------------------------------
 # True (standart): o'quvchi kiritgan ASL matematik ifoda (`√5+1`) `responses`

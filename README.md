@@ -257,6 +257,75 @@ To'liq yo'riqnoma, tekshirish ro'yxati va xatolar jadvali:
 | `/admins` | Adminlarni boshqarish: «➕ Admin qo'shish» (odamning xabarini **forward** qilish kifoya), «🗑» bilan o'chirish |
 | `/cancel` | Ustani istalgan qadamda bekor qilish |
 
+### 📥 Offline mock — qog'oz natijalarini yuklash
+
+Bitta imtihon **online** (Mini App) va **offline** (qog'ozda) birgalikda
+o'tkazilishi mumkin. Offline o'quvchilar botda ro'yxatdan o'tishi shart emas:
+ular Excel qatorlari sifatida saqlanadi. Online va offline natijalar **bitta
+Rasch 1PL modeli** bilan baholanadi va bitta reytingga qo'shiladi.
+
+Imtihon tuzilishi: **45 pozitsiya**, 36–45 ochiq savollar `a`/`b` ga bo'linadi
+→ jami **55 baholanadigan item** (`1…35`, `36a`, `36b`, …, `45b`).
+
+| Komanda | Vazifasi |
+|---|---|
+| `/offline KOD` | Imtihonning offline paneli: shablon, import, tarix, PDF va bog'lash tugmalari |
+| `/offline_check KOD` | 55 item, labeled kalit va `b` tayyorgarligini tekshirish |
+| `/offline_template KOD` | Shu imtihonga bog'langan `.xlsx` shablonni yuklab berish |
+| `/offline_import KOD` | Excel faylni qabul qilish (preview → tasdiqlash) |
+| `/offline_batches KOD` | Import partiyalari tarixi va holati |
+| `/offline_void BATCH_ID` | Partiyani bekor qilish (natijalar tarixda qoladi) |
+| `/offline_links KOD` | Offline/online nomzodlar, tasdiqlangan va bog'lanmagan ishtirokchilar |
+| `/offline_link_user PARTICIPANT_ID USER_ID` | Offline natijani Telegram foydalanuvchisiga qo'lda bog'lash |
+| `/offline_unlink PARTICIPANT_ID` | Bog'lanishni bekor qilish |
+| `/offline_report KOD` | Ikki PDF: umumiy reyting va faqat offline reyting |
+
+**Excel shabloni** (`/offline_template` bilan yaratiladi):
+
+* `Natijalar` varag'i: `student_code`, `full_name`, `class`,
+  `telegram_username` (ixtiyoriy), so'ng **55 ustun** — `1…35`, `36a`,
+  `36b`, … `45b`. Tartibni o'zgartirmang.
+* Har bir topshiriq uchun faqat `1` (to'g'ri) yoki `0` (noto'g'ri).
+* Formula, birlashtirilgan katak, bo'sh qator va yashirin ustun ishlatilmaydi;
+  fayl `.xlsx`, 5 MB gacha, 2000 qatorgacha.
+* `Meta` varag'i shablonni imtihon kodi, forma versiyasi, kalit fingerprinti va
+  `b` checksumiga bog'laydi. Boshqa testdan olingan yoki o'zgartirilgan fayl
+  **META_MISMATCH** bilan rad etiladi — bu online va offline natijalarni bir xil
+  kalit/qiyinlik bilan baholashni kafolatlaydi.
+
+**Ish tartibi:**
+
+1. Admin `/new_exam` orqali imtihon yaratadi (45 pozitsiya, `a`/`b` qismli kalit).
+2. `/offline_check KOD` — tizim tayyorligini tekshiradi.
+3. `/offline_template KOD` → o'qituvchi Excelni to'ldiradi.
+4. `/offline_import KOD` → faylni yuboradi. Bot barcha qatorlarni tekshiradi;
+   xato bo'lsa bazaga hech narsa yozilmaydi. Tasdiqlangach bitta tranzaksiyada
+   saqlanadi.
+5. Keyin shu imtihon Telegram kanalida online o'tkaziladi.
+6. `/offline_report KOD` — **umumiy** (online + offline) va **faqat offline**
+   PDF reytinglarini yuboradi. Ikkala hisobotda ham θ, SE, 0–100 ball, daraja
+   va to'g'ri javoblar soni bor.
+
+**Adolat va dublikatlar:**
+
+* Online va offline bir xil `rasch.estimate_theta()` funksiyasini ishlatadi;
+  kalit yoki `b` o'zgarsa, import/commit bloklanadi.
+* Exceldagi `telegram_username` botdagi username bilan **aynan** mos kelsa,
+  offline natija avtomatik bog'lanadi. Ism-familiya bo'yicha topilgan nomzod
+  faqat taklif bo'ladi (admin tasdiqlaydi).
+* Agar o'quvchi ham online, ham offline qatnashgan bo'lsa, **offline rasmiy**
+  hisoblanadi; online natija bazada saqlanadi, lekin reytingda ikkinchi marta
+  chiqmaydi. Partiya bekor qilinsa, online natija reytingga qaytadi.
+* Botda ro'yxatdan o'tmagan offline qatnashchilar ham PDF va reytingda ko'rinadi.
+
+Sozlamalar: `OFFLINE_IMPORT_ENABLED` (standart `1`), `OFFLINE_IMPORT_MAX_ROWS`,
+`OFFLINE_IMPORT_MAX_MB`, `OFFLINE_TEMPLATE_VERSION`,
+`OFFLINE_RANKING_RULE_VERSION`. Baza o'zgarishlari faqat `011_offline_mock.sql`
+migratsiyasida — mavjud `users`, `exams`, `user_answers` jadvallariga
+tegilmaydi.
+
+Tekshirish: `python tests/test_offline_mock.py`.
+
 ### 🔍 «Test tahlili» bo'limi (o'quvchi)
 
 Natijasi **e'lon qilingan** va o'quvchi **javob yuborgan** imtihonlar tahlil
@@ -651,6 +720,7 @@ python tests/test_admin_panel.py  # vaqtni tahrirlash + qatnashchilar + admin ch
 python tests/test_admin_chat.py   # /admin_chat + begonalarni chiqarish
 python tests/test_flow.py         # eski mashq rejimi + router/klaviatura
 python tests/test_bot_flow.py     # botning TO'LIQ oqimi (Telegram'siz)
+python tests/test_offline_mock.py # Excel → 55 item → online/offline yagona reyting + PDF
 ```
 
 **`test_rasch.py`** — model matematikasi:

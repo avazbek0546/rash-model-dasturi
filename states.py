@@ -48,6 +48,12 @@ class SolutionUploadStates(StatesGroup):
     awaiting_upload = State()
 
 
+class OfflineImportStates(StatesGroup):
+    """Offline mock Excel yuklash holati (faqat admin)."""
+
+    waiting_file = State()
+
+
 class AdminManageStates(StatesGroup):
     """`/admins` paneli — yangi adminni qo'shish holati.
 
