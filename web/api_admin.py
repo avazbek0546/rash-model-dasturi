@@ -7,7 +7,9 @@ Mini App ichidagi admin bo'limi uchun endpoint'lar::
     POST /api/v2/admin/exams                — yangi test yaratish
     POST /api/v2/admin/exams/{id}/schedule  — vaqtlarni o'zgartirish
     GET  /api/v2/admin/exams/{id}/participants — qatnashchilar ro'yxati
-    POST /api/v2/admin/exams/{id}/regrade   — qayta baholash
+    GET  /api/v2/admin/exams/{id}/quality     — test sifati dashboardi
+    POST /api/v2/admin/exams/{id}/calibrate   — JMLE `b` kalibrlash (preview/apply)
+    POST /api/v2/admin/exams/{id}/regrade     — qayta baholash
     POST /api/v2/admin/exams/{id}/report-send — PDF ni adminga chatda yuborish
     GET  /api/v2/admin/exams/{id}/solutions — «🎬 Yechimlar» qamrovi
     POST /api/v2/admin/solutions/delete     — bitta yechimni o'chirish
@@ -39,6 +41,7 @@ from aiohttp import web
 import config
 from database.models import normalize_part
 from services import exam_admin, exam_service, grading, report_data, report_pdf, test_quality
+from services import calibration
 from services import solutions as solutions_service
 from web.api import ApiError, ensure_user, get_bot, read_json, repositories
 
@@ -305,6 +308,61 @@ async def exam_quality(request: web.Request) -> web.Response:
     except test_quality.TestQualityError as exc:
         raise ApiError(400, str(exc)) from exc
     return web.json_response(report)
+
+
+async def calibrate_exam(request: web.Request) -> web.Response:
+    """Imtihon javoblaridan `b` ni JMLE bilan kalibrlaydi (faqat admin).
+
+    Body (ixtiyoriy)::
+
+        {"source": "combined", "min_n": 200, "max_iter": 100, "tol": 1e-4,
+         "apply": false}
+
+    `apply=false` (default) — faqat preview; `true` — `exams.difficulty_logits`
+    ga yozadi. 10 000+ qatnashchi uchun mo'ljallangan; `min_n` dan kam bo'lsa
+    400 qaytaradi.
+    """
+    await ensure_admin(request)
+    repos = repositories(request)
+    exam_id = _exam_id(request)
+    exam = await repos.exams.get(exam_id)
+    if exam is None:
+        raise ApiError(404, "Imtihon topilmadi.")
+
+    body = await read_json(request)
+    source = str(body.get("source") or "combined").strip().lower()
+    if source not in {"online", "offline", "combined"}:
+        raise ApiError(400, "`source` online/offline/combined bo'lishi kerak.")
+    try:
+        min_n = int(body.get("min_n") or 200)
+        max_iter = int(body.get("max_iter") or 100)
+        tol = float(body.get("tol") or 1e-4)
+    except (TypeError, ValueError) as exc:
+        raise ApiError(400, "`min_n`, `max_iter`, `tol` son bo'lishi kerak.") from exc
+    if min_n < 1:
+        raise ApiError(400, "`min_n` musbat bo'lishi kerak.")
+
+    try:
+        matrix = await calibration.build_exam_matrix(repos, exam, source=source)
+        result = calibration.calibrate_rasch(
+            matrix.matrix,
+            matrix.labels,
+            min_n=min_n,
+            max_iter=max_iter,
+            tol=tol,
+        )
+    except calibration.CalibrationError as exc:
+        raise ApiError(400, str(exc)) from exc
+
+    payload = result.to_dict()
+    payload["online_count"] = matrix.online_count
+    payload["offline_count"] = matrix.offline_count
+    payload["excluded_online"] = matrix.excluded_online
+    payload["applied"] = False
+    if bool(body.get("apply")):
+        payload["b_json"] = await calibration.apply_calibration(repos, exam, result)
+        payload["applied"] = True
+    return web.json_response(payload)
 
 
 async def regrade_exam(request: web.Request) -> web.Response:
@@ -675,6 +733,7 @@ def setup_routes(app: web.Application) -> None:
     router.add_post("/api/v2/admin/exams/{exam_id}/schedule", update_schedule)
     router.add_get("/api/v2/admin/exams/{exam_id}/participants", exam_participants)
     router.add_get("/api/v2/admin/exams/{exam_id}/quality", exam_quality)
+    router.add_post("/api/v2/admin/exams/{exam_id}/calibrate", calibrate_exam)
     router.add_post("/api/v2/admin/exams/{exam_id}/regrade", regrade_exam)
     router.add_post("/api/v2/admin/exams/{exam_id}/report-link", report_link)
     # Mini App «📄 PDF» tugmasi: fayl brauzerga emas, adminga chatga yuboriladi.

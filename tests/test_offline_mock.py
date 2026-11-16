@@ -30,6 +30,7 @@ from database.models import User  # noqa: E402
 from database.repository import Repositories  # noqa: E402
 from services import exam_admin, exam_service, form_layout, grading, offline_import  # noqa: E402
 from services import offline_report, offline_scoring, offline_template, report_pdf, test_quality  # noqa: E402
+from services import calibration  # noqa: E402
 
 ADMIN_ID = 900001
 ALI_ID = 900101
@@ -191,6 +192,23 @@ async def main() -> None:
         print(
             "[OK] Test sifati: offline=2, combined=3 (online 1 + offline 2)"
         )
+
+        # Avtomatik kalibrlash matritsasi: 1 online + 2 offline, 55 item
+        calibration_matrix = await calibration.build_exam_matrix(
+            repos, exam, source="combined"
+        )
+        assert calibration_matrix.online_count == 1
+        assert calibration_matrix.offline_count == 2
+        assert len(calibration_matrix.labels) == 55
+        calibration_result = calibration.calibrate_rasch(
+            calibration_matrix.matrix,
+            calibration_matrix.labels,
+            min_n=1,
+            max_iter=10,
+        )
+        assert calibration_result.person_count == 3
+        assert calibration_result.item_count == 55
+        print("[OK] Kalibrlash matritsasi: N=3, K=55 (online 1 + offline 2)")
         assert len(combined.students) == 3 and combined.students[0].rank == 1
 
         pdf_combined = report_pdf.build_combined_results_pdf(

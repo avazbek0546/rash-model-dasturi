@@ -267,6 +267,7 @@ async def check_admin_ui() -> None:
     assert "admin-difficulty" not in html, "HTML'da eski b maydoni qoldi"
     assert "admin-difficulty" not in js, "JS'da eski b maydoni qoldi"
     assert "item bank" in html.lower(), "item bank haqida izoh yo'q"
+    assert "Kalibrlash" in js, "kalibrlash tugmasi yo'q"
     print("[OK] Admin panel: qo'lda b kiritish maydoni olib tashlangan")
 
 

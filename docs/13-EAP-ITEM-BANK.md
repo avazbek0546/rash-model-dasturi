@@ -141,3 +141,20 @@ python scripts/test_quality.py --test-code m3rash25 --html quality.html
 > Aniq M2 uchun to'liq pair covariance va katta hisob kerak. SRMSR bevosita
 > standartlashtirilgan residuallardan hisoblanadi.
 
+## 9. Avtomatik kalibrlash (10 000+ qatnashchi)
+
+`services/calibration.py` — Rasch 1PL **JMLE**. Yetarli `N` yig'ilgach `b` ni
+javoblardan qayta hisoblaydi va `exams.difficulty_logits` ga yozadi.
+
+```bash
+python scripts/calibrate_item_bank.py --test-code m3rash25 --min-n 200 --apply
+```
+
+API:
+
+```text
+POST /api/v2/admin/exams/{exam_id}/calibrate
+```
+
+Batafsil: `docs/14-AUTO-CALIBRATION.md`.
+

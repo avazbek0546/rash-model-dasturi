@@ -113,6 +113,9 @@
           '<button type="button" class="report" data-exam="' +
           row.exam_id +
           '" title="PDF hisobotni chatga yuborish">📄 PDF</button>' +
+          '<button type="button" class="ghost calibrate" data-exam="' +
+          row.exam_id +
+          '" title="Javoblardan b ni JMLE bilan kalibrlash">📐 Kalibrlash</button>' +
           '<button type="button" class="ghost regrade" data-exam="' +
           row.exam_id +
           '" title="Qayta baholash">🔄 Baholash</button>' +
@@ -138,6 +141,11 @@
     root.querySelectorAll(".regrade").forEach(function (button) {
       button.addEventListener("click", function () {
         regrade(Number(button.dataset.exam));
+      });
+    });
+    root.querySelectorAll(".calibrate").forEach(function (button) {
+      button.addEventListener("click", function () {
+        calibrate(Number(button.dataset.exam));
       });
     });
     root.querySelectorAll(".solutions").forEach(function (button) {
@@ -384,6 +392,66 @@
         {}
       );
       App.setNotice("success", "🔄 Qayta baholandi: " + result.graded + " javob", true);
+      loadExams();
+    } catch (error) {
+      App.setNotice("error", error.message, false);
+    }
+  }
+
+  async function calibrate(examId) {
+    const ok = await API.confirm(
+      "Javoblardan b ni JMLE bilan qayta kalibrlaymizmi? Avval preview ko'rsatiladi."
+    );
+    if (!ok) {
+      return;
+    }
+    try {
+      const preview = await API.post(
+        "/api/v2/admin/exams/" + examId + "/calibrate",
+        { source: "combined", min_n: 200, apply: false }
+      );
+      let text =
+        "📐 N=" +
+        Number(preview.person_count || 0) +
+        ", K=" +
+        Number(preview.item_count || 0) +
+        ", iter=" +
+        Number(preview.iterations || 0) +
+        ", converged=" +
+        String(preview.converged) +
+        ", b=[" +
+        Number(preview.b_min || 0).toFixed(2) +
+        "; " +
+        Number(preview.b_max || 0).toFixed(2) +
+        "]";
+      if (preview.warnings && preview.warnings.length) {
+        text += " ⚠️ " + preview.warnings[0];
+      }
+      App.setNotice("success", text, true);
+
+      const apply = await API.confirm(
+        "Natijani examga yozib, qayta baholaymizmi? (N=" +
+          Number(preview.person_count || 0) +
+          ")"
+      );
+      if (!apply) {
+        return;
+      }
+      await API.post(
+        "/api/v2/admin/exams/" + examId + "/calibrate",
+        { source: "combined", min_n: 200, apply: true }
+      );
+      const regraded = await API.post(
+        "/api/v2/admin/exams/" + examId + "/regrade",
+        {}
+      );
+      App.setNotice(
+        "success",
+        "📐 Kalibrlandi va qayta baholandi: " +
+          Number(regraded.graded || 0) +
+          " javob",
+        true
+      );
       loadExams();
     } catch (error) {
       App.setNotice("error", error.message, false);

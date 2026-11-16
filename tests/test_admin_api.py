@@ -186,6 +186,27 @@ async def run_checks(repos: Repositories) -> None:
         assert invalid_source.status == 400, invalid_source.status
         print("[OK] GET .../quality: test sifati hisoboti (N=1, K=3)")
 
+        # 6c) Avtomatik kalibrlash: admin preview 200; o'quvchi 403
+        calibrate_url = f"/api/v2/admin/exams/{exam.exam_id}/calibrate"
+        denied_calibration = await client.post(
+            calibrate_url, json={"min_n": 1}, headers=STUDENT_HEADERS
+        )
+        assert denied_calibration.status == 403, denied_calibration.status
+        calibration_response = await client.post(
+            calibrate_url,
+            json={"source": "online", "min_n": 1, "apply": False},
+            headers=ADMIN_HEADERS,
+        )
+        assert calibration_response.status == 200, (
+            calibration_response.status,
+            await calibration_response.text(),
+        )
+        calibration_payload = await calibration_response.json()
+        assert calibration_payload["item_count"] == 3, calibration_payload
+        assert calibration_payload["person_count"] == 1, calibration_payload
+        assert calibration_payload["applied"] is False, calibration_payload
+        print("[OK] POST .../calibrate: JMLE preview (N=1, K=3)")
+
         link = await client.post(
             f"/api/v2/admin/exams/{exam.exam_id}/report-link",
             headers=ADMIN_HEADERS,
