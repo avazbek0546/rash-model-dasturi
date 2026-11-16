@@ -259,6 +259,17 @@ async def check_api(repos: Repositories, bot: FakeBot) -> None:
         print("[OK] `texts.participants_chunks` sanoqni ko'rsatdi")
 
 
+async def check_admin_ui() -> None:
+    """Mini App admin panelida qo'lda `b` kiritish maydoni yo'qligini tekshiradi."""
+    root = Path(__file__).resolve().parent.parent / "webapp"
+    html = (root / "index.html").read_text(encoding="utf-8")
+    js = (root / "js" / "admin.js").read_text(encoding="utf-8")
+    assert "admin-difficulty" not in html, "HTML'da eski b maydoni qoldi"
+    assert "admin-difficulty" not in js, "JS'da eski b maydoni qoldi"
+    assert "item bank" in html.lower(), "item bank haqida izoh yo'q"
+    print("[OK] Admin panel: qo'lda b kiritish maydoni olib tashlangan")
+
+
 async def main() -> None:
     tmp_dir = Path(tempfile.mkdtemp(prefix="admin_panel_"))
     db = Database(tmp_dir / "admin_panel.db")
@@ -275,6 +286,7 @@ async def main() -> None:
     print("Admin panel testi (vaqtni tahrirlash + qatnashchilar + admin chat)")
     print("=" * 72)
     try:
+        await check_admin_ui()
         await check_repository(repos)
         await check_api(repos, FakeBot())
     finally:

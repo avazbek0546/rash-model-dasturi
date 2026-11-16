@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Sequence
+from typing import Any
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -38,28 +38,6 @@ from states import ExamCreateStates
 logger = logging.getLogger(__name__)
 
 router = Router(name="admin_exam")
-
-SKIP_WORDS = {"-", "—", "skip", "yo'q", "yoq", "0.0", "none"}
-
-#: Xulosada nechta savolning juftligi ko'rsatiladi (qolganlari "…" bilan).
-PREVIEW_LIMIT = 8
-
-
-def _format_difficulties_preview(values: Sequence[float]) -> str:
-    """Logitlarni o'qituvchi tushunadigan ko'rinishga keltiradi.
-
-    Ko'rinish: ``90%→-2.20, 75%→-1.10, …`` — ya'ni kiritilgan foiz (teskari
-    o'tkazish orqali) va undan hosil bo'lgan logit. Savollar ko'p bo'lsa faqat
-    birinchi ``PREVIEW_LIMIT`` tasi ko'rsatiladi.
-    """
-    items = list(values)
-    parts = [
-        f"{exam_service.logit_to_percent(value):.0f}%→{value:+.2f}"
-        for value in items[:PREVIEW_LIMIT]
-    ]
-    if len(items) > PREVIEW_LIMIT:
-        parts.append("…")
-    return ", ".join(parts)
 
 
 def _state_logits(data: dict[str, Any]) -> list[float] | None:
@@ -269,38 +247,23 @@ async def step_answer_key(message: Message, state: FSMContext) -> None:
         return
 
     await state.update_data(answer_key=stored)
-    await _ask(
-        message,
-        state,
-        ExamCreateStates.difficulties,
-        texts.ask_difficulties(total),
-    )
+    # `b` endi qo'lda so'ralmaydi — kalibrlangan item bank ishlatiladi.
+    await _ask(message, state, ExamCreateStates.start_time, texts.ask_start_time())
 
 
 @router.message(ExamCreateStates.difficulties)
 async def step_difficulties(message: Message, state: FSMContext) -> None:
-    """5-qadam: qiyinchilik foizda (bo'sh bo'lsa — 0.0; logit avtomatik hisoblanadi)."""
+    """Legacy FSM holati: qiyinchilik endi qo'lda kiritilmaydi.
+
+    Eski suhbatlar `difficulties` holatida qolgan bo'lsa, foydalanuvchi
+    kiritgan matn e'tiborsiz qoldiriladi va vaqt qadamiga o'tiladi. Yangi
+    oqim bu holatga **kirmaydi**.
+    """
     data = await state.get_data()
     total = int(data.get("total_questions", 0))
-
-    raw = " ".join((message.text or "").split())
-    if raw.lower() in SKIP_WORDS:
-        raw = ""
-
-    try:
-        values = exam_service.parse_difficulties_input(raw, total)
-    except ValueError as exc:
-        await message.answer(texts.input_error(str(exc)))
-        return
-
-    if any(values):
-        shown = _format_difficulties_preview(values)
-    else:
-        shown = f"0.0 (barcha {total} savol)"
-
     await state.update_data(
-        difficulty_logits=exam_service.difficulties_to_json(values),
-        difficulties_text=shown,
+        difficulty_logits=exam_service.difficulties_to_json([0.0] * total),
+        difficulties_text="item bank (qo'lda kiritilmaydi)",
     )
     await _ask(message, state, ExamCreateStates.start_time, texts.ask_start_time())
 
@@ -367,7 +330,9 @@ async def step_result_time(message: Message, state: FSMContext) -> None:
             test_code=str(data.get("test_code")),
             total_questions=int(data.get("total_questions", 0)),
             answer_key=str(data.get("answer_key")),
-            difficulties=str(data.get("difficulties_text")),
+            difficulties=str(
+                data.get("difficulties_text") or "item bank (qo'lda kiritilmaydi)"
+            ),
             start_local=exam_service.format_local(str(data.get("start_time"))),
             end_local=exam_service.format_local(str(data.get("end_time"))),
             result_local=exam_service.format_local(result_db),
@@ -404,6 +369,11 @@ async def confirm_exam(call: CallbackQuery, state: FSMContext, repos: Repositori
     await call.answer("Imtihon yaratilmoqda…")
 
     # 1) Legacy imtihon yozuvi (`exams`) — eski oqim o'zgarmagan holda saqlanadi.
+    total = int(data.get("total_questions", 0))
+    raw_logits = str(data.get("difficulty_logits") or "").strip()
+    if not raw_logits:
+        # `b` qo'lda kiritilmaydi — item bank yuklanmaguncha 0.0.
+        raw_logits = exam_service.difficulties_to_json([0.0] * total)
     try:
         exam_id = await repos.exams.create(
             title=str(data.get("title")),
@@ -411,9 +381,9 @@ async def confirm_exam(call: CallbackQuery, state: FSMContext, repos: Repositori
             start_time=str(data.get("start_time")),
             end_time=str(data.get("end_time")),
             result_time=str(data.get("result_time")),
-            total_questions=int(data.get("total_questions", 0)),
+            total_questions=total,
             answer_key=str(data.get("answer_key")),
-            difficulty_logits=str(data.get("difficulty_logits")),
+            difficulty_logits=raw_logits,
             created_by=call.from_user.id,
         )
     except Exception:  # baza xatosi (masalan, kod band bo'lib qolgan)

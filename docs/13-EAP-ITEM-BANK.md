@@ -72,7 +72,16 @@ Keyin imtihonni **qayta baholang** (admin panel «🔄 Baholash» yoki
 
 `auto`: per-item `b` (`36a` kabi belgilar) bo'lsa EAP, aks holda MLE.
 
-## 5. Kichik namuna (N) siyosati
+## 5. Admin panel va `b`
+
+- Mini App «⚙️ Test yaratish» panelida va `/new_exam` ustasida **qiyinchilik
+  (`b`) so'ralmaydi** — test yaratilganda `0.0` (provisional) yoziladi.
+- Kalibrlangan `b` faqat item bank orqali yuklanadi:
+  `python scripts/load_item_bank.py --file assets/item_banks/m3rash25.json --test-code m3rash25 --apply`.
+- API'dagi `difficulty` maydoni **legacy** (eski mijoz/import) uchun saqlanadi;
+  yangi Mini App uni yubormaydi.
+
+## 6. Kichik namuna (N) siyosati
 
 - **Baholash** `b` qat'iy bo'lsa `N` ga bog'liq emas — 1 kishi ham to'g'ri
   baholanadi (CI kengroq).
@@ -81,7 +90,7 @@ Keyin imtihonni **qayta baholang** (admin panel «🔄 Baholash» yoki
 - Har imtihonda `b` ni qayta kalibrlamang; yangi forma uchun anchor/equating.
 - `b` ni yangilashdan oldin: `r ≥ 0.95`, `RMSD ≤ 0.30` tekshirilsin.
 
-## 6. Validatsiya
+## 7. Validatsiya
 
 `tests/test_eap_item_bank.py`:
 
@@ -92,7 +101,7 @@ python tests/test_eap_item_bank.py
 Tekshiradi: item bank 55 ta, `36a`/`36b` alohida, EAP tanlanishi,
 55/55 → ~90.86, 0/55 → ~9.7, 48/55 → 91 emas, fanlar 35/20, legacy MLE.
 
-## 7. Test sifati dashboardi
+## 8. Test sifati dashboardi
 
 Yangi servis: `services/test_quality.py`. Hisoblaydi:
 

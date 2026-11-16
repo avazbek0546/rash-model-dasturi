@@ -1389,9 +1389,27 @@ class FormRepository:
         )
 
     async def items_by_position(self, form_version_id: int) -> dict[int, dict[str, Any]]:
-        """`{position: savol satri}` xaritasi (MVP: har pozitsiyaga bitta qism)."""
+        """`{position: savol satri}` xaritasi (legacy zaxira uchun).
+
+        Qismli formada bitta pozitsiyada `36a` va `36b` bo'ladi. Eski mijoz
+        `part` yubormasa, **`a` qismi** (yoki qismsiz satr) ustuvor bo'lishi
+        kerak — aks holda `ORDER BY position, part` oxirgi `36b` ni olib
+        qoladi va legacy javob noto'g'ri katakka yoziladi.
+        """
         rows = await self.list_items(form_version_id)
-        return {int(row["position"]): row for row in rows}
+        result: dict[int, dict[str, Any]] = {}
+        for row in rows:
+            position = int(row["position"])
+            current = result.get(position)
+            if current is None:
+                result[position] = row
+                continue
+            current_part = str(current.get("part") or "")
+            candidate_part = str(row.get("part") or "")
+            # `''` (legacy) va `a` — ustuvor; `b` faqat ular yo'q bo'lsa.
+            if current_part not in ("", "a") and candidate_part in ("", "a"):
+                result[position] = row
+        return result
 
     async def items_by_label(self, form_version_id: int) -> dict[str, dict[str, Any]]:
         """`{label: savol satri}` xaritasi (Phase 3 Step 2).

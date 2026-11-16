@@ -532,10 +532,15 @@ def score_items(
     * **qismli kalit** (`36a`, `36b`): har bir qism — mustaqil savol
       (`score_labeled_items`); legacy kalit (`|36:12.5`) avvalgidek baholanadi.
 
+    Legacy kalit (`|36:12.5`) bilan **qismli javob** (`|36a:...`) kelganda ham
+    label-aware yo'l tanlanadi: `a` qismi legacy qiymatni oladi, `b` qismi
+    kalitda yo'qligi sababli noto'g'ri hisoblanadi. Bu item-level formada
+    55 item (35 variant + 20 qism) barqarorligini saqlaydi.
+
     Raises:
         answer_key.AnswerKeyError: kalit yoki javob bloki formati buzuq bo'lsa.
     """
-    if is_labeled_key(key_text):
+    if is_labeled_key(key_text) or is_labeled_key(submitted_text):
         return score_labeled_items(key_text, submitted_text, total_questions)
 
     total = int(total_questions)
@@ -606,14 +611,38 @@ def _labeled_order(labeled: Mapping[str, float]) -> list[tuple[str, float]]:
     return [(answer_key.label_of(number, part), value) for number, part, value in ordered]
 
 
+def _correct_labeled_for_scoring(
+    key_text: str, total_questions: int
+) -> tuple[list[str], dict[str, float]]:
+    """Baholash uchun qismli kalitni tayyorlaydi.
+
+    * qismli kalit (`|36a:...`) — o'z holida;
+    * legacy MVP kalit (`|36:12.5`) — qiymat `a` qismiga ko'chiriladi, `b`
+      uchun kalit yo'q (u noto'g'ri hisoblanadi);
+    * oddiy harfli kalit — sonli qismlar yo'q.
+    """
+    total = int(total_questions)
+    if is_labeled_key(key_text):
+        return parse_labeled_key(key_text, total)
+    if is_mvp_key(key_text):
+        letters, numeric = parse_key(key_text, total)
+        return letters, {f"{position}a": value for position, value in numeric.items()}
+    letters = answer_key.parse_answer_key(
+        key_text, total, allowed_options=allowed_options(total)
+    )
+    return letters, {}
+
+
 def score_labeled_items(
     key_text: str, submitted_text: str, total_questions: int
 ) -> list[ItemOutcome]:
     """Qismli kalit bo'yicha baholaydi: `36a` va `36b` — ikki alohida savol.
 
-    Item to'plami — **kalitdagi belgilar** (`36a`, `36b`, ...). O'quvchi javob
-    bermagan qism ham natijaga kiradi (javobsiz = noto'g'ri), shu sababli
-    xom ball va savollar soni (masalan 35 variant + 20 qism = 55) barqaror.
+    Item to'plami — **barcha qismlar** (`36a`, `36b`, ...). Kalitda qism
+    bo'lmasa (legacy `|36:12.5`), `a` qismi qiymatni oladi, `b` esa noto'g'ri
+    hisoblanadi. O'quvchi javob bermagan qism ham natijaga kiradi (javobsiz =
+    noto'g'ri), shu sababli xom ball va savollar soni (masalan 35 variant +
+    20 qism = 55) barqaror.
 
     Sonli javoblar `math_expr.equivalent` bilan solishtiriladi — `√5`,
     `(√20)/2`, `6/14`, `3/7` ekvivalent hisoblanadi. Variant savollar
@@ -623,11 +652,18 @@ def score_labeled_items(
         answer_key.AnswerKeyError: kalit yoki javob bloki formati buzuq bo'lsa.
     """
     total = int(total_questions)
-    correct_letters, correct_labeled = parse_labeled_key(key_text, total)
+    correct_letters, correct_labeled = _correct_labeled_for_scoring(key_text, total)
     given_letters = answer_key.parse_submitted(
         submitted_text, total, allowed_options=allowed_options(total)
     )
-    given_labeled = answer_key.parse_labeled_block(submitted_text)
+    if is_labeled_key(submitted_text):
+        given_labeled = answer_key.parse_labeled_block(submitted_text)
+    else:
+        # Legacy mijoz `|36:...` yuborgan — qiymat `a` qismiga tegishli.
+        given_labeled = {
+            f"{position}a": raw
+            for position, raw in answer_key.parse_numeric_block(submitted_text).items()
+        }
     sections = numeric_positions(total)
 
     outcomes: list[ItemOutcome] = []
@@ -647,8 +683,15 @@ def score_labeled_items(
             )
         )
 
-    for label, correct_value in _labeled_order(correct_labeled):
+    # Barcha qismlar (a/b) — kalitda qiymat bo'lmasa ham natija chiqadi.
+    numeric_labels: list[str] = []
+    for position in sorted(sections):
+        for part in parts_of(position):
+            numeric_labels.append(label_of(position, part or None))
+
+    for label in numeric_labels:
         number, _part = answer_key.split_label(label)
+        correct_value = correct_labeled.get(label)
         raw_given = given_labeled.get(label)
         # Phase 2: javob ham ifoda bo'lishi mumkin (`√5`, `6/14`, `π/2`).
         given_value = math_expr.evaluate(raw_given) if raw_given is not None else None
@@ -656,10 +699,13 @@ def score_labeled_items(
             ItemOutcome(
                 position=number,
                 kind=NUMERIC_KIND,
-                correct_display=_number_text(correct_value),
+                correct_display=(
+                    "—" if correct_value is None else _number_text(correct_value)
+                ),
                 given_display=None if given_value is None else _number_text(given_value),
                 is_correct=(
-                    given_value is not None
+                    correct_value is not None
+                    and given_value is not None
                     and math_expr.equivalent(
                         given_value,
                         correct_value,

@@ -255,32 +255,10 @@ def ask_answer_key(total_questions: int) -> str:
     )
 
 
-def ask_difficulties(total_questions: int) -> str:
-    """Qiyinchilik **foizda** so'raladi (logit avtomatik hisoblanadi)."""
-    return (
-        "5️⃣ <b>Qiyinchilik darajalari (foizda)</b> — ixtiyoriy qadam.\n\n"
-        "Har bir savolga <b>to'g'ri javob beradigan o'quvchilarning taxminiy "
-        "ulushini</b> foizda yozing (sizning bahosingiz):\n\n"
-        f"• Bo'sh qoldirsangiz yoki <code>-</code> yozsangiz: barcha "
-        f"{total_questions} savol uchun <b>0.0</b> (ma'lumot yo'q);\n"
-        "• bitta foiz yozsangiz (masalan <code>75</code>) — u hamma savolga "
-        "qo'llanadi;\n"
-        f"• yoki {total_questions} ta foizni vergul bilan ajratib yozing:\n"
-        "<code>90, 75, 50, 25</code>\n\n"
-        "⚙️ Foiz qiyinchilikka <b>avtomatik</b> o'tkaziladi "
-        "(<code>b = ln((1−p)/p)</code>):\n"
-        "<code>90% → -2.20 · 75% → -1.10 · 50% → 0.00 · 25% → +1.10</code>\n\n"
-        "ℹ️ b katta bo'lsa savol qiyin, manfiy bo'lsa oson hisoblanadi.\n"
-        "Ilg'or: logitni to'g'ridan-to'g'ri ham yozishingiz mumkin "
-        "(<code>-1.1, 0, 1.1</code>), yoki foizni <code>%</code> bilan "
-        "belgilang (<code>75%</code>)."
-    )
-
-
 def ask_start_time() -> str:
     """Javob qabul qilish boshlanishi so'raladi."""
     return (
-        "6️⃣ <b>Javob qabul qilish boshlanish vaqti</b> (mahalliy vaqt).\n\n"
+        "5️⃣ <b>Javob qabul qilish boshlanish vaqti</b> (mahalliy vaqt).\n\n"
         "Format: <code>15.01.2026 09:00</code> yoki <code>2026-01-15 09:00</code>"
     )
 
@@ -288,7 +266,7 @@ def ask_start_time() -> str:
 def ask_end_time() -> str:
     """Javob qabul qilish tugashi so'raladi."""
     return (
-        "7️⃣ <b>Javob qabul qilish tugash vaqti</b> (boshlanishdan keyin bo'lishi kerak).\n\n"
+        "6️⃣ <b>Javob qabul qilish tugash vaqti</b> (boshlanishdan keyin bo'lishi kerak).\n\n"
         "Masalan: <code>15.01.2026 10:30</code>"
     )
 
@@ -296,7 +274,7 @@ def ask_end_time() -> str:
 def ask_result_time() -> str:
     """Natijalar e'lon qilinishi so'raladi."""
     return (
-        "8️⃣ <b>Natijalar e'lon qilinadigan vaqt</b> (javob qabul qilish tugagach).\n\n"
+        "7️⃣ <b>Natijalar e'lon qilinadigan vaqt</b> (javob qabul qilish tugagach).\n\n"
         "Masalan: <code>15.01.2026 14:00</code>"
     )
 
@@ -320,7 +298,7 @@ def exam_summary(
         f"🔑 Test kodi: <code>{_safe(test_code)}</code>\n"
         f"❓ Savollar: <b>{total_questions}</b>\n"
         f"🗝 Kalit: <code>{_safe(answer_key)}</code>\n"
-        f"📈 Qiyinchilik (foiz → logit): <code>{_safe(difficulties)}</code>\n"
+        f"📈 Qiyinchilik: <code>{_safe(difficulties)}</code>\n"
         f"▶️ Boshlanish: {_safe(start_local)}\n"
         f"⏹ Tugash: {_safe(end_local)}\n"
         f"📢 Natija: {_safe(result_local)}\n"

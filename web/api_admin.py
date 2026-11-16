@@ -164,6 +164,8 @@ async def create_exam(request: web.Request) -> web.Response:
             test_code=str(body.get("test_code") or ""),
             total_questions=total,
             answer_key=str(body.get("answer_key") or ""),
+            # Legacy ixtiyoriy maydon: Mini App endi yubormaydi. Productionda
+            # `b` kalibrlangan item bankdan olinadi (`scripts/load_item_bank.py`).
             difficulty=body.get("difficulty"),
             start_time=start_db,
             end_time=end_db,

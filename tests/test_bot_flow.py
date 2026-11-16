@@ -257,7 +257,7 @@ async def check_commands(bot, session, dp) -> None:
 
 
 async def check_new_exam_wizard(bot, session, dp, repos) -> None:
-    """`/new_exam` ustasi: 8 qadam, tekshiruvlar, tasdiqlash, ro'yxat va o'chirish."""
+    """`/new_exam` ustasi: 7 qadam, tekshiruvlar, tasdiqlash, ro'yxat va o'chirish."""
     await dp.feed_update(bot, message_update(bot, 40, "/new_exam"))
     assert "Yangi imtihon yaratish" in session.sent_texts()[-1]
 
@@ -271,9 +271,6 @@ async def check_new_exam_wizard(bot, session, dp, repos) -> None:
     assert "Javoblar kalitini" in session.sent_texts()[-1]
 
     await dp.feed_update(bot, message_update(bot, 44, "1A 2B 3C"))
-    assert "Qiyinchilik darajalari" in session.sent_texts()[-1]
-
-    await dp.feed_update(bot, message_update(bot, 45, "-"))
     assert "boshlanish vaqti" in session.sent_texts()[-1]
 
     await dp.feed_update(bot, message_update(bot, 46, "15.01.2027 09:00"))
@@ -289,10 +286,10 @@ async def check_new_exam_wizard(bot, session, dp, repos) -> None:
     await dp.feed_update(bot, message_update(bot, 49, "15.01.2027 12:00"))
     summary = session.sent_texts()[-1]
     assert "Imtihon ma'lumotlari" in summary and "MATH2026" in summary
-    assert "1A2B3C" in summary and "0.0 (barcha 3 savol)" in summary, summary
+    assert "1A2B3C" in summary and "item bank" in summary, summary
     assert isinstance(session.last(), SendMessage)
     assert session.last().reply_markup is not None, "tasdiqlash tugmalari yo'q"
-    print("[OK] Usta: 8 qadam o'tdi, xulosa va tasdiqlash tugmalari ko'rsatildi")
+    print("[OK] Usta: 7 qadam o'tdi, xulosa va tasdiqlash tugmalari ko'rsatildi")
 
     await dp.feed_update(bot, callback_update(bot, 50, "exam:confirm:0"))
     created = session.last()

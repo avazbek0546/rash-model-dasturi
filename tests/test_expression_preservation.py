@@ -219,9 +219,9 @@ async def check_api(repos: Repositories, db: Database) -> tuple[int, int]:
         assert response.status == 200, response.status
         state_a = await response.json()
         by_label = {item["label"]: item for item in state_a["items"]}
-        assert by_label["36"]["expression"] == "\u221a5+1", by_label["36"]
-        assert by_label["36"]["value"] == "3.23606797749979", by_label["36"]
-        assert by_label["37"]["expression"] == "3/7", by_label["37"]
+        assert by_label["36a"]["expression"] == "\u221a5+1", by_label.get("36a")
+        assert by_label["36a"]["value"] == "3.23606797749979", by_label.get("36a")
+        assert by_label["37a"]["expression"] == "3/7", by_label.get("37a")
         print("[OK] Case 3/4: state \u2192 expression='\u221a5+1'")
 
         # Eski mijoz urinishida ifoda o'rniga son qaytadi (moslik)
@@ -230,8 +230,8 @@ async def check_api(repos: Repositories, db: Database) -> tuple[int, int]:
         )
         state_b = await response.json()
         by_label_b = {item["label"]: item for item in state_b["items"]}
-        assert by_label_b["36"]["value"] == "3.2361", by_label_b["36"]
-        assert by_label_b["36"].get("expression") != "\u221a5+1", by_label_b["36"]
+        assert by_label_b["36a"]["value"] == "3.2361", by_label_b.get("36a")
+        assert by_label_b["36a"].get("expression") != "\u221a5+1", by_label_b.get("36a")
         print("[OK] Case 5: eski urinish state'i avvalgidek (ifoda yo'q)")
 
         # Case 4 (flag): o'chirilsa \u2014 avvalgi xatti-harakat
@@ -246,7 +246,7 @@ async def check_api(repos: Repositories, db: Database) -> tuple[int, int]:
             f"/api/v2/state?attempt_id={attempt_c}", headers=HEADERS_C
         )
         state_off = await response.json()
-        item36 = {item["label"]: item for item in state_off["items"]}["36"]
+        item36 = {item["label"]: item for item in state_off["items"]}["36a"]
         assert "expression" not in item36, item36
         config.EXPRESSION_PRESERVATION_ENABLED = _ORIGINAL_EXP_FLAG
         print("[OK] Case 4: flag o'chirilganda raw_answer=son, state'da expression yo'q")

@@ -20,7 +20,6 @@ Ishga tushirish:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import shutil
 import sys
@@ -56,6 +55,7 @@ from database.repository import Repositories  # noqa: E402
 from database.seed import seed_questions  # noqa: E402
 from handlers import setup_routers  # noqa: E402
 from middlewares import UserSyncMiddleware  # noqa: E402
+from services import exam_admin  # noqa: E402
 from services.test_session import TestSessionStore  # noqa: E402
 
 TOKEN = "123456789:TEST_TOKEN_FOR_OFFLINE_CHECKS"
@@ -195,14 +195,12 @@ async def run_wizard(
     start: str,
     end: str,
     result: str,
-    difficulty: str = "-",
 ) -> int:
-    """Ustani 8 qadam bo'ylab o'tkazadi va keyingi `update_id` ni qaytaradi.
+    """Ustani 7 qadam bo'ylab o'tkazadi va keyingi `update_id` ni qaytaradi.
 
-    `difficulty` — 5-qadamdagi qiyinchilik kiritishi (`"-"` — o'tkazib
-    yuborish; foiz yoki logit qiymatlari ham bo'lishi mumkin).
+    `b` (qiyinchilik) endi so'ralmaydi — test yaratilgach item bank yuklanadi.
     """
-    steps = ["/new_exam", title, code, str(total), key, difficulty, start, end, result]
+    steps = ["/new_exam", title, code, str(total), key, start, end, result]
     for index, text in enumerate(steps):
         await dp.feed_update(bot, message_update(bot, update_id + index, text))
     return update_id + len(steps)
@@ -371,54 +369,17 @@ async def check_bad_key(bot: Bot, session: FakeSession, dp: Dispatcher, db: Data
     print("[OK] Xato MVP kalit → FormBuildError ko'rsatildi, bazaga hech narsa yozilmadi")
 
 
-async def check_percent_difficulty(
-    bot: Bot, session: FakeSession, dp: Dispatcher, db: Database
-) -> None:
-    """Foiz kiritilganda `b` avtomatik hisoblanadi (`b = ln((1-p)/p)`).
+def check_legacy_difficulty_conversion() -> None:
+    """Backend legacy: `normalize_difficulties` API/import uchun ishlaydi.
 
-    Tekshiriladi: (a) `exams.difficulty_logits` ga konvertatsiya qilingan
-    logitlar tushadi; (b) `item_parameters` ga `source='legacy_expert'`
-    (o'qituvchining oldindan bahosi) bilan yoziladi.
+    Mini App va `/new_exam` endi `b` so'ramaydi; lekin eski API mijozlari
+    yoki import uchun foiz → logit konvertatsiyasi saqlanadi.
     """
-    total = 45
-    next_id = await run_wizard(
-        bot,
-        session,
-        dp,
-        300,
-        title="Matematika — foiz bilan",
-        code="MVPPCT45",
-        total=total,
-        key=mvp_key(total),
-        start="17.01.2027 09:00",
-        end="17.01.2027 10:30",
-        result="17.01.2027 12:00",
-        difficulty="75",
-    )
-    await dp.feed_update(bot, callback_update(bot, next_id, "exam:confirm:0"))
-
-    exams = await db.fetchall("SELECT * FROM exams WHERE test_code = 'MVPPCT45'")
-    assert len(exams) == 1, exams
-    logits = json.loads(exams[0]["difficulty_logits"])
-    assert len(logits) == total, len(logits)
+    values = exam_admin.normalize_difficulties("75", 45)
     expected = -1.0986  # ln((1-0.75)/0.75)
-    assert all(abs(value - expected) < 1e-3 for value in logits), logits[:3]
-
-    parameters = await db.fetchall(
-        "SELECT * FROM item_parameters ORDER BY item_version_id"
-    )
-    converted = [
-        row for row in parameters if abs(float(row["b_value"]) - expected) < 1e-3
-    ]
-    expected_items = total + 10  # 36–45: 10 pozitsiya → 20 qism (a/b)
-    assert len(converted) == expected_items, (
-        f"legacy_expert parametrlar: {len(converted)}"
-    )
-    assert {str(row["source"]) for row in converted} == {"legacy_expert"}
-    print(
-        "[OK] Foiz «75» → b=%.4f (%d item), item_parameters.source=legacy_expert"
-        % (expected, len(converted))
-    )
+    assert len(values) == 45, len(values)
+    assert all(abs(value - expected) < 1e-3 for value in values), values[:3]
+    print(f"[OK] Legacy difficulty backend: 75% → b={expected:.4f}")
 
 
 async def main() -> None:
@@ -449,7 +410,7 @@ async def main() -> None:
         await check_mvp_key(bot, session, dp, db)
         await check_plain_key(bot, session, dp, db)
         await check_bad_key(bot, session, dp, db)
-        await check_percent_difficulty(bot, session, dp, db)
+        check_legacy_difficulty_conversion()
     finally:
         await bot.session.close()
         await db.close()
