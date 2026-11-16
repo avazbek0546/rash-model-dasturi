@@ -263,6 +263,8 @@ Bitta imtihon **online** (Mini App) va **offline** (qog'ozda) birgalikda
 o'tkazilishi mumkin. Offline o'quvchilar botda ro'yxatdan o'tishi shart emas:
 ular Excel qatorlari sifatida saqlanadi. Online va offline natijalar **bitta
 Rasch 1PL modeli** bilan baholanadi va bitta reytingga qo'shiladi.
+Admin uchun asosiy menyuda **«📥 Offline mock»** tugmasi ham bor — u orqali
+imtihon tanlanadi (komandani yodlab yurish shart emas).
 
 Imtihon tuzilishi: **45 pozitsiya**, 36–45 ochiq savollar `a`/`b` ga bo'linadi
 → jami **55 baholanadigan item** (`1…35`, `36a`, `36b`, …, `45b`).

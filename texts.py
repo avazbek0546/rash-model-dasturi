@@ -76,6 +76,7 @@ def help_text(is_admin: bool = False) -> str:
             "/participants TEST_KODI — qatnashchilar ro'yxati",
             "/admin_chat — qatnashchilar guruhini ulash",
             "/admins — adminlarni qo'shish/o'chirish",
+            "/offline TEST_KODI — offline mock paneli (Excel, PDF)",
         ]
     lines += [
         "",
