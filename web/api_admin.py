@@ -38,7 +38,7 @@ from aiohttp import web
 
 import config
 from database.models import normalize_part
-from services import exam_admin, exam_service, grading, report_data, report_pdf
+from services import exam_admin, exam_service, grading, report_data, report_pdf, test_quality
 from services import solutions as solutions_service
 from web.api import ApiError, ensure_user, get_bot, read_json, repositories
 
@@ -67,6 +67,9 @@ def exam_payload(exam: Any, *, now_db: str, submissions: int) -> dict[str, Any]:
         "title": exam.title,
         "test_code": exam.test_code,
         "total_questions": exam.total_questions,
+        # Baholanadigan savollar soni (qismlar bilan) — panelda "N savol" va
+        # "to'g'ri / jami" ko'rsatkichlari shu qiymatdan foydalanadi.
+        "total_items": grading.expected_total_items(exam),
         "status": status.value,
         "status_title": exam_service.status_title(status),
         "start_local": exam_service.format_local(exam.start_time),
@@ -262,6 +265,7 @@ async def exam_participants(request: web.Request) -> web.Response:
             "test_code": exam.test_code,
             "count": len(participants),
             "total_questions": exam.total_questions,
+            "total_items": grading.expected_total_items(exam),
             "participants": [
                 {
                     "user_id": item.user_id,
@@ -277,6 +281,28 @@ async def exam_participants(request: web.Request) -> web.Response:
             ],
         }
     )
+
+
+async def exam_quality(request: web.Request) -> web.Response:
+    """Imtihonning test sifati hisoboti (faqat admin).
+
+    Cronbach α, EAP ishonchlilik, item p/r_pbi/infit/outfit, SRMSR/RMSEA/
+    CFI/TLI (limited-information), Wright xaritasi va TIF.
+    """
+    await ensure_admin(request)
+    repos = repositories(request)
+    exam_id = _exam_id(request)
+    exam = await repos.exams.get(exam_id)
+    if exam is None:
+        raise ApiError(404, "Imtihon topilmadi.")
+    source = str(request.query.get("source") or "combined").strip().lower()
+    if source not in {"online", "offline", "combined"}:
+        raise ApiError(400, "`source` online/offline/combined bo'lishi kerak.")
+    try:
+        report = await test_quality.build_exam_quality(repos, exam, source=source)
+    except test_quality.TestQualityError as exc:
+        raise ApiError(400, str(exc)) from exc
+    return web.json_response(report)
 
 
 async def regrade_exam(request: web.Request) -> web.Response:
@@ -646,6 +672,7 @@ def setup_routes(app: web.Application) -> None:
     # Yaratilgan test vaqtini tahrirlash va qatnashchilarni ko'rish.
     router.add_post("/api/v2/admin/exams/{exam_id}/schedule", update_schedule)
     router.add_get("/api/v2/admin/exams/{exam_id}/participants", exam_participants)
+    router.add_get("/api/v2/admin/exams/{exam_id}/quality", exam_quality)
     router.add_post("/api/v2/admin/exams/{exam_id}/regrade", regrade_exam)
     router.add_post("/api/v2/admin/exams/{exam_id}/report-link", report_link)
     # Mini App «📄 PDF» tugmasi: fayl brauzerga emas, adminga chatga yuboriladi.

@@ -190,7 +190,8 @@ async def cmd_participants(message: Message, repos: Repositories) -> None:
         title=exam.title,
         test_code=exam.test_code,
         participants=participants,
-        total_questions=exam.total_questions,
+        # Qismli formada savollar soni pozitsiyalardan ko'p (masalan 55).
+        total_items=grading.expected_total_items(exam),
     ):
         await message.answer(chunk)
 

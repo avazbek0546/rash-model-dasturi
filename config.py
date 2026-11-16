@@ -319,6 +319,22 @@ MLE_START: float = 0.0  # Newton-Raphson uchun boshlang'ich nuqta
 MLE_MAX_ITER: int = 100
 MLE_TOLERANCE: float = 1e-6
 
+# θ baholash usuli: "auto" | "eap" | "mle".
+#   auto — per-item (label) `b` bo'lsa EAP, aks holda MLE (eski xulq saqlanadi);
+#   eap  — har doim EAP (production Rasch 1PL modeli);
+#   mle  — har doim MLE (eski xulq).
+THETA_METHOD: str = (_get_str("THETA_METHOD", "auto") or "auto").lower()
+
+# EAP (Expected A Posteriori) prior va integratsiya panjarasi.
+# Prior — normal taqsimot: N(EAP_PRIOR_MEAN, EAP_PRIOR_SD²).
+# `EAP_PRIOR_SD` test populyatsiyasiga moslanadi (PDFda latent dispersiya 1.040;
+# 55/55 → 90.78 uchun amalda ~0.56 ishlatiladi — config orqali sozlanadi).
+EAP_PRIOR_MEAN: float = _get_float("EAP_PRIOR_MEAN", 0.0)
+EAP_PRIOR_SD: float = _get_float("EAP_PRIOR_SD", 0.53)
+EAP_GRID_MIN: float = _get_float("EAP_GRID_MIN", -6.0)
+EAP_GRID_MAX: float = _get_float("EAP_GRID_MAX", 6.0)
+EAP_GRID_STEP: float = _get_float("EAP_GRID_STEP", 0.01)
+
 # θ → 0..100 "scaled score" chizig'i
 SCALED_MIN: float = 0.0
 SCALED_MAX: float = 100.0

@@ -35,7 +35,7 @@ from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
 from database.db import Database  # noqa: E402
 from database.models import User  # noqa: E402
 from database.repository import Repositories  # noqa: E402
-from services import exam_service, webapp_auth  # noqa: E402
+from services import exam_service, grading, webapp_auth  # noqa: E402
 from web.server import create_app  # noqa: E402
 
 TOKEN = "123456789:AAAdminPanelChecks"
@@ -253,7 +253,7 @@ async def check_api(repos: Repositories, bot: FakeBot) -> None:
             title=exam.title,
             test_code=exam.test_code,
             participants=await repos.answers.list_participants(exam_id),
-            total_questions=exam.total_questions,
+            total_items=grading.expected_total_items(exam),
         )
         assert chunks and "Jami: <b>1</b>" in chunks[0], chunks
         print("[OK] `texts.participants_chunks` sanoqni ko'rsatdi")

@@ -163,6 +163,29 @@ async def run_checks(repos: Repositories) -> None:
         )
         assert denied_link.status == 403, denied_link.status
 
+        # 6b) Test sifati: admin 200 + qisqa jamlanma; o'quvchi 403
+        quality_url = f"/api/v2/admin/exams/{exam.exam_id}/quality"
+        denied_quality = await client.get(quality_url, headers=STUDENT_HEADERS)
+        assert denied_quality.status == 403, denied_quality.status
+        quality = await client.get(quality_url, headers=ADMIN_HEADERS)
+        assert quality.status == 200, (quality.status, await quality.text())
+        quality_payload = await quality.json()
+        assert quality_payload["ok"] is True, quality_payload
+        assert quality_payload["summary"]["participants"] == 1, quality_payload
+        assert quality_payload["summary"]["items"] == 3, quality_payload
+        assert quality_payload["items"] and quality_payload["wright"]["bins"]
+        assert quality_payload["tif"]["theta"], quality_payload["tif"]
+        assert quality_payload["source"] == "combined", quality_payload
+        offline_quality = await client.get(
+            quality_url + "?source=offline", headers=ADMIN_HEADERS
+        )
+        assert offline_quality.status == 400, offline_quality.status
+        invalid_source = await client.get(
+            quality_url + "?source=bad", headers=ADMIN_HEADERS
+        )
+        assert invalid_source.status == 400, invalid_source.status
+        print("[OK] GET .../quality: test sifati hisoboti (N=1, K=3)")
+
         link = await client.post(
             f"/api/v2/admin/exams/{exam.exam_id}/report-link",
             headers=ADMIN_HEADERS,

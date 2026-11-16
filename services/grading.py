@@ -70,6 +70,21 @@ def build_estimate(exam: Exam, submitted_answers: str) -> rasch.RaschEstimate:
     return estimate_submission(exam, submitted_answers)
 
 
+def expected_total_items(exam: Exam) -> int:
+    """Imtihon kaliti bo'yicha baholanadigan savollar (item) soni.
+
+    `exam.total_questions` — **pozitsiyalar** soni (masalan 45). Qismli kalitda
+    (`36a`, `36b`) har bir qism alohida savol bo'lgani uchun item soni ko'proq
+    (masalan 55). Hisobotlarda `to'g'ri / jami` nisbati shu qiymat bilan
+    ko'rsatiladi — aks holda `48/45` kabi ishonchsiz ko'rinish chiqadi.
+
+    Bu yengil (bazaga murojaat qilmaydigan) yordamchi: ro'yxat/panel
+    ko'rsatkichlari uchun. Aniq item soni o'quvchi javoblari bilan birga
+    `build_report()["total_items"]` dan olinadi.
+    """
+    return scoring.expected_item_count(scoring.ScoringContext.from_exam(exam))
+
+
 def _label_position(label: str) -> int:
     """Belgidan pozitsiyani oladi: `"36a"` → `36` (raqam bo'lmasa — `0`)."""
     digits = "".join(char for char in str(label) if char.isdigit())
@@ -642,7 +657,11 @@ def build_report(exam: Exam, submission: ExamSubmission) -> dict[str, Any]:
     return {
         "exam_id": exam.exam_id,
         "title": exam.title,
+        # `total_questions` — pozitsiyalar soni (forma tuzilishi uchun).
         "total_questions": exam.total_questions,
+        # `total_items` — baholanadigan savollar soni (qismlar bilan). Xom ball
+        # maxraji **shu**: `48/45` emas, `48/55` ko'rsatiladi.
+        "total_items": len(results),
         "raw_score": int(submission.raw_score or 0),
         "theta": round(theta, 4),
         "theta_interval": theta_interval,

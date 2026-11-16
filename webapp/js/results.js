@@ -649,7 +649,9 @@
     const level = latest.level || levelCode(score);
     const tone = toneOf(latest);
     const submitted = parseDbTime(latest.submitted_at);
-    const total = Number(latest.total_questions) || 0;
+    // Qismli formada savollar soni `total_items` da (masalan 55); `total_questions`
+    // — pozitsiyalar soni (zaxira, eski javoblar uchun).
+    const total = Number(latest.total_items || latest.total_questions) || 0;
     const raw = Number(latest.raw_score) || 0;
     const scores = asc
       .map(function (item) {
@@ -771,7 +773,7 @@
     const scores = [];
     published.forEach(function (item) {
       raw += Number(item.raw_score) || 0;
-      total += Number(item.total_questions) || 0;
+      total += Number(item.total_items || item.total_questions) || 0;
       const score = scoreOf(item);
       if (score !== null) {
         scores.push(score);
@@ -827,7 +829,7 @@
     const tone = toneOf(item);
     const score = scoreOf(item);
     const level = item.level || levelCode(score);
-    const total = Number(item.total_questions) || 0;
+    const total = Number(item.total_items || item.total_questions) || 0;
     const raw = Number(item.raw_score) || 0;
     const ratio = score === null ? 0 : Math.max(0, Math.min(100, score));
     const submitted = parseDbTime(item.submitted_at);
@@ -1006,7 +1008,7 @@
           '<div class="profile-row"><span class="label">To\'g\'ri javoblar</span><b>' +
           report.raw_score +
           " / " +
-          report.total_questions +
+          (report.total_items || report.total_questions) +
           "</b></div>" +
           subjectRows +
           '<div class="profile-row"><span class="label">Sertifikat darajasi</span><b>' +

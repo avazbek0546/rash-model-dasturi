@@ -38,7 +38,7 @@ if hasattr(sys.stdout, "reconfigure"):
 import config  # noqa: E402
 from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
 from database.db import Database  # noqa: E402
-from database.models import SKIPPED, User  # noqa: E402
+from database.models import SKIPPED, Exam, ExamSubmission, User  # noqa: E402
 from database.repository import Repositories  # noqa: E402
 from services import (  # noqa: E402
     answer_key,
@@ -230,6 +230,63 @@ def check_parts_scoring() -> None:
     assert len(outcomes) == 55
     assert not omitted.is_correct and omitted.given_display is None
     print("[OK] 36b javobsiz: savollar soni 55 da qoladi (javobsiz = noto'g'ri)")
+
+
+# ---------------------------------------------------------------------------
+# 2b-qadam: "to'g'ri / jami" maxraji — qismlar bilan (48/45 muammosi)
+# ---------------------------------------------------------------------------
+def check_item_count_and_report() -> None:
+    """`expected_item_count` va `build_report()["total_items"]` — 45 emas, 55.
+
+    Muammo: `exam.total_questions` — **pozitsiyalar** soni (45), xom ball esa
+    qismlar bilan 55 tagacha bo'lishi mumkin. Hisobotda `48/45` chiqmasligi
+    uchun maxraj item soni bo'lishi shart.
+    """
+    parts_context = item_context(
+        labeled_parts_key(), TOTAL, scoring.ScoringMode.ITEM_LEVEL
+    )
+    assert scoring.expected_item_count(parts_context) == 55
+
+    letters = key_letters()
+    given = part_values()
+    results = scoring.build_item_results(parts_context, submitted(letters, given))
+    assert len(results) == scoring.expected_item_count(parts_context) == 55
+
+    # Legacy (qismsiz) kalitlar o'zgarmaydi.
+    legacy_context = item_context(
+        mvp_legacy_key(), TOTAL, scoring.ScoringMode.ITEM_LEVEL
+    )
+    assert scoring.expected_item_count(legacy_context) == TOTAL
+    plain_context = item_context(
+        plain_legacy_key(), LEGACY_TOTAL, scoring.ScoringMode.LETTERS
+    )
+    assert scoring.expected_item_count(plain_context) == LEGACY_TOTAL
+
+    now = exam_service.to_db_time(exam_service.utc_now())
+    exam = Exam(
+        exam_id=0,
+        title="Qismli imtihon",
+        test_code=CODE_PARTS,
+        start_time=now,
+        end_time=now,
+        result_time=now,
+        total_questions=TOTAL,
+        answer_key=labeled_parts_key(),
+        difficulty_logits="[]",
+    )
+    submission = ExamSubmission(
+        user_id=STUDENT["id"],
+        exam_id=0,
+        submitted_answers=submitted(letters, given),
+        theta=1.0,
+        scaled_score=90.0,
+        raw_score=55,
+    )
+    report = grading.build_report(exam, submission)
+    assert report["total_questions"] == TOTAL, report["total_questions"]
+    assert report["total_items"] == 55, report["total_items"]
+    assert report["raw_score"] <= report["total_items"], report
+    print("[OK] Hisobot maxraji: total_items=55 (total_questions=45) — `48/45` yo'q")
 
 
 # ---------------------------------------------------------------------------
@@ -748,6 +805,7 @@ async def main() -> None:
 
         check_label_helpers()
         check_parts_scoring()
+        check_item_count_and_report()
         check_equivalences()
         check_plan_cases()
         check_legacy_unchanged()

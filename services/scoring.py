@@ -187,25 +187,43 @@ class ScoringContext:
     tolerance: float = form_layout.NUMERIC_TOLERANCE
     engine_version: str = SCORING_ENGINE_VERSION
     b_source: str = B_SOURCE_DEFAULT
+    #: θ baholash usuli: `"mle"` (eski xulq) yoki `"eap"` (production Rasch).
+    #: `from_exam()` `config.THETA_METHOD` va `b` manbasiga qarab tanlaydi:
+    #: per-item (label) `b` bo'lsa — EAP; 45 pozitsiyali eski `b` bo'lsa — MLE.
+    theta_method: str = "mle"
 
     @classmethod
     def from_exam(cls, exam: Exam) -> ScoringContext:
         """Imtihon yozuvidan kontekst quradi (xato bermaydi, hamma qiymat bor).
 
+        `b` manbasi `exam_service.b_by_key()` orqali aniqlanadi:
+
+        * **per-item (label) `b`** — JSON obyekt yoki 55 qiymatli massiv
+          (`"1".."35"`, `"36a".."45b"`) — production Rasch item banki;
+        * **45 pozitsiyali massiv** — eski xulq (qismlar pozitsiya `b` sini
+          meros oladi).
+
+        `theta_method` `config.THETA_METHOD` bo'yicha tanlanadi:
+        `auto` — per-item `b` bo'lsa EAP, aks holda MLE (eski imtihonlar
+        o'zgarmaydi); `eap`/`mle` — majburan.
+
         `b_source` — `b` qayerdan olinganini bildiradi: o'qituvchi foiz
         kiritgan bo'lsa (`b != 0`) `legacy_expert` (muallif bahosi), aks holda
         `default`.
         """
-        difficulties = tuple(exam_service.effective_difficulties(exam))
-        # M1: pozitsiyali qiymatlarni **identlik kaliti** bo'yicha saqlaymiz.
-        # Manba hozircha o'zgarmagan (`exams.difficulty_logits`): bir pozitsiyaga
-        # bitta `b`; kalit `str(position)` (`"1".."N"`). Qismlar (`36a`/`36b`)
-        # o'z kaliti bilan topilmasa — pozitsiya (`"36"`) zaxirasidan oladi
-        # (`difficulty_of()`), ya'ni joriy xulq saqlanadi.
-        b_by_key = {
-            str(position): float(value)
-            for position, value in enumerate(difficulties, start=1)
-        }
+        b_by_key = exam_service.b_by_key(exam)
+        requested = (config.THETA_METHOD or "auto").lower()
+        if requested not in {"auto", "eap", "mle"}:
+            requested = "auto"
+        theta_method = requested
+        if requested == "auto":
+            # Per-item kalitlar (`36a`, `36b`, ...) bo'lsa — EAP; eski 45
+            # pozitsiyali `b` bo'lsa — MLE (orqaga moslik).
+            theta_method = (
+                "eap"
+                if any(not str(key).isdigit() for key in b_by_key)
+                else "mle"
+            )
         return cls(
             exam_id=int(exam.exam_id),
             total_questions=max(int(exam.total_questions or 0), 0),
@@ -221,6 +239,7 @@ class ScoringContext:
                 if any(abs(value) > 0.0 for value in b_by_key.values())
                 else B_SOURCE_DEFAULT
             ),
+            theta_method=theta_method,
         )
 
     @property
@@ -383,6 +402,36 @@ def correct_count(results: Sequence[ItemScoreResult]) -> int:
     return sum(1 for result in results if result.is_correct)
 
 
+def expected_item_count(context: ScoringContext) -> int:
+    """Baholanadigan savollar (item) soni — xom ballning **haqiqiy maxraji**.
+
+    Item-level rejimda kalit **qism belgilarini** (`36a`, `36b`) ishlatsa,
+    savollar soni pozitsiyalar sonidan (`exam.total_questions`) ko'p bo'ladi
+    (masalan 35 variant + 10 pozitsiya × 2 qism = 55). Shu sababli
+    `raw_score / total_questions` nisbati noto'g'ri chiqadi (masalan `48/45` —
+    savoldan ko'p javob topilgandek ko'rinadi). Bu funksiya
+    `form_layout.score_items()` qaytaradigan item to'plamining **aynan** sonini
+    beradi: hisobot va barcha `to'g'ri / jami` ko'rsatkichlari shu qiymatdan
+    foydalanadi.
+
+    Legacy (qismsiz) kalitlarda natija `total_questions` ga **aynan** teng —
+    eski imtihonlar ko'rinishi o'zgarmaydi.
+    """
+    total = max(int(context.total_questions or 0), 0)
+    if total <= 0:
+        return 0
+    if not context.is_item_level or not form_layout.is_labeled_key(context.answer_key):
+        return total
+    try:
+        _letters, labeled = form_layout.parse_labeled_key(context.answer_key, total)
+    except answer_key.AnswerKeyError:
+        # Kalit buzuq — baholash ham xato beradi; maxrajni pozitsiyalar sonida
+        # qoldiramiz (hisobot yasash to'xtamaydi).
+        return total
+    # Qismli kalit: variant savollar + kalitdagi har bir qism (36a, 36b, ...).
+    return (total - len(form_layout.numeric_positions(total))) + len(labeled)
+
+
 def total_score(results: Sequence[ItemScoreResult]) -> float:
     """Berilgan ballar yig'indisi (keyinchalik qismiy ball uchun tayyor)."""
     return sum(result.score_awarded for result in results)
@@ -415,8 +464,21 @@ def item_responses(
 def estimate_theta(
     results: Sequence[ItemScoreResult], context: ScoringContext, **kwargs: float
 ) -> rasch.RaschEstimate:
-    """θ ni MLE (Newton-Raphson) usulida baholaydi — `rasch.estimate_theta` orqali."""
-    return rasch.estimate_theta(item_responses(results, context), **kwargs)
+    """θ ni baholaydi — kontekstdagi `theta_method` bo'yicha.
+
+    * `eap` — `rasch.estimate_theta_eap()` (production Rasch 1PL; ekstremallar
+      ham chekli: 55/55 → 90.78, 0/55 → 9);
+    * `mle` — `rasch.estimate_theta()` (eski xulq, orqaga moslik).
+
+    EAP uchun faqat prior/panjara parametrlari uzatiladi; MLE uchun qolgan
+    parametrlar (`bound`, `start`, `max_iter`, `tolerance`) ishlatiladi.
+    """
+    responses = item_responses(results, context)
+    if context.theta_method == "eap":
+        eap_keys = {"prior_mean", "prior_sd", "grid_min", "grid_max", "grid_step"}
+        eap_kwargs = {key: value for key, value in kwargs.items() if key in eap_keys}
+        return rasch.estimate_theta_eap(responses, **eap_kwargs)
+    return rasch.estimate_theta(responses, **kwargs)
 
 
 def _b_checksum(context: ScoringContext) -> str:

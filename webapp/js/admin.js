@@ -94,7 +94,7 @@
           '<div class="meta">Kod: <b>' +
           App.escape(row.test_code) +
           "</b> · " +
-          row.total_questions +
+          (row.total_items || row.total_questions) +
           " savol · <b>" +
           Number(row.submissions || 0) +
           "</b> qatnashchi</div>" +
@@ -254,7 +254,7 @@
                 ? " · ✅ " +
                   Number(item.raw_score) +
                   "/" +
-                  Number((data && data.total_questions) || 0)
+                  Number((data && (data.total_items || data.total_questions)) || 0)
                 : "";
             return (
               '<div class="admin-card">' +

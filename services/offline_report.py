@@ -61,8 +61,12 @@ def _rank_rows(rows: list[report_pdf.StudentRow]) -> list[report_pdf.StudentRow]
 
 
 async def _online_rows(
-    repos: Repositories, exam: Exam, *, total_items: int = 55
+    repos: Repositories, exam: Exam, *, total_items: int | None = None
 ) -> tuple[list[report_pdf.StudentRow], int]:
+    # Qismli formada item soni pozitsiyalardan ko'p (masalan 45 → 55). Berilmasa
+    # imtihon kalitidan aniqlanadi — hardcode qilingan son ishlatilmaydi.
+    if total_items is None:
+        total_items = grading.expected_total_items(exam)
     rows: list[report_pdf.StudentRow] = []
     excluded = 0
     for submission in await repos.answers.list_for_exam(exam.exam_id):
@@ -142,7 +146,9 @@ async def _offline_rows(
                     None if balls.get("geometry") is None else float(balls["geometry"])
                 ),
                 correct=int(attempt.get("raw_score") or 0),
-                total=int(attempt.get("total_items") or 55),
+                # `offline_attempts.total_items` — import paytida saqlangan aniq
+                # item soni; bo'lmasa imtihon kalitidan aniqlanadi (55 hardcode emas).
+                total=int(attempt.get("total_items") or grading.expected_total_items(exam)),
                 source="offline",
                 student_code=str(attempt.get("student_code") or ""),
                 standard_error=(

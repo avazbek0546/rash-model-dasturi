@@ -181,7 +181,7 @@ async def show_questions(
             label=solutions.exam_label(exam),
             title=exam.title,
             correct=solutions.raw_score(exam, submission),
-            total=exam.total_questions,
+            total=solutions.item_count(exam, submission),
         ),
         analysis_questions_kb(units, exam_id=exam.exam_id, page=callback_data.page),
     )

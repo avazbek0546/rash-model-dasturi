@@ -303,6 +303,96 @@ def estimate_theta(
     )
 
 
+def estimate_theta_eap(
+    responses: Sequence[ItemResponse],
+    *,
+    prior_mean: float | None = None,
+    prior_sd: float | None = None,
+    grid_min: float | None = None,
+    grid_max: float | None = None,
+    grid_step: float | None = None,
+) -> RaschEstimate:
+    """θ ni **EAP** (Expected A Posteriori) usulida baholaydi.
+
+    MLE dan farqi
+    -------------
+    * MLE da 0/55 yoki 55/55 kabi chekka holatlar uchun chekli yechim yo'q
+      (θ = ±THETA_BOUND ga majburan qisiladi). EAP da normal prior tufayli
+      yechim **har doim chekli**: 55/55 → θ≈2.45 → 90.78 ball, 0/55 → 9 ball.
+    * EAP posterior **o'rtachasi** va **standart chetlanishi** (SE) ni beradi —
+      bu o'lchov aniqligini to'g'riroq ko'rsatadi.
+    * Prior `N(prior_mean, prior_sd²)`; `prior_sd` test populyatsiyasiga
+      moslanadi (`config.EAP_PRIOR_SD`). Prior kichik bo'lsa — kuchliroq
+      shrinkaj (ekstremallar markazga tortiladi), katta bo'lsa — MLE ga yaqin.
+
+    Integratsiya panjarasi `[grid_min, grid_max]` oralig'ida `grid_step`
+    qadam bilan hisoblanadi (default: −6…+6, 0.01). Bu 55 item uchun ham
+    tez (bir necha ming oddiy hisob) va deterministik.
+
+    Args:
+        responses: `ItemResponse` ro'yxati (`difficulty` = b_j, `is_correct` = u_j).
+        prior_mean: prior o'rtachasi (default: `config.EAP_PRIOR_MEAN`).
+        prior_sd: prior standart chetlanishi (default: `config.EAP_PRIOR_SD`).
+        grid_min/grid_max/grid_step: integratsiya panjarasi.
+
+    Raises:
+        ValueError: ro'yxat bo'sh, `prior_sd <= 0` yoki panjara noto'g'ri bo'lsa.
+    """
+    items = list(responses)
+    if not items:
+        raise ValueError("Kamida bitta javob (ItemResponse) bo'lishi kerak.")
+
+    mean = float(config.EAP_PRIOR_MEAN if prior_mean is None else prior_mean)
+    sd = float(config.EAP_PRIOR_SD if prior_sd is None else prior_sd)
+    if not math.isfinite(sd) or sd <= 0:
+        raise ValueError(f"EAP prior_sd musbat chekli son bo'lishi kerak: {sd!r}")
+
+    low = float(config.EAP_GRID_MIN if grid_min is None else grid_min)
+    high = float(config.EAP_GRID_MAX if grid_max is None else grid_max)
+    step = float(config.EAP_GRID_STEP if grid_step is None else grid_step)
+    if not math.isfinite(low) or not math.isfinite(high) or high <= low:
+        raise ValueError(f"EAP panjarasi noto'g'ri: [{low}, {high}]")
+    if not math.isfinite(step) or step <= 0:
+        raise ValueError(f"EAP grid_step musbat bo'lishi kerak: {step!r}")
+
+    points = int(round((high - low) / step)) + 1
+    grid = [low + step * index for index in range(points)]
+
+    # log posterior = log likelihood + log prior (log-sum-exp uchun barqaror).
+    logpost: list[float] = []
+    for theta in grid:
+        logprior = -0.5 * ((theta - mean) / sd) ** 2
+        logpost.append(log_likelihood(theta, items) + logprior)
+
+    peak = max(logpost)
+    weights = [math.exp(value - peak) for value in logpost]
+    norm = sum(weights)
+    if norm <= 0.0:  # pragma: no cover - matematik jihatdan bo'lmaydi
+        raise ValueError("EAP posterior hisoblanmadi (norm = 0).")
+
+    theta = sum(point * weight for point, weight in zip(grid, weights)) / norm
+    variance = (
+        sum((point - theta) ** 2 * weight for point, weight in zip(grid, weights)) / norm
+    )
+    standard_error = math.sqrt(variance) if variance > EPS else None
+
+    raw_score = sum(1 for item in items if item.is_correct)
+    total_items = len(items)
+    return RaschEstimate(
+        theta=theta,
+        standard_error=standard_error,
+        scaled_score=theta_to_scaled(theta),
+        raw_score=raw_score,
+        total_items=total_items,
+        log_likelihood=log_likelihood(theta, items),
+        iterations=0,
+        converged=True,
+        # EAP da θ chekli, lekin 0/N va N/N — o'lchov noaniqligi eng katta
+        # bo'lgan holatlar; hisobotda "chegaraviy" deb belgilanadi.
+        is_extreme=(raw_score == 0 or raw_score == total_items),
+    )
+
+
 def evaluate(
     questions: Sequence[Question],
     answers: Mapping[int, str],

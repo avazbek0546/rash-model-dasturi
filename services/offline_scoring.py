@@ -294,7 +294,7 @@ def score_offline(
     readiness: OfflineReadiness,
     flags: Sequence[int],
 ) -> OfflineScore:
-    """55 ta 0/1 bayroqni mavjud Rasch MLE bilan baholaydi."""
+    """55 ta 0/1 bayroqni mavjud Rasch modeli bilan baholaydi (MLE/EAP)."""
     if not readiness.ready:
         raise OfflineReadinessError(readiness.reason)
     if len(flags) != len(readiness.items):
@@ -329,7 +329,11 @@ def score_offline(
             }
         )
 
-    estimate = rasch.estimate_theta(responses)
+    estimate = (
+        rasch.estimate_theta_eap(responses)
+        if context.theta_method == "eap"
+        else rasch.estimate_theta(responses)
+    )
     summaries = subjects.summarize(
         (int(item.get("position") or 0), bool(int(flag)))
         for item, flag in zip(readiness.items, flags)

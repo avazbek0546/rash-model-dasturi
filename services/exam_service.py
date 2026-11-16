@@ -23,6 +23,7 @@ from typing import Final, Sequence
 
 import config
 from database.models import Exam, ExamStatus
+from services import form_layout
 
 logger = logging.getLogger(__name__)
 
@@ -412,12 +413,110 @@ def difficulties_to_json(values: Sequence[float]) -> str:
     return json.dumps([round(float(value), 4) for value in values], ensure_ascii=False)
 
 
+def item_labels(total_questions: int) -> list[str]:
+    """Item belgilari: `1..35`, `36a..45b` (qismlar alohida savol)."""
+    total = max(int(total_questions or 0), 0)
+    labels: list[str] = []
+    for position in range(1, total + 1):
+        for part in form_layout.parts_of(position):
+            labels.append(form_layout.label_of(position, part or None))
+    return labels
+
+
+def b_by_key(exam: Exam) -> dict[str, float]:
+    """`b` xaritasi — per-item (label) yoki pozitsiya bo'yicha.
+
+    `exams.difficulty_logits` quyidagi ko'rinishlarda bo'lishi mumkin:
+
+    * JSON obyekt: `{"1": -1.649, "36a": 0.135, ...}` — **per-item** `b`
+      (production item banki; `36a`/`36b` alohida);
+    * JSON massiv, uzunligi item soniga teng (45 pozitsiya uchun 55) —
+      `1..35`, `36a..45b` tartibida per-item `b`;
+    * JSON massiv, uzunligi pozitsiyalar soniga teng (45) — eski xulq:
+      `"1".."45"`, qismlar pozitsiya `b` sini meros oladi;
+    * buzuq/bo'sh — hamma pozitsiya uchun `0.0`.
+
+    Qaytaradi: `{question_key: b}` (`difficulty_of()` shu xaritadan qidiradi).
+    """
+    total = max(int(exam.total_questions or 0), 0)
+    if total <= 0:
+        return {}
+    try:
+        parsed = json.loads(exam.difficulty_logits or "[]")
+    except (TypeError, ValueError):
+        parsed = []
+
+    if isinstance(parsed, dict):
+        result: dict[str, float] = {}
+        for key, value in parsed.items():
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(number):
+                result[str(key)] = number
+        if result:
+            # Faqat **per-item** kalitlar (`36a`, `36b`, ...) bo'lsa to'ldiramiz;
+            # sof pozitsiyali eski dict (`{"1": ...}`) o'z holida qoladi —
+            # `difficulty_of()` pozitsiya zaxirasidan foydalanadi va `auto`
+            # rejim MLE ni tanlaydi (orqaga moslik).
+            if any(not str(key).isdigit() for key in result):
+                for label in item_labels(total):
+                    if label in result:
+                        continue
+                    number, _part = form_layout.split_label(label)
+                    result[label] = result.get(str(number), 0.0)
+            return result
+    elif isinstance(parsed, list):
+        values: list[float] = []
+        for value in parsed:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            number = float(value)
+            if math.isfinite(number):
+                values.append(number)
+        labels = item_labels(total)
+        if len(values) == len(labels) and len(labels) != total:
+            # Per-item (55) massiv — qismlar alohida.
+            return {label: values[index] for index, label in enumerate(labels)}
+        if len(values) >= total:
+            # 45 pozitsiyali eski massiv.
+            return {
+                str(position): values[position - 1]
+                for position in range(1, total + 1)
+            }
+        if values:
+            return {
+                str(position): (
+                    values[position - 1] if position - 1 < len(values) else 0.0
+                )
+                for position in range(1, total + 1)
+            }
+
+    return {str(position): 0.0 for position in range(1, total + 1)}
+
+
 def effective_difficulties(exam: Exam) -> list[float]:
-    """Imtihon logitlari (buzilgan yoki to'liq bo'lmasa — 0.0 bilan to'ldiriladi)."""
-    values = list(exam.difficulties)
-    if len(values) < exam.total_questions:
-        values += [0.0] * (exam.total_questions - len(values))
-    return values[: exam.total_questions]
+    """Pozitsiyalar bo'yicha `b` (per-item xaritadan ham, eski massivdan ham).
+
+    Qismli item bankida (`36a`/`36b`) pozitsiya uchun birinchi mavjud qism
+    `b` si olinadi — bu faqat ko'rsatish/o'rtacha uchun; baholashda
+    `difficulty_of()` aniq belgi bo'yicha ishlaydi.
+    """
+    total = max(int(exam.total_questions or 0), 0)
+    mapping = b_by_key(exam)
+    values: list[float] = []
+    for position in range(1, total + 1):
+        value = mapping.get(str(position))
+        if value is None:
+            for part in form_layout.parts_of(position):
+                if not part:
+                    continue
+                value = mapping.get(form_layout.label_of(position, part))
+                if value is not None:
+                    break
+        values.append(float(value) if value is not None else 0.0)
+    return values
 
 
 def average_difficulty(exam: Exam) -> float | None:

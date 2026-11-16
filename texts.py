@@ -527,12 +527,13 @@ def participants_chunks(
     title: str,
     test_code: str,
     participants: Sequence[Participant],
-    total_questions: int = 0,
+    total_items: int = 0,
 ) -> list[str]:
     """`/participants TEST_KODI` — qatnashchilar ro'yxati (bo'laklarga bo'lingan).
 
     Har bir satr: tartib raqami, ism (@username), Telegram ID, yuborilgan
-    vaqt va (baholangan bo'lsa) to'g'ri javoblar soni.
+    vaqt va (baholangan bo'lsa) to'g'ri javoblar soni. `total_items` —
+    baholanadigan savollar soni (qismlar bilan), pozitsiyalar soni emas.
     """
     header = (
         "👥 <b>Qatnashchilar</b>\n"
@@ -551,7 +552,7 @@ def participants_chunks(
             mention += f" (@{_safe(item.username)})"
         details = [f"🕒 {_safe(_submitted_text(item.submitted_at))}"]
         if item.is_graded:
-            details.append(f"✅ {int(item.raw_score or 0)}/{int(total_questions or 0)}")
+            details.append(f"✅ {int(item.raw_score or 0)}/{int(total_items or 0)}")
         lines.append(
             f"{index}. {mention} · <code>{int(item.user_id)}</code>\n"
             f"   " + " · ".join(details)
@@ -1407,7 +1408,9 @@ def result_ready(
     level = str(report.get("ability_level") or "")
     theta = float(report.get("theta") or 0.0)
     raw = int(report.get("raw_score") or 0)
-    total = int(report.get("total_questions") or 0)
+    # Maxraj — baholanadigan savollar soni (qismli formada masalan 55);
+    # `total_questions` faqat zaxira (eski hisobotlar uchun).
+    total = int(report.get("total_items") or report.get("total_questions") or 0)
     scaled = report.get("scaled_score")
     subject_balls = report.get("subject_balls") or {}
 

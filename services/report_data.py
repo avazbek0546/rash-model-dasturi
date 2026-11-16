@@ -65,7 +65,9 @@ async def build_exam_report(repos: Repositories, exam) -> ExamReport:
                 algebra=_subject_ball(report, "algebra"),
                 geometry=_subject_ball(report, "geometry"),
                 correct=int(report["raw_score"]),
-                total=int(report["total_questions"]),
+                # Maxraj — baholanadigan savollar soni (qismlar bilan), pozitsiya
+                # emas: `48/45` o'rniga `48/55`.
+                total=int(report.get("total_items") or report["total_questions"]),
             )
         )
 

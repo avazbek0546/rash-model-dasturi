@@ -576,6 +576,18 @@ class ExamRepository:
             "UPDATE exams SET graded_at = ? WHERE exam_id = ?", (graded_at, exam_id)
         )
 
+    async def update_difficulty_logits(self, exam_id: int, difficulty_logits: str) -> None:
+        """Imtihonning `b` manbasini yangilaydi (item bank yuklash uchun).
+
+        `difficulty_logits` — JSON satri: 45 pozitsiyali massiv (eski xulq),
+        55 itemli massiv yoki label bo'yicha obyekt (`{"36a": ...}`).
+        Baholash `services.exam_service.b_by_key()` orqali o'qiydi.
+        """
+        await self._db.execute(
+            "UPDATE exams SET difficulty_logits = ? WHERE exam_id = ?",
+            (difficulty_logits, int(exam_id)),
+        )
+
     async def count(self) -> int:
         """Jami imtihonlar soni."""
         return int(await self._db.fetchvalue("SELECT COUNT(*) FROM exams", default=0))

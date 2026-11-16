@@ -372,6 +372,11 @@ async def submit_answers(request: web.Request) -> web.Response:
     if not allowed:
         raise ApiError(403, reason)
 
+    # Baholanadigan savollar soni (qismlar bilan). Qismli formada
+    # `exam.total_questions` (45) emas, 55 bo'lishi mumkin — javob xabaridagi
+    # `belgilangan / jami` maxraji shu qiymat bo'lishi kerak.
+    total_items = grading.expected_total_items(exam)
+
     if await repos.answers.get(user["user_id"], exam.exam_id) is not None:
         raise ApiError(409, "Siz bu imtihonga allaqachon javob yuborgansiz.")
 
@@ -402,7 +407,7 @@ async def submit_answers(request: web.Request) -> web.Response:
         user["user_id"],
         exam.exam_id,
         answered,
-        exam.total_questions,
+        total_items,
     )
 
     # Tezkor tekshiruv: faqat ✅/❌ (kalit, o'quvchi javobi, θ va ball yo'q).
@@ -435,9 +440,10 @@ async def submit_answers(request: web.Request) -> web.Response:
             "title": exam.title,
             "answered": answered,
             "total_questions": exam.total_questions,
+            "total_items": total_items,
             "result_time_local": exam_service.format_local(exam.result_time),
             "message": (
-                f"Javoblaringiz qabul qilindi ({answered}/{exam.total_questions}). "
+                f"Javoblaringiz qabul qilindi ({answered}/{total_items}). "
                 f"Natijalar {exam_service.format_local(exam.result_time)} da e'lon qilinadi."
             ),
         }
@@ -456,12 +462,29 @@ async def list_results(request: web.Request) -> web.Response:
 
     published: list[dict[str, Any]] = []
     pending: list[dict[str, Any]] = []
+    # Item soni (qismlar bilan) bir imtihon uchun bir marta hisoblanadi:
+    # qismli formada `exams.total_questions` (45) emas, haqiqiy savollar soni
+    # (55) ko'rsatilishi kerak — aks holda `48/45` chiqadi.
+    item_counts: dict[int, int] = {}
+
+    async def item_total(exam_id: int, fallback: int) -> int:
+        cached = item_counts.get(exam_id)
+        if cached is not None:
+            return cached
+        exam = await repos.exams.get(exam_id)
+        value = grading.expected_total_items(exam) if exam is not None else int(fallback)
+        item_counts[exam_id] = value
+        return value
+
     for submission in submissions:
         is_published = submission.result_time is not None and submission.result_time <= now
         entry: dict[str, Any] = {
             "exam_id": submission.exam_id,
             "title": submission.exam_title or f"Imtihon #{submission.exam_id}",
             "total_questions": submission.total_questions or 0,
+            "total_items": await item_total(
+                submission.exam_id, submission.total_questions or 0
+            ),
             "submitted_at": (submission.submitted_at or "")[:16],
             # Aniq (UTC ISO) natija vaqti — Web App'da jonli countdown uchun
             # (`result_time_local` faqat ko'rsatish uchun formatlangan matn).
@@ -606,6 +629,9 @@ async def verify_code(request: web.Request) -> web.Response:
             "exam_id": exam.exam_id,
             "title": exam.title,
             "total_questions": exam.total_questions,
+            # Baholanadigan savollar soni (qismlar bilan) — navbatda "N savol"
+            # ko'rsatkichi uchun; `layout` esa kartochkalarni beradi.
+            "total_items": grading.expected_total_items(exam),
             "layout": form_layout.layout_with_parts(
                 exam.total_questions,
                 form_layout.part_labels(exam.answer_key, exam.total_questions),

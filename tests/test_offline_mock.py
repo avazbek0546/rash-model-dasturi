@@ -29,7 +29,7 @@ from database.db import Database  # noqa: E402
 from database.models import User  # noqa: E402
 from database.repository import Repositories  # noqa: E402
 from services import exam_admin, exam_service, form_layout, grading, offline_import  # noqa: E402
-from services import offline_report, offline_scoring, offline_template, report_pdf  # noqa: E402
+from services import offline_report, offline_scoring, offline_template, report_pdf, test_quality  # noqa: E402
 
 ADMIN_ID = 900001
 ALI_ID = 900101
@@ -173,6 +173,24 @@ async def main() -> None:
         assert combined.online_count == 1
         assert combined.excluded_count == 1
         assert all(row.total == 55 for row in combined.students)
+
+        # Test sifati: offline va combined manbalar (offline 2, online 1)
+        offline_quality = await test_quality.build_exam_quality(
+            repos, exam, source="offline"
+        )
+        assert offline_quality["source"] == "offline", offline_quality
+        assert offline_quality["summary"]["participants"] == 2, offline_quality
+        assert offline_quality["summary"]["items"] == 55, offline_quality
+        combined_quality = await test_quality.build_exam_quality(
+            repos, exam, source="combined"
+        )
+        assert combined_quality["source"] == "combined", combined_quality
+        assert combined_quality["summary"]["participants"] == 3, combined_quality
+        assert combined_quality["summary"]["online_participants"] == 1
+        assert combined_quality["summary"]["offline_participants"] == 2
+        print(
+            "[OK] Test sifati: offline=2, combined=3 (online 1 + offline 2)"
+        )
         assert len(combined.students) == 3 and combined.students[0].rank == 1
 
         pdf_combined = report_pdf.build_combined_results_pdf(

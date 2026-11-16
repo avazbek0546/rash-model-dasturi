@@ -66,7 +66,8 @@
       item.className = "exam-item";
 
       const left = document.createElement("div");
-      let meta = App.escape(exam.status_title) + " · " + exam.total_questions + " savol";
+      let meta = App.escape(exam.status_title) + " · " +
+        (exam.total_items || exam.total_questions) + " savol";
       if (exam.status === "active") {
         meta += " · tugash: " + App.escape(exam.end_time_local);
       } else if (exam.status === "upcoming") {

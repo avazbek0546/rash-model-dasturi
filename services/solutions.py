@@ -283,6 +283,15 @@ def raw_score(exam: Exam, submission: ExamSubmission | None) -> int:
     return sum(question_marks(exam, submission))
 
 
+def item_count(exam: Exam, submission: ExamSubmission | None) -> int:
+    """Baholanadigan savollar soni (qismlar bilan) — `raw_score` maxraji.
+
+    Qismli formada (`36a`, `36b`) `exam.total_questions` pozitsiyalar sonini
+    beradi (masalan 45), haqiqiy savollar soni esa ko'proq (masalan 55).
+    """
+    return len(question_marks(exam, submission))
+
+
 def _labeled_marks(exam: Exam, submission: ExamSubmission | None) -> list[tuple[str, int, bool]]:
     """Har bir savol uchun ``(label, position, is_correct)`` ro'yxati.
 
