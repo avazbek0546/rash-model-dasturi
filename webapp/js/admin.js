@@ -637,6 +637,60 @@
     input.classList.toggle("empty", !filled);
   }
 
+  /** Trigonometrik funksiya bormi (DEG/RAD muhrini faqat shunda qo'llaymiz). */
+  const TRIG_RE = /(?:^|[^a-z])(sin|cos|tg|ctg|arcsin|arccos|arctg|arcctg)\s*\(/i;
+
+  /**
+   * Admin kaliti uchun qiymat.
+   *
+   * - o'nlik vergul → nuqta (kalitda `,` — blok ajratuvchisi);
+   * - DEG rejimida trigonometrik ifoda `deg(...)` bilan muhrlanadi — server
+   *   ham, panelning jonli natijasi ham AYNAN bir xil hisoblaydi;
+   * - RAD — standart (wrapper kerak emas), eski `deg(...)` bo'lsa — ochiladi.
+   */
+  function adminKeyValue(raw) {
+    let text = String(raw || "").trim().replace(/,/g, ".");
+    if (!text) {
+      return "";
+    }
+    if (!window.MathPanel) {
+      return text;
+    }
+    if (typeof window.MathPanel.unwrapExpression === "function") {
+      const parsed = window.MathPanel.unwrapExpression(text);
+      if (parsed && parsed.mode) {
+        text = parsed.text;
+      }
+    }
+    const mode =
+      typeof window.MathPanel.getAngleMode === "function"
+        ? window.MathPanel.getAngleMode()
+        : "deg";
+    if (
+      mode === "deg" &&
+      TRIG_RE.test(text) &&
+      typeof window.MathPanel.machineExpression === "function"
+    ) {
+      return window.MathPanel.machineExpression(text);
+    }
+    return text;
+  }
+
+  /** DEG/RAD almashganda barcha sonli maydonlarni qayta muhrlaydi. */
+  function resyncNumericKeys() {
+    const box = el("key-grid");
+    if (!box) {
+      return;
+    }
+    box.querySelectorAll(".key-part-input").forEach(function (input) {
+      const label = input.getAttribute("data-label");
+      if (label) {
+        keyState.nums[label] = adminKeyValue(input.value);
+      }
+    });
+    syncKeyText();
+  }
+
   /** 36–45 maydonlari uchun MATEMATIK PANEL (foydalanuvchilardagi bilan bir xil). */
   function bindMathPanel(input, label) {
     if (!window.MathPanel || typeof window.MathPanel.bindInput !== "function") {
@@ -647,6 +701,15 @@
       if (typeof window.MathPanel.attach === "function") {
         window.MathPanel.attach("admin-" + label, { label: label + ") javobi" });
       }
+      // `attach` o'zi jonli ko'rinish va natijani chizadi (boundInput orqali).
+      // Panel pastdan chiqadi — fokusdagi maydon panel ostida qolmasin.
+      window.setTimeout(function () {
+        try {
+          input.scrollIntoView({ block: "start", behavior: "smooth" });
+        } catch (error) {
+          /* eski brauzer — e'tiborsiz */
+        }
+      }, 80);
     });
     input.addEventListener("blur", function () {
       window.MathPanel.unbindInput(null);
@@ -705,10 +768,13 @@
       input.spellcheck = false;
       input.className = "key-part-input";
       input.placeholder = part;
+      input.setAttribute("data-label", position + part);
       input.value = keyState.nums[position + part] || "";
       markPartInput(input, input.value);
       input.addEventListener("input", function () {
-        keyState.nums[position + part] = input.value.trim();
+        // Kalit matni uchun xavfsiz qiymat: vergul → nuqta, DEG bo'lsa —
+        // trigonometrik ifoda `deg(...)` bilan muhrlanadi (server bilan mos).
+        keyState.nums[position + part] = adminKeyValue(input.value);
         markPartInput(input, input.value);
         syncKeyText();
       });
@@ -760,6 +826,13 @@
       total.addEventListener("input", function () {
         renderKeyGrid();
         syncKeyText();
+      });
+    }
+    // DEG/RAD almashganda kalit qiymatlari qayta muhrlanadi (server bilan mos).
+    const angleBtn = el("math-angle");
+    if (angleBtn) {
+      angleBtn.addEventListener("click", function () {
+        window.setTimeout(resyncNumericKeys, 0);
       });
     }
     renderKeyGrid();

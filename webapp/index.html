@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Rasch imtihon platformasi</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=22" />
+    <link rel="stylesheet" href="/static/css/style.css?v=23" />
     <!-- Telegram Web App SDK — Telegram faqat HTTPS sahifalarda beradi. -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
@@ -223,22 +223,38 @@
       <button type="button" data-tab="admin" id="nav-admin" class="hidden"><span class="icon">⚙️</span>Test yaratish</button>
     </nav>
 
-    <!-- ============ Matematik javob paneli (36–45) — BITTA global panel ============ -->
+    <!-- ============ Matematik javob paneli (36–45) — BITTA global panel ============
+         Foydalanuvchi javob varag'ida ham, admin «Qulay kiritish»da ham AYNAN
+         shu panel ishlaydi. Tuzilishi:
+           sarlavha (qaysi katak) → jonli ko'rinish + natija → rejim → tugmalar.
+         Pastdagi tahrirlash qatori (← → ⌫ ⌦ C ✓) doim ko'rinib turadi. -->
     <div id="math-panel" class="math-panel hidden" role="group"
          aria-label="Matematik javob paneli">
+      <div class="math-grab" aria-hidden="true"></div>
       <div class="math-head">
-        <span class="math-target" id="math-target">Katakni tanlang</span>
-        <div class="math-modes" role="tablist">
-          <button type="button" id="math-mode-basic" class="math-mode active">Asosiy</button>
-          <button type="button" id="math-mode-math" class="math-mode">Matematik</button>
-          <button type="button" id="math-angle" class="math-mode angle"
-                  aria-label="Burchak rejimi (DEG/RAD)">DEG</button>
-        </div>
+        <span class="math-target" id="math-target" aria-live="polite">Katakni tanlang</span>
         <button type="button" id="math-close" class="math-close"
                 aria-label="Panelni yopish">×</button>
       </div>
-      <div class="math-hint" id="math-hint"></div>
-      <div class="math-keys" id="math-keys"></div>
+      <div class="math-preview-row">
+        <div class="math-preview math-render empty" id="math-preview"
+             aria-live="polite">
+          <span class="math-preview-empty">Ifodani kiriting…</span>
+        </div>
+        <div class="math-hint" id="math-hint" aria-live="polite"></div>
+      </div>
+      <div class="math-modes" aria-label="Klaviatura rejimi">
+        <button type="button" id="math-mode-basic" class="math-mode active"
+                aria-pressed="true">123 Asosiy</button>
+        <button type="button" id="math-mode-math" class="math-mode"
+                aria-pressed="false">ƒ Matematik</button>
+        <button type="button" id="math-angle" class="math-mode angle"
+                aria-label="Burchak rejimi (DEG/RAD)">DEG</button>
+      </div>
+      <div class="math-keys" id="math-keys" role="group"
+           aria-label="Matematik tugmalar"></div>
+      <div class="math-actions" id="math-actions" role="group"
+           aria-label="Tahrirlash amallari"></div>
     </div>
 
     <!-- ============ Kasr konstruktori (2 slot: surat / maxraj) ============ -->
@@ -264,11 +280,11 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="/static/js/api.js?v=6"></script>
-    <script src="/static/js/mathpanel.js?v=17"></script>
-    <script src="/static/js/queue.js?v=19"></script>
+    <script src="/static/js/mathpanel.js?v=18"></script>
+    <script src="/static/js/queue.js?v=20"></script>
     <script src="/static/js/results.js?v=6"></script>
     <script src="/static/js/profile.js?v=4"></script>
-    <script src="/static/js/admin.js?v=12"></script>
+    <script src="/static/js/admin.js?v=13"></script>
     <script src="/static/js/app.js?v=7"></script>
   </body>
 </html>

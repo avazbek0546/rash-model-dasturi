@@ -44,6 +44,7 @@ from services import math_expr  # noqa: E402
 
 PANEL_JS = ROOT / "webapp" / "js" / "mathpanel.js"
 QUEUE_JS = ROOT / "webapp" / "js" / "queue.js"
+ADMIN_JS = ROOT / "webapp" / "js" / "admin.js"
 INDEX_HTML = ROOT / "webapp" / "index.html"
 STYLE_CSS = ROOT / "webapp" / "css" / "style.css"
 
@@ -186,7 +187,11 @@ EXPECTED = {
     # 7. Renderer root
     "render_sqrt": "\u221A<span class=\"m-root\">x</span>",
     "render_sqrt_sym": "\u221A<span class=\"m-root\">5</span>",
-    "render_cbrt": "\u221B<span class=\"m-root\">8</span>",
+    # 3-darajali ildiz `³√8` ko'rinishida (n-darajali ildiz bilan bir xil):
+    "render_cbrt": (
+        '<span class="m-root-wrap"><span class="m-index">3</span>'
+        "\u221A" '<span class="m-root">8</span></span>'
+    ),
     # 8. Legacy / escape
     "render_legacy_frac": "3/7",
     "render_legacy_sin": "2sin(pi/2)",
@@ -239,7 +244,36 @@ def check_wiring() -> None:
         assert token in index, token
     for token in (".m-frac", ".m-num", ".m-den", ".m-root", ".frac-modal"):
         assert token in css, token
-    print("[OK] simlar: mathpanel.js / queue.js / index.html / style.css ulangan")
+
+    # --- Yangi panel tuzilishi (bitta global panel, ikkala rejimda bir xil) ---
+    # HTML: jonli ko'rinish + doimiy tahrirlash qatori.
+    for token in (
+        'id="math-preview"',
+        'id="math-actions"',
+        'class="math-grab"',
+        'class="math-preview-row"',
+        'aria-pressed="true"',
+    ):
+        assert token in index, token
+    # JS: preview API ochiq; admin maydoni panelni `bindInput` + `attach`
+    # orqali ochadi — preview/natija `attach` ichida `updateInputHint` bilan
+    # chiziladi (ikki joyda AYNAN bir xil oqim).
+    assert "setPreview: setPreview" in panel, "setPreview eksport qilinmagan"
+    assert "MathPanel.setPreview" in queue, "queue.js preview chizmaydi"
+    admin = read_text(ADMIN_JS)
+    assert "MathPanel.bindInput" in admin, "admin.js maydonni ulamaydi"
+    assert "MathPanel.attach" in admin, "admin.js panelni ochmaydi"
+    # CSS: yangi bloklar uslublangan.
+    for token in (
+        ".math-preview",
+        ".math-preview-row",
+        ".math-actions",
+        ".math-grab",
+        ".math-mode.active",
+        "button.math-key.key-ok",
+    ):
+        assert token in css, token
+    print("[OK] simlar: mathpanel.js / queue.js / admin.js / index.html / style.css ulangan")
 
 
 def check_python_parser() -> None:

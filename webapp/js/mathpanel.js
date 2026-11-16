@@ -37,30 +37,75 @@
   // registrga yangi yozuv sifatida qo'shiladi (panel qayta yozilmaydi).
   const ARROW = "\u232B"; // ⌫
 
+  // «Asosiy» — faqat raqamlar va amallar. Tahrirlash (← → ⌫ ⌦ C ✓) pastdagi
+  // doimiy qatorda — shu sababli bu yerda takrorlanmaydi va panel past bo'ladi.
   const LAYOUT_BASIC = [
-    ["7", "8", "9", { label: ARROW, action: "backspace", cls: "key-fn" }],
-    // `÷` — SMART KASR: terilgan qism SURATGA o'tadi, caret MAXRAJGA tushadi
-    // (foydalanuvchi darhol maxrajni yozadi). Bo'lish = kasr — qiymat o'zgarmaydi,
-    // faqat kiritish tez va qulay bo'ladi.
-    ["4", "5", "6", { label: "\u00F7", action: "smartfraction", cls: "key-op" }],
-    ["1", "2", "3", { label: "\u00D7", insert: "*", cls: "key-op" }],
-    [",", "0", ".", { label: "\u2212", insert: "-", cls: "key-op" }],
+    ["7", "8", "9", { label: "\u00F7", action: "smartfraction", cls: "key-op" }],
+    // `×`/`−` belgilari ifodaga o'z ko'rinishida yoziladi (preview chiroyli),
+    // hisoblashda `normalizeExpression` ularni `*`/`-` ga aylantiradi.
+    ["4", "5", "6", { label: "\u00D7", insert: "\u00D7", cls: "key-op" }],
+    ["1", "2", "3", { label: "\u2212", insert: "\u2212", cls: "key-op" }],
+    [",", "0", ".", { label: "+", insert: "+", cls: "key-op" }],
     [
       "(",
       ")",
       { label: "=", insert: "=", cls: "key-op" },
-      { label: "+", insert: "+", cls: "key-op" },
-    ],
-    [
-      { label: "\u2190", action: "left", cls: "key-fn" },
-      { label: "\u2192", action: "right", cls: "key-fn" },
-      { label: "\u2326", action: "delete", cls: "key-fn" },
       { label: "a/b", action: "fraction", cls: "key-fn" },
     ],
   ];
 
-  // «Funksiya» rejimi — FAQAT matematik belgilar (raqamlar «Asosiy»da).
-  // Guruhlar: ildiz/daraja · sonlar · trigonometriya · logarifm · tahrir.
+  // Doimiy tahrirlash qatori (rejimdan qat'i nazar bir xil):
+  // ← → · ⌫ (chapdagi) · ⌦ (o'ngdagi) · C (tozalash) · ✓ (tayyor).
+  const LAYOUT_ACTIONS = [
+    { label: "\u2190", action: "left", cls: "key-act" },
+    { label: "\u2192", action: "right", cls: "key-act" },
+    { label: ARROW, action: "backspace", cls: "key-act" },
+    { label: "\u2326", action: "delete", cls: "key-act" },
+    { label: "C", action: "clear", cls: "key-act key-danger" },
+    { label: "\u2713", action: "confirm", cls: "key-ok" },
+  ];
+
+  // Ekran o'quvchi uchun tushunarli nomlar (belgi o'rniga so'z).
+  const ARIA_LABELS = {
+    "\u232B": "O'chirish (backspace)",
+    "\u2326": "O'ngdagi belgini o'chirish",
+    "\u2190": "Chapga",
+    "\u2192": "O'ngga",
+    C: "Tozalash",
+    "\u2713": "Tayyor",
+    "\u00F7": "Kasr (bo'lish)",
+    "\u00D7": "Ko'paytirish",
+    "\u2212": "Ayirish",
+    "+": "Qo'shish",
+    "=": "Teng",
+    "a/b": "Kasr kiritish",
+    "\u221A": "Kvadrat ildiz",
+    "\u207F\u221A": "n-darajali ildiz",
+    "x\u207F": "Daraja",
+    "x\u207B\u00B9": "Teskari daraja",
+    "\u03C0": "Pi soni",
+    e: "E soni",
+    "|x|": "Modul",
+    "\u2044": "Kasr kiritish",
+    sin: "Sinus",
+    cos: "Kosinus",
+    tg: "Tangens",
+    ctg: "Kotangens",
+    arcsin: "Arksinus",
+    arccos: "Arkkosinus",
+    arctg: "Arktangens",
+    arcctg: "Arkkotangens",
+    ln: "Natural logarifm",
+    lg: "O'nlik logarifm",
+    "log\u2090": "Logarifm (asos)",
+    "%": "Foiz",
+    "x\u00B2": "Kvadrat",
+    "x\u00B3": "Kub",
+  };
+
+  // «Matematik» — faqat matematik belgilar. Har bir qator mantiqiy guruh:
+  // ildiz/daraja · sonlar · trigonometriya · teskari trigonometriya · logarifm.
+  // Tahrirlash amallari pastdagi doimiy qatorda (LAYOUT_ACTIONS).
   const LAYOUT_MATH_V2 = [
     [
       // √ — kvadrat ildiz (kursor radikand ichida turadi).
@@ -86,25 +131,25 @@
       { label: "ctg", insert: "ctg", cls: "key-fn" },
     ],
     [
+      { label: "arcsin", insert: "arcsin", cls: "key-fn" },
+      { label: "arccos", insert: "arccos", cls: "key-fn" },
+      { label: "arctg", insert: "arctg", cls: "key-fn" },
+      { label: "arcctg", insert: "arcctg", cls: "key-fn" },
+    ],
+    [
       { label: "ln", insert: "ln", cls: "key-fn" },
       { label: "lg", insert: "lg", cls: "key-fn" },
       // `logₐ` — asos va argument katakchalari darhol ochiladi, kursor ASOS
       // KATAKCHASIGA tushadi (avval asos, keyin argument) — n-darajali ildiz
       // bilan bir xil mantiq (`√[]()`).
       { label: "log\u2090", insert: "log_()", caretBack: 2, cls: "key-fn" },
-      { label: "\u2044", action: "fraction", cls: "key-fn" }, // kasr: surat/maxraj
+      { label: "%", insert: "%", cls: "key-fn" },
     ],
     [
       { label: "(", insert: "(", cls: "key-fn" },
       { label: ")", insert: ")", cls: "key-fn" },
-      { label: "\u2190", action: "left", cls: "key-fn" },
-      { label: "\u2192", action: "right", cls: "key-fn" },
-    ],
-    [
-      { label: ARROW, action: "backspace", cls: "key-fn" },
-      { label: "\u2326", action: "delete", cls: "key-fn" },
-      { label: "C", action: "clear", cls: "key-fn" },
-      { label: "\u2713", action: "confirm", cls: "key-ok" },
+      { label: "x\u00B2", insert: "^2", cls: "key-fn" },
+      { label: "x\u00B3", insert: "^3", cls: "key-fn" },
     ],
   ];
 
@@ -169,8 +214,10 @@
   };
   let panel = null;
   let keysBox = null;
+  let actionsBox = null;
   let targetBox = null;
   let hintBox = null;
+  let previewBox = null;
 
   function byId(id) {
     return document.getElementById(id);
@@ -379,14 +426,18 @@
     } else if (degreeStart >= 0) {
       indexHtml = mdRenderRange(degree, base + degreeStart, caret);
     }
+    var rootHtml = "\u221A" + '<span class="m-root">' + rad.html + "</span>";
+    // Kvadrat ildizda daraja yo'q — ortiqcha bo'sh `<span>` chizilmaydi.
+    if (!indexHtml) {
+      return { html: rootHtml, next: rad.next };
+    }
     return {
       html:
         '<span class="m-root-wrap"><span class="m-index">' +
         indexHtml +
-        "</span>\u221A" +
-        '<span class="m-root">' +
-        rad.html +
-        "</span></span>",
+        "</span>" +
+        rootHtml +
+        "</span>",
       next: rad.next
     };
   }
@@ -589,6 +640,79 @@
   }
   // --- [PURE-END] ----------------------------------------------------------
 
+  /**
+   * Bitta tugma bosilganda bajariladigan amal.
+   *
+   * Tartib muhim: avval admin `<input>` rejimi (u ulangan bo'lsa, panel
+   * to'g'ridan-to'g'ri maydonga yozadi), keyin foydalanuvchi katagi uchun
+   * `handlers`. Shu tufayli ikkala joyda xulq AYNAN bir xil.
+   */
+  function handleKey(key) {
+    haptic();
+    if (applyKeyToInput(key)) {
+      return;
+    }
+    if (key.action === "backspace") {
+      if (handlers.onBackspace) {
+        handlers.onBackspace();
+      }
+      return;
+    }
+    if (key.action === "clear") {
+      if (handlers.onClear) {
+        handlers.onClear();
+      }
+      return;
+    }
+    if (key.action === "left" || key.action === "right" || key.action === "delete") {
+      if (key.action === "left" && handlers.onLeft) {
+        handlers.onLeft();
+      } else if (key.action === "right" && handlers.onRight) {
+        handlers.onRight();
+      } else if (key.action === "delete" && handlers.onDelete) {
+        handlers.onDelete();
+      }
+      return;
+    }
+    if (key.action === "confirm") {
+      if (handlers.onConfirm) {
+        handlers.onConfirm();
+      }
+      return;
+    }
+    if (key.action === "fraction") {
+      if (handlers.onFraction) {
+        handlers.onFraction();
+      }
+      return;
+    }
+    // `÷` — terilgan qismni suratga o'tkazib, kursorni maxrajga tushiradi.
+    if (key.action === "smartfraction") {
+      if (handlers.onSmartFraction) {
+        handlers.onSmartFraction();
+      }
+      return;
+    }
+    if (key.insert && handlers.onInsert) {
+      handlers.onInsert(key.insert, key.caretBack || 0);
+    }
+  }
+
+  /** Bitta tugma elementini yaratadi (matn, sinf, aria, bosish). */
+  function makeKeyButton(key) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "math-key" + (key.cls ? " " + key.cls : "");
+    button.textContent = key.label;
+    button.setAttribute("aria-label", ARIA_LABELS[key.label] || key.label);
+    button.addEventListener("click", function (event) {
+      event.preventDefault();
+      handleKey(key);
+    });
+    return button;
+  }
+
+  /** Joriy rejim tugmalarini chizadi (4 ustunli qatorlar). */
   function renderKeys() {
     if (!keysBox) {
       return;
@@ -599,68 +723,20 @@
       const rowBox = document.createElement("div");
       rowBox.className = "math-row";
       row.forEach(function (rawKey) {
-        const key = normalizeKey(rawKey);
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "math-key" + (key.cls ? " " + key.cls : "");
-        button.textContent = key.label;
-        button.setAttribute("aria-label", key.label);
-        button.addEventListener("click", function (event) {
-          event.preventDefault();
-          haptic();
-          // Admin «Qulay kiritish» maydoni ulangan bo'lsa — panel shu
-          // `<input>` ga yozadi (foydalanuvchi paneli bilan bir xil ishlaydi).
-          if (applyKeyToInput(key)) {
-            return;
-          }
-          if (key.action === "backspace") {
-            if (handlers.onBackspace) {
-              handlers.onBackspace();
-            }
-            return;
-          }
-          if (key.action === "clear") {
-            if (handlers.onClear) {
-              handlers.onClear();
-            }
-            return;
-          }
-          if (key.action === "left" || key.action === "right" || key.action === "delete") {
-            if (key.action === "left" && handlers.onLeft) {
-              handlers.onLeft();
-            } else if (key.action === "right" && handlers.onRight) {
-              handlers.onRight();
-            } else if (key.action === "delete" && handlers.onDelete) {
-              handlers.onDelete();
-            }
-            return;
-          }
-          if (key.action === "confirm") {
-            if (handlers.onConfirm) {
-              handlers.onConfirm();
-            }
-            return;
-          }
-          if (key.action === "fraction") {
-            if (handlers.onFraction) {
-              handlers.onFraction();
-            }
-            return;
-          }
-          // `÷` — terilgan qismni suratga o'tkazib, kursorni maxrajga tushiradi.
-          if (key.action === "smartfraction") {
-            if (handlers.onSmartFraction) {
-              handlers.onSmartFraction();
-            }
-            return;
-          }
-          if (key.insert && handlers.onInsert) {
-            handlers.onInsert(key.insert, key.caretBack || 0);
-          }
-        });
-        rowBox.appendChild(button);
+        rowBox.appendChild(makeKeyButton(normalizeKey(rawKey)));
       });
       keysBox.appendChild(rowBox);
+    });
+  }
+
+  /** Doimiy tahrirlash qatorini chizadi (rejim almashsa ham o'zgarmaydi). */
+  function renderActions() {
+    if (!actionsBox) {
+      return;
+    }
+    actionsBox.innerHTML = "";
+    LAYOUT_ACTIONS.forEach(function (rawKey) {
+      actionsBox.appendChild(makeKeyButton(normalizeKey(rawKey)));
     });
   }
 
@@ -669,9 +745,11 @@
     const math = byId("math-mode-math");
     if (basic) {
       basic.classList.toggle("active", mode !== "math");
+      basic.setAttribute("aria-pressed", mode !== "math" ? "true" : "false");
     }
     if (math) {
       math.classList.toggle("active", mode === "math");
+      math.setAttribute("aria-pressed", mode === "math" ? "true" : "false");
     }
   }
 
@@ -736,24 +814,32 @@
     writeInput("(" + left + ")/(" + right + ")", left.length + 4 + right.length);
   }
 
-  /** Ulangan maydon uchun natija ko'rsatkichi (faqat UI). */
+  /** Ulangan maydon uchun jonli ko'rinish va natija (faqat UI). */
   function updateInputHint() {
     if (!boundInput) {
       return;
     }
-    const raw = String(boundInput.value || "").trim();
+    const valueText = String(boundInput.value || "");
+    const caret =
+      typeof boundInput.selectionStart === "number"
+        ? boundInput.selectionStart
+        : valueText.length;
+    setPreview(valueText, caret);
+    const raw = valueText.trim();
     if (!raw) {
       setHint("", null);
       return;
     }
     let value = null;
     try {
-      value = evaluate(raw);
+      // DEG/RAD rejimi ifodaga "muhrlanadi" — foydalanuvchi javob varag'idagi
+      // hisob bilan AYNAN bir xil natija ko'rinadi.
+      value = evaluate(composeExpression(raw, angleMode));
     } catch (error) {
       value = null;
     }
     if (value === null || value === undefined || !isFinite(value)) {
-      setHint("Hozircha hisoblanmayapti — ifodani tugating", "error");
+      setHint("Hisoblanmadi", "error");
       return;
     }
     setHint("= " + formatValue(value), "ok");
@@ -797,10 +883,12 @@
     }
     if (key.action === "left") {
       caretToInput(Math.max(0, start - 1));
+      updateInputHint(); // jonli ko'rinishdagi caret ham siljiydi
       return true;
     }
     if (key.action === "right") {
       caretToInput(Math.min(value.length, end + 1));
+      updateInputHint();
       return true;
     }
     if (key.action === "clear") {
@@ -849,6 +937,11 @@
       targetBox.textContent = opts.label || cellId;
     }
     setHint("", null);
+    // Admin rejimida maydon ulangan — uning qiymati va natijasi darhol
+    // ko'rsatiladi (foydalanuvchi oqimida `queue.js` o'zi chaqiradi).
+    if (boundInput) {
+      updateInputHint();
+    }
     if (panel) {
       panel.classList.remove("hidden");
     }
@@ -863,6 +956,32 @@
     }
     document.body.classList.remove("panel-open");
     setHint("", null);
+    setPreview("", -1);
+  }
+
+  /**
+   * Jonli ko'rinish: kiritilayotgan ifodani kasr/ildiz/daraja ko'rinishida
+   * chizadi va caret joyini ko'rsatadi. Faqat UI — machine-string o'zgarmaydi.
+   *
+   * @param {string} expression — foydalanuvchi ko'radigan matn.
+   * @param {number} caret — absolut caret indeksi (berilmasa — oxiri).
+   */
+  function setPreview(expression, caret) {
+    if (!previewBox) {
+      return;
+    }
+    const text = String(expression == null ? "" : expression);
+    if (!text) {
+      previewBox.classList.add("empty");
+      previewBox.innerHTML =
+        '<span class="math-preview-empty">Ifodani kiriting…</span>';
+      return;
+    }
+    previewBox.classList.remove("empty");
+    previewBox.innerHTML = renderExpression(
+      text,
+      typeof caret === "number" ? caret : text.length
+    );
   }
 
   /**
@@ -896,6 +1015,10 @@
     if (handlers.onAngle) {
       handlers.onAngle(angleMode);
     }
+    // Admin rejimida maydon ulangan — natija darhol qayta hisoblanadi.
+    if (boundInput) {
+      updateInputHint();
+    }
   }
 
   /** DEG ↔ RAD almashtirish. */
@@ -914,6 +1037,10 @@
     const button = byId("math-angle");
     if (button) {
       button.textContent = angleMode === "deg" ? "DEG" : "RAD";
+      button.setAttribute(
+        "aria-label",
+        "Burchak rejimi: " + (angleMode === "deg" ? "gradus" : "radian")
+      );
     }
   }
 
@@ -938,14 +1065,17 @@
       });
     }
     keysBox = byId("math-keys");
+    actionsBox = byId("math-actions");
     targetBox = byId("math-target");
     hintBox = byId("math-hint");
+    previewBox = byId("math-preview");
 
     const saved = storageGet(MODE_KEY);
     mode = saved === "math" ? "math" : "basic";
     const savedAngle = storageGet(ANGLE_KEY);
     angleMode = savedAngle === "rad" ? "rad" : "deg";
     renderKeys();
+    renderActions();
     updateModeButtons();
     updateAngleButton();
 
@@ -984,6 +1114,7 @@
     detach: detach,
     setMode: setMode,
     setHint: setHint,
+    setPreview: setPreview,
     currentTarget: currentTarget,
     /* Hisoblash yordamchilari (queue.js ishlatadi). */
     evaluate: evaluate,

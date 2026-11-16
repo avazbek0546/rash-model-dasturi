@@ -880,7 +880,7 @@
   function hintForCell(cellId) {
     const value = answers[cellId];
     if (value === undefined || value === null || value === "") {
-      return expressions[cellId] ? "Ifoda to'liq emas — hisoblanmadi" : "";
+      return expressions[cellId] ? "Hisoblanmadi" : "";
     }
     return "= " + value;
   }
@@ -914,6 +914,14 @@
     if (card) {
       card.classList.toggle("answered", Boolean(saved));
     }
+    // Panelning jonli ko'rinishi ham katak bilan bir xil bo'lsin (caret bilan).
+    if (
+      activeCell === cellId &&
+      window.MathPanel &&
+      typeof window.MathPanel.setPreview === "function"
+    ) {
+      window.MathPanel.setPreview(expression, caretOf(cellId));
+    }
   }
 
   /**
@@ -941,6 +949,9 @@
     if (window.MathPanel && typeof window.MathPanel.attach === "function") {
       window.MathPanel.attach(cellId, { label: cellLabel(cell) });
       window.MathPanel.setHint(hintForCell(cellId), answers[cellId] ? "ok" : null);
+      if (typeof window.MathPanel.setPreview === "function") {
+        window.MathPanel.setPreview(expressions[cellId] || "", caretOf(cellId));
+      }
     }
     const node = byId("answer-sheet").querySelector('.q-cell[data-cell="' + cellId + '"]');
     if (node) {
@@ -1242,7 +1253,7 @@
     cell.setAttribute("aria-readonly", "true");
     cell.setAttribute("aria-label", cellLabel(item) + " — javob katagi");
     const valueBox = document.createElement("span");
-    valueBox.className = "q-value placeholder";
+    valueBox.className = "q-value math-render placeholder";
     valueBox.textContent = "Javobni kiriting";
     cell.appendChild(valueBox);
     cell.addEventListener("click", function (event) {

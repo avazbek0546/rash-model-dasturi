@@ -825,7 +825,7 @@ input.q-input.invalid {
 
 /* Panel ochilganda pastdagi kataklar panel ostida qolmasligi uchun. */
 body.panel-open main {
-  padding-bottom: calc(var(--nav-height) + 340px);
+  padding-bottom: calc(var(--nav-height) + min(74vh, 560px));
 }
 
 /* «Tasdiqlash» (✓) tugmasi — ajralib turadi (birlamchi rang). */
@@ -850,10 +850,14 @@ body.panel-open main {
 }
 
 body.panel-open .q-card {
-  scroll-margin-bottom: 340px;
+  scroll-margin-bottom: min(74vh, 560px);
 }
 
-/* --- Matematik panel ------------------------------------------------------ */
+/* --- Matematik panel ------------------------------------------------------
+   Bitta global panel: o'quvchi javob varag'ida ham, admin «Qulay kiritish»da
+   ham AYNAN shu panel ishlaydi. Tuzilishi:
+     sarlavha (qaysi katak) → jonli ko'rinish + natija → rejim → tugmalar.
+   Tahrirlash amallari (← → ⌫ ⌦ C ✓) pastda doim ko'rinib turadi. */
 .math-panel {
   position: fixed;
   left: 0;
@@ -861,93 +865,214 @@ body.panel-open .q-card {
   /* Telefonning ENG PASTIGA yopishadi (nav ustida emas) — bo'shliq qolmaydi. */
   bottom: 0;
   z-index: 60;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  max-height: min(74vh, 560px);
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
   border-top: 1px solid rgba(128, 128, 128, 0.22);
-  border-radius: 16px 16px 0 0;
-  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
-  padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
-  animation: math-slide-up 0.18s ease-out;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -10px 34px rgba(0, 0, 0, 0.22);
+  padding: 6px 10px calc(10px + env(safe-area-inset-bottom));
+  animation: math-slide-up 0.2s ease-out;
 }
 
 @keyframes math-slide-up {
-  from { transform: translateY(14px); opacity: 0.6; }
+  from { transform: translateY(18px); opacity: 0.5; }
   to { transform: translateY(0); opacity: 1; }
 }
 
+/* Ushatib yopish uchun vizual tutqich (mobil bottom-sheet uslubi). */
+.math-grab {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 4px;
+  margin: 0 auto 6px;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.35);
+}
+
 .math-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
 }
 
+/* Qaysi katak tanlanganini ko'rsatadigan "chip". */
 .math-target {
   flex: 1 1 auto;
-  font-size: 13px;
-  font-weight: 650;
+  min-width: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--secondary-bg);
   color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.math-modes {
-  display: flex;
-  gap: 4px;
-}
-
-.math-mode {
-  width: auto;
-  padding: 5px 10px;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--hint);
-  border: 1px solid rgba(128, 128, 128, 0.28);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.math-mode.active {
-  background: var(--button);
-  border-color: var(--button);
-  color: var(--button-text);
-}
-
 .math-close {
-  width: auto;
-  padding: 2px 8px;
-  background: transparent;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--secondary-bg);
   color: var(--hint);
   font-size: 20px;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.math-hint {
-  min-height: 16px;
-  margin: 0 0 6px;
-  font-size: 12px;
+/* Jonli ko'rinish: kiritilayotgan ifoda + hisoblangan natija. */
+.math-preview-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(128, 128, 128, 0.22);
+  border-radius: 12px;
+  background: var(--secondary-bg);
+}
+
+.math-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.2;
+  scrollbar-width: none;
+}
+
+.math-preview::-webkit-scrollbar {
+  display: none;
+}
+
+/* Kasr/ildiz bloklari siqilib ketmasin — kenglik yetmasa scroll bo'ladi. */
+.math-preview > * {
+  flex: 0 0 auto;
+}
+
+.math-preview.empty {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.math-preview-empty {
   color: var(--hint);
+}
+
+/* Panelda caret ham ko'rinadi (qaysi joyga yozilayotgani aniq). */
+.math-preview .q-caret {
+  display: inline;
+  margin-left: 1px;
+  color: var(--button);
+  font-weight: 700;
+  animation: q-blink 1s step-end infinite;
+}
+
+/* Natija nishoni: "= 3.5" (yashil) yoki "Hisoblanmadi" (qizil). */
+.math-hint {
+  flex: 0 0 auto;
+  max-width: 46%;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.14);
+  color: var(--hint);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.math-hint:empty {
+  display: none;
 }
 
 .math-hint.ok {
   color: var(--button);
-  font-weight: 600;
+  background: rgba(47, 124, 224, 0.14);
 }
 
 .math-hint.error {
   color: var(--danger);
+  background: rgba(224, 75, 75, 0.14);
 }
 
+/* Segmentli rejim tanlagichi: 123 Asosiy · ƒ Matematik · DEG/RAD. */
+.math-modes {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--secondary-bg);
+}
+
+.math-mode {
+  flex: 1 1 0;
+  width: auto;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--hint);
+  font-size: 12.5px;
+  font-weight: 650;
+  font-family: inherit;
+}
+
+.math-mode.active {
+  background: var(--button);
+  color: var(--button-text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+}
+
+.math-mode.angle {
+  flex: 0 0 auto;
+  min-width: 54px;
+  background: var(--bg);
+  color: var(--button);
+  border: 1px solid rgba(128, 128, 128, 0.22);
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
+/* Tugmalar maydoni — panel balandligi chegarasida o'zi scroll bo'ladi. */
 .math-keys {
-  max-height: min(48vh, 392px);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 2px;
 }
 
 .math-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: 7px;
+  margin-bottom: 7px;
 }
 
 .math-row:last-child {
@@ -955,33 +1080,79 @@ body.panel-open .q-card {
 }
 
 button.math-key {
-  min-height: 46px;
+  min-height: 48px;
   min-width: 0;
   padding: 8px 0;
-  border-radius: 11px;
-  background: var(--secondary-bg);
+  border-radius: 12px;
+  background: var(--bg);
   color: var(--text);
-  border: 1px solid rgba(128, 128, 128, 0.2);
-  font-size: 18px;
-  font-weight: 600;
+  border: 1px solid rgba(128, 128, 128, 0.22);
+  font-size: 19px;
+  font-weight: 650;
   font-family: inherit;
   touch-action: manipulation;
+  transition: transform 0.08s ease, background 0.12s ease, color 0.12s ease;
 }
 
 button.math-key:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
   background: var(--button);
   color: var(--button-text);
 }
 
+/* Amallar (÷ × − + =) — ko'zga tashlanadi. */
 button.math-key.key-op {
+  background: var(--secondary-bg);
   color: var(--button);
+  font-size: 20px;
+  font-weight: 700;
 }
 
+/* Matematik funksiyalar (√, sin, log…) — yumshoq, ramkasiz. */
 button.math-key.key-fn {
-  font-size: 16px;
   background: transparent;
-  border-color: rgba(128, 128, 128, 0.32);
+  border-color: rgba(128, 128, 128, 0.3);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Tahrirlash amallari (← → ⌫ ⌦ C) — sokin ko'rinish. */
+button.math-key.key-act {
+  background: transparent;
+  border-color: transparent;
+  color: var(--hint);
+  font-size: 17px;
+}
+
+button.math-key.key-danger {
+  color: var(--danger);
+}
+
+/* «Tayyor» (✓) — birlamchi rang, eng muhim tugma. */
+button.math-key.key-ok {
+  background: var(--button);
+  border-color: var(--button);
+  color: var(--button-text);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+/* Doimiy tahrirlash qatori — rejim almashsa ham joyida turadi. */
+.math-actions {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(128, 128, 128, 0.18);
+}
+
+.math-actions button.math-key {
+  min-height: 44px;
+  border-radius: 11px;
+  font-size: 16px;
 }
 
 /* --- Kasr konstruktori (2 slot) ------------------------------------------ */
@@ -1056,53 +1227,55 @@ button.math-key.key-fn {
   border-color: var(--button);
 }
 
-/* --- Matematik renderer (kasr / ildiz / daraja) — FAQAT ko'rinish --------- */
-.q-value .m-frac,
-.q-value .m-root {
+/* --- Matematik renderer (kasr / ildiz / daraja) — FAQAT ko'rinish ---------
+   `.math-render` — javob katagi (`.q-value`) va panelning jonli ko'rinishi
+   (`.math-preview`) uchun UMUMIY sinf: ikkala joyda bir xil chiziladi. */
+.math-render .m-frac,
+.math-render .m-root {
   display: inline-block;
   vertical-align: middle;
 }
 
-.q-value .m-frac {
+.math-render .m-frac {
   text-align: center;
 }
 
-.q-value .m-num {
+.math-render .m-num {
   display: block;
   padding: 0 4px;
   border-bottom: 1.5px solid currentColor;
 }
 
-.q-value .m-den {
+.math-render .m-den {
   display: block;
   padding: 0 4px;
 }
 
-.q-value .m-root {
+.math-render .m-root {
   border-top: 1.5px solid currentColor;
   padding: 0 2px;
 }
 
-.q-value sup {
+.math-render sup {
   font-size: 0.72em;
   vertical-align: super;
 }
 
 /* --- Word'dagi kabi BO'SH KATAKCHALAR (ildiz darajasi / daraja) ---------- */
 /* Katakcha bosiladi va foydalanuvchi o'zi raqam yozadi (`√[6](64)` -> ⁶√64). */
-.q-value .m-root-wrap {
+.math-render .m-root-wrap {
   display: inline-block;
   white-space: nowrap;
 }
 
-.q-value .m-index {
+.math-render .m-index {
   display: inline-block;
   font-size: 0.62em;
   vertical-align: super;
   line-height: 1;
 }
 
-.q-value .m-slot {
+.math-render .m-slot {
   display: inline-block;
   min-width: 1.05em;
   height: 1.1em;
@@ -1119,7 +1292,7 @@ button.math-key.key-fn {
 }
 
 /* Ildiz darajasi katakchasi — kichikroq (yuqori indeks joyida). */
-.q-value .m-slot-idx {
+.math-render .m-slot-idx {
   min-width: 0.9em;
   height: 0.95em;
   font-size: 0.62em;
@@ -1128,14 +1301,14 @@ button.math-key.key-fn {
 }
 
 /* Logarifm asosi — kichik indeks (Word kabi): `log₂(8)`. */
-.q-value .m-logbase {
+.math-render .m-logbase {
   font-size: 0.82em;
   vertical-align: sub;
   padding: 0 1px;
 }
 
 /* Asos KATAKCHASI — aniq ko'rinadi va bosiladi (n-darajali ildiznikidek). */
-.q-value .m-slot-log {
+.math-render .m-slot-log {
   min-width: 1.05em;
   height: 1.15em;
   font-size: 1em;
@@ -1144,11 +1317,17 @@ button.math-key.key-fn {
 }
 
 /* Faol katakcha (caret ichida — foydalanuvchi yozayotgan joy). */
-.q-value .m-slot-on {
+.math-render .m-slot-on {
   border-style: solid;
   border-color: var(--button, currentColor);
   background: rgba(127, 127, 127, 0.26);
   box-shadow: 0 0 0 2px rgba(127, 127, 127, 0.16);
+}
+
+/* Panelning jonli ko'rinishida katakchalar faqat ko'rsatiladi (bosilmaydi). */
+.math-preview .m-slot {
+  cursor: default;
+  pointer-events: none;
 }
 
 /* --- Admin: «Qulay kiritish» (Grid) — javoblar kaliti bir bosishda --------- */
@@ -1472,14 +1651,21 @@ button.math-key.key-fn {
 .key-part-input {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 32px;
+  min-height: 34px;
   padding: 2px 8px;
   border-radius: 8px;
   border: 1px solid rgba(127, 127, 127, 0.45);
-  background: transparent;
+  background: var(--bg);
   color: inherit;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 600;
   text-align: center;
+}
+
+.key-part-input:focus {
+  outline: none;
+  border-color: var(--button, #4f8cff);
+  box-shadow: 0 0 0 2px rgba(47, 124, 224, 0.18);
 }
 
 .key-part-input.filled {
@@ -1502,13 +1688,6 @@ button.math-key.key-fn {
   font-size: 0.8rem;
   padding: 8px 10px;
 }
-
-/* Burchak rejimi tugmasi (DEG/RAD) — Asosiy/Matematik tablar qatorida. */
-.math-mode.angle {
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-
 
 /* --- «🎬 Yechimlar» (admin): qamrov to'ri va boshqaruv -------------------- */
 .sol-head {

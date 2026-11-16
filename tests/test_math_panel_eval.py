@@ -34,6 +34,10 @@ from services import math_expr  # noqa: E402
 PANEL_JS = ROOT / "webapp" / "js" / "mathpanel.js"
 
 FUNCTIONS = (
+    # `normalizeExpression` `expandRootDegrees` ni chaqiradi, u esa `mdTrim` ni.
+    # Ular ham HAQIQIY manbadan olinadi — aks holda harness `undefined` beradi.
+    "mdTrim",
+    "expandRootDegrees",
     "normalizeExpression",
     "balanceParentheses",
     "acot",
