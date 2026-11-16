@@ -93,6 +93,7 @@ class AppCallback(CallbackData, prefix="app"):
     action:
         analysis — «🔍 Test tahlili» (natijasi e'lon qilingan imtihonlar);
         upload   — «🎬 Yechim yuklash» (faqat admin uchun yo'riqnoma);
+        offline  — «📥 Offline mock» (faqat admin uchun imtihon tanlash);
         help     — «ℹ️ Yordam»;
         missing  — Web App manzili sozlanmagan.
     """
@@ -160,6 +161,8 @@ def webapp_kb(*, is_admin: bool) -> InlineKeyboardMarkup:
     if is_admin:
         builder.button(text="📋 Imtihonlar ro'yxati", callback_data=ExamAdminCallback(action="list"))
         builder.button(text="🎬 Yechim yuklash", callback_data=AppCallback(action="upload"))
+        if config.OFFLINE_IMPORT_ENABLED:
+            builder.button(text="📥 Offline mock", callback_data=AppCallback(action="offline"))
 
     builder.button(text="ℹ️ Yordam", callback_data=AppCallback(action="help"))
     builder.adjust(1)
@@ -358,6 +361,21 @@ class OfflineAdminCallback(CallbackData, prefix="offl"):
     batch_id: int = 0
     participant_id: int = 0
     user_id: int = 0
+
+
+def offline_exams_kb(exams: Sequence[Exam]) -> InlineKeyboardMarkup:
+    """Admin uchun offline mock imtihonlarini tanlash tugmalari."""
+    builder = InlineKeyboardBuilder()
+    for exam in exams:
+        builder.button(
+            text=f"📥 {exam.test_code} · {_short(exam.title, 24)}",
+            callback_data=OfflineAdminCallback(
+                action="panel", exam_id=exam.exam_id
+            ),
+        )
+    builder.button(text="🏡 Asosiy menyu", callback_data=MenuCallback(action="back"))
+    builder.adjust(1)
+    return builder.as_markup()
 
 
 def offline_menu_kb(exam_id: int) -> InlineKeyboardMarkup:

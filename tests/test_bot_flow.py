@@ -156,8 +156,8 @@ async def check_start_and_menu(bot, session, dp, repos) -> None:
 
     buttons = last.reply_markup.inline_keyboard
     labels = [row[0].text for row in buttons]
-    # Admin uchun 7 qator: ilova → natijalar → bo'limlar → admin → yordam.
-    assert len(buttons) == 7, labels
+    # Admin uchun 8 qator: ilova → natijalar → bo'limlar → admin → yordam.
+    assert len(buttons) == 8, labels
     assert labels[0] == "📝 Javoblarni belgilash", labels
     assert labels[1] == "📊 Natijalarim", labels
     assert labels[2:4] == ["🔍 Test tahlili", "🏡 Asosiy menyu"], labels
@@ -171,6 +171,7 @@ async def check_start_and_menu(bot, session, dp, repos) -> None:
     assert labels[4:] == [
         "📋 Imtihonlar ro'yxati",
         "🎬 Yechim yuklash",
+        "📥 Offline mock",
         "ℹ️ Yordam",
     ], labels
     assert "➕ Yangi imtihon" not in labels, "«Yangi imtihon» tugmasi qaytib qo'shilgan"

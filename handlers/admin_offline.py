@@ -20,8 +20,10 @@ import config
 from database.repository import Repositories
 from handlers.access import is_admin, log_denied
 from keyboards.inline import (
+    AppCallback,
     OfflineAdminCallback,
     offline_cancel_kb,
+    offline_exams_kb,
     offline_link_kb,
     offline_menu_kb,
     offline_preview_kb,
@@ -80,6 +82,39 @@ async def _send_readiness(message: Message, repos: Repositories, exam) -> bool:
     readiness = await offline_scoring.check_readiness(repos, exam)
     await message.answer(_readiness_text(readiness), reply_markup=offline_menu_kb(exam.exam_id))
     return readiness.ready
+
+
+@router.callback_query(AppCallback.filter(F.action == "offline"))
+async def offline_menu_callback(
+    call: CallbackQuery, repos: Repositories
+) -> None:
+    """«📥 Offline mock» tugmasi — admin imtihonni tanlaydi."""
+    if not _call_guard(call):
+        await call.answer("Faqat admin uchun.", show_alert=True)
+        return
+    if not config.OFFLINE_IMPORT_ENABLED:
+        await call.answer("Offline import o'chirilgan.", show_alert=True)
+        return
+    await call.answer()
+    if call.message is None:
+        return
+    exams = await repos.exams.list_all(limit=10)
+    if not exams:
+        await call.message.answer(
+            "📥 <b>Offline mock</b>\n\nHozircha imtihon yaratilmagan. "
+            "Avval <code>/new_exam</code> orqali imtihon yarating."
+        )
+        return
+    text = (
+        "📥 <b>Offline mock</b>\n\n"
+        "Excel bilan ishlash uchun imtihonni tanlang. "
+        "Ichida shablon, import, tarix, PDF va online bilan bog‘lash bor."
+    )
+    markup = offline_exams_kb(exams)
+    try:
+        await call.message.edit_text(text, reply_markup=markup)
+    except Exception:
+        await call.message.answer(text, reply_markup=markup)
 
 
 @router.message(Command("offline"))
@@ -581,7 +616,7 @@ async def offline_callback(
     message = call.message
     admin_id = call.from_user.id
 
-    if action in {"template", "import", "batches", "report", "links"}:
+    if action in {"panel", "template", "import", "batches", "report", "links"}:
         exam = await repos.exams.get(int(callback_data.exam_id))
         if exam is None:
             await call.answer("Imtihon topilmadi.", show_alert=True)
@@ -589,7 +624,9 @@ async def offline_callback(
         await call.answer()
         if message is None:
             return
-        if action == "template":
+        if action == "panel":
+            await _send_readiness(message, repos, exam)
+        elif action == "template":
             await _send_template(message, repos, exam)
         elif action == "import":
             readiness = await offline_scoring.check_readiness(repos, exam)
