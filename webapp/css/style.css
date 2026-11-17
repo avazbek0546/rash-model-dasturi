@@ -1316,18 +1316,35 @@ button.math-key.key-ok {
   line-height: 1.15em;
 }
 
-/* Faol katakcha (caret ichida — foydalanuvchi yozayotgan joy). */
-.math-render .m-slot-on {
+/* Faol katakcha (caret ichida — foydalanuvchi yozayotgan joy).
+   Nofaol katakda caret yashirin — katakcha ham "faol" ko'rinmaydi. */
+.q-cell.active .m-slot-on,
+.math-preview .m-slot-on {
   border-style: solid;
   border-color: var(--button, currentColor);
   background: rgba(127, 127, 127, 0.26);
   box-shadow: 0 0 0 2px rgba(127, 127, 127, 0.16);
 }
 
-/* Panelning jonli ko'rinishida katakchalar faqat ko'rsatiladi (bosilmaydi). */
+/* Panelning jonli ko'rinishida ham katakcha bosiladi — kursor o'sha joyga. */
 .math-preview .m-slot {
-  cursor: default;
+  cursor: text;
+}
+
+/* Ko'rinmas caret LANGARLARI: har bir caret chegarasida `data-off` turadi.
+   Barmoq bilan bosilganda eng yaqin langar tanlanadi — kursor aynan o'sha
+   joyga tushadi (strelkalarsiz, qo'lda boshqaruv). */
+.math-render .m-at {
+  display: inline;
+  font-size: 0;
+  line-height: 0;
   pointer-events: none;
+}
+
+/* Jonli ko'rinish va javob katagi — matn maydoni kabi "qo'lda" boshqariladi. */
+.math-preview,
+.q-cell .q-value {
+  cursor: text;
 }
 
 /* --- Admin: «Qulay kiritish» (Grid) — javoblar kaliti bir bosishda --------- */

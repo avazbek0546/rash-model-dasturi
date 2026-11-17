@@ -209,7 +209,7 @@
   let handlers = {
     onInsert: null, onBackspace: null, onClear: null, onClose: null,
     onLeft: null, onRight: null, onDelete: null, onFraction: null,
-    onSmartFraction: null,
+    onSmartFraction: null, onCaretTo: null,
     onAngle: null,
   };
   let panel = null;
@@ -360,15 +360,188 @@
     return -1;
   }
 
+  /** Atama chegarasi bo'lgan operatorlar (`^` — daraja, atama ICHIDA). */
+  function mdIsBinary(ch) {
+    return (
+      ch === "+" ||
+      ch === "-" ||
+      ch === "\u2212" ||
+      ch === "\u00D7" ||
+      ch === "*" ||
+      ch === "\u00F7" ||
+      ch === "/" ||
+      ch === "="
+    );
+  }
+
+  /** Oxirgi YOPILMAGAN `(` indeksi (`caret` gacha; yo'q bo'lsa -1). */
+  function mdOpenParen(text, caret) {
+    var stack = [];
+    var index;
+    for (index = 0; index < caret; index += 1) {
+      var ch = text.charAt(index);
+      if (ch === "(") {
+        stack.push(index);
+      } else if (ch === ")" && stack.length) {
+        stack.pop();
+      }
+    }
+    return stack.length ? stack[stack.length - 1] : -1;
+  }
+
+  /** Caret CHAPIDAGI oxirgi atama boshi (top-level operator / qavs chegarasi). */
+  function mdTermStart(text, caret, floor) {
+    var depth = 0;
+    var index = caret - 1;
+    while (index >= 0 && index >= floor) {
+      var ch = text.charAt(index);
+      if (ch === ")") {
+        depth += 1;
+      } else if (ch === "(") {
+        if (depth === 0) {
+          break;
+        }
+        depth -= 1;
+      } else if (depth === 0 && mdIsBinary(ch)) {
+        break;
+      }
+      index -= 1;
+    }
+    return index + 1;
+  }
+
+  /** Caret O'NGIDAGI birinchi atama oxiri (top-level operatorgacha). */
+  function mdTermEnd(text, caret) {
+    var depth = 0;
+    var index = caret;
+    while (index < text.length) {
+      var ch = text.charAt(index);
+      if (ch === "(") {
+        depth += 1;
+      } else if (ch === ")") {
+        if (depth === 0) {
+          break;
+        }
+        depth -= 1;
+      } else if (depth === 0 && mdIsBinary(ch)) {
+        break;
+      }
+      index += 1;
+    }
+    return index;
+  }
+
+  /** Atama allaqachon to'liq qavs ichida bo'lsa — o'zini qaytaradi. */
+  function mdGroup(text) {
+    var body = String(text == null ? "" : text);
+    if (body.charAt(0) === "(" && mdMatchParen(body, 0) === body.length - 1) {
+      return body;
+    }
+    return "(" + body + ")";
+  }
+
+  /**
+   * `÷` — SMART KASR: caret chapidagi OXIRGI atama suratga, o'ngidagi
+   * BIRINCHI atama maxrajga o'tadi (BUTUN chap tomon EMAS!).
+   *
+   *   `ln8+5|`    → `ln8+(5)/()`   (caret maxraj ichida)
+   *   `(ln8+5)|`  → `(ln8+5)/()`   (qavs — allaqachon bitta atama)
+   *   `5|2`       → `(5)/(2)`
+   *   `|52`       → `()/(52)`      (caret surat ichida)
+   *   `2*(1+2|`   → `2*((1+2)/())` (qavs ichida — guruh saqlanadi)
+   *
+   * Bo'lish = kasr, ya'ni hisoblangan qiymat o'zgarmaydi.
+   */
+  function smartFraction(text, caret) {
+    var source = String(text == null ? "" : text);
+    var at = typeof caret === "number" ? Math.round(caret) : source.length;
+    if (at < 0) {
+      at = 0;
+    }
+    if (at > source.length) {
+      at = source.length;
+    }
+    var open = mdOpenParen(source, at);
+    if (open >= 0) {
+      // Caret YOPILMAGAN qavs ichida — guruh ( qator ... ) saqlanadi.
+      var close = at;
+      var depth = 0;
+      while (close < source.length) {
+        var ch = source.charAt(close);
+        if (ch === "(") {
+          depth += 1;
+        } else if (ch === ")") {
+          if (depth === 0) {
+            break;
+          }
+          depth -= 1;
+        }
+        close += 1;
+      }
+      var tailAfter = close < source.length ? source.substring(close + 1) : "";
+      var headOutside = source.substring(0, open);
+      var before = source.substring(open + 1, mdTermStart(source, at, open + 1));
+      var innerTerm = source.substring(mdTermStart(source, at, open + 1), at);
+      var rest = source.substring(at, close);
+      var numIn = innerTerm ? mdGroup(innerTerm) : "()";
+      var denIn = mdGroup(rest);
+      var caretIn;
+      if (innerTerm) {
+        caretIn =
+          headOutside.length + before.length + numIn.length + denIn.length + 1;
+      } else {
+        caretIn = headOutside.length + before.length + 2;
+      }
+      return {
+        text:
+          headOutside +
+          "(" +
+          before +
+          numIn +
+          "/" +
+          denIn +
+          ")" +
+          tailAfter,
+        caret: caretIn
+      };
+    }
+    var start = mdTermStart(source, at, 0);
+    var end = mdTermEnd(source, at);
+    var head = source.substring(0, start);
+    var term = source.substring(start, at);
+    var right = source.substring(at, end);
+    var tail = source.substring(end);
+    var num = term ? mdGroup(term) : "()";
+    var den = right ? mdGroup(right) : "()";
+    var caretOut = term
+      ? head.length + num.length + den.length
+      : head.length + 1;
+    return { text: head + num + "/" + den + tail, caret: caretOut };
+  }
+
   /** Caret belgisi (faqat UI). */
   var CARET_HTML = '<span class="q-caret">|</span>';
 
+  /**
+   * Ko'rinmas caret LANGARI: har bir caret chegarasida `data-off` bilan turadi.
+   * Foydalanuvchi barmoq bilan bosganda eng yaqin langar tanlanadi — kursor
+   * aynan o'sha joyga tushadi (strelkalarsiz boshqaruv).
+   */
+  function mdAnchor(position) {
+    return (
+      '<span class="m-at" data-off="' + position + '">' + "\u200B" + "</span>"
+    );
+  }
+
   /** Bo'sh KATAKCHA (Word'dagi kabi): bosilganda caret ichiga tushadi. */
   function mdSlot(base, caret, extraCls) {
+    // `extraCls` berilmasa — `undefined` klassga tushib ketmasin (`.m-slot`
+    // selektori buzilardi); berilsa — boshida bo'sh joy qo'shiladi.
+    var extra = extraCls ? " " + String(extraCls).replace(/^\s+/, "") : "";
     var on = caret === base ? " m-slot-on" : "";
     var bar = caret === base ? CARET_HTML : "";
     return (
-      '<span class="m-slot' + extraCls + on + '" data-off="' + base + '">' + bar + "</span>"
+      '<span class="m-slot' + extra + on + '" data-off="' + base + '">' + bar + "</span>"
     );
   }
 
@@ -446,7 +619,11 @@
   function mdRenderAtom(text, index, base, caret) {
     var ch = text.charAt(index);
     var mark = function (position) {
-      return position === caret ? CARET_HTML : "";
+      var html = position === caret ? CARET_HTML : "";
+      if (caret >= 0) {
+        html += mdAnchor(position);
+      }
+      return html;
     };
     if (ch === "(") {
       var close = mdMatchParen(text, index);
@@ -574,7 +751,11 @@
     var b = typeof base === "number" ? base : 0;
     var at = typeof caret === "number" ? caret : -1;
     var mark = function (position) {
-      return position === at ? CARET_HTML : "";
+      var html = position === at ? CARET_HTML : "";
+      if (at >= 0) {
+        html += mdAnchor(position);
+      }
+      return html;
     };
     out += mark(b);
     while (index < text.length) {
@@ -639,6 +820,48 @@
     return { text: body, mode: null };
   }
   // --- [PURE-END] ----------------------------------------------------------
+
+  /**
+   * Bosilgan joy → caret indeksi (faqat UI).
+   *
+   * Renderer har bir caret chegarasiga ko'rinmas `m-at` langar qo'yadi
+   * (`data-off` — absolut indeks). Barmoq bilan bosilganda eng yaqin langar
+   * tanlanadi — kursor aynan o'sha joyga tushadi (strelkalarsiz boshqaruv).
+   * Bo'sh katakcha (`m-slot`) bosilsa — uning `data-off` i ishlatiladi.
+   *
+   * @returns {number} absolut caret indeksi yoki -1 (aniqlab bo'lmasa).
+   */
+  function caretIndexFromTap(container, event) {
+    if (!container || !event) {
+      return -1;
+    }
+    var target = event.target;
+    if (target && target.closest) {
+      var slot = target.closest(".m-slot");
+      if (slot && container.contains(slot)) {
+        var slotOff = Number(slot.getAttribute("data-off"));
+        return isFinite(slotOff) ? slotOff : -1;
+      }
+    }
+    var anchors = container.querySelectorAll(".m-at");
+    if (!anchors || !anchors.length) {
+      return -1;
+    }
+    var x = typeof event.clientX === "number" ? event.clientX : 0;
+    var best = -1;
+    var bestDistance = -1;
+    var index;
+    for (index = 0; index < anchors.length; index += 1) {
+      var rect = anchors[index].getBoundingClientRect();
+      var distance = Math.abs(rect.left - x);
+      if (bestDistance < 0 || distance < bestDistance) {
+        bestDistance = distance;
+        var off = Number(anchors[index].getAttribute("data-off"));
+        best = isFinite(off) ? off : -1;
+      }
+    }
+    return best;
+  }
 
   /**
    * Bitta tugma bosilganda bajariladigan amal.
@@ -801,17 +1024,20 @@
       return;
     }
     const value = String(boundInput.value || "");
-    const at =
+    const start =
       typeof boundInput.selectionStart === "number"
         ? boundInput.selectionStart
         : value.length;
-    const left = value.slice(0, at);
-    const right = value.slice(at);
-    if (!left) {
-      writeInput("()/(" + right + ")", 1);
-      return;
-    }
-    writeInput("(" + left + ")/(" + right + ")", left.length + 4 + right.length);
+    const end =
+      typeof boundInput.selectionEnd === "number" &&
+      boundInput.selectionEnd >= start
+        ? boundInput.selectionEnd
+        : start;
+    // Tanlov bo'lsa — o'chiriladi (kasr faqat caret atrofidagi atamalardan).
+    const cleaned =
+      end > start ? value.slice(0, start) + value.slice(end) : value;
+    const result = smartFraction(cleaned, start);
+    writeInput(result.text, result.caret);
   }
 
   /** Ulangan maydon uchun jonli ko'rinish va natija (faqat UI). */
@@ -1050,7 +1276,7 @@
       {
         onInsert: null, onBackspace: null, onClear: null, onClose: null,
         onLeft: null, onRight: null, onDelete: null, onFraction: null,
-        onAngle: null, onConfirm: null,
+        onCaretTo: null, onAngle: null, onConfirm: null,
       },
       options || {}
     );
@@ -1069,6 +1295,30 @@
     targetBox = byId("math-target");
     hintBox = byId("math-hint");
     previewBox = byId("math-preview");
+
+    if (previewBox) {
+      // Jonli ko'rinishni BOSIB caret qo'yish (strelkalarsiz, qo'lda boshqaruv).
+      previewBox.addEventListener("click", function (event) {
+        var index = caretIndexFromTap(previewBox, event);
+        if (index < 0) {
+          return;
+        }
+        if (boundInput) {
+          // Admin rejimi: kursor oddiy `<input>` ichida.
+          try {
+            boundInput.focus();
+          } catch (error) {
+            /* ba'zi brauzerlarda ruxsat yo'q — e'tiborsiz */
+          }
+          caretToInput(index);
+          updateInputHint();
+          return;
+        }
+        if (handlers.onCaretTo) {
+          handlers.onCaretTo(index);
+        }
+      });
+    }
 
     const saved = storageGet(MODE_KEY);
     mode = saved === "math" ? "math" : "basic";
@@ -1124,7 +1374,9 @@
     deleteBefore: deleteBefore,
     deleteAt: deleteAt,
     buildFraction: buildFraction,
+    smartFraction: smartFraction,
     renderExpression: renderExpression,
+    caretIndexFromTap: caretIndexFromTap,
     // Admin rejimi (test yaratish): panel oddiy `<input>` ga yozadi.
     bindInput: bindInput,
     unbindInput: bindInput,

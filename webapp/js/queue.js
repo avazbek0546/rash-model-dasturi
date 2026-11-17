@@ -1024,8 +1024,10 @@
     if (!api || typeof api.renderExpression !== "function") {
       return escapeHtml(expression);
     }
-    const at = activeCell === cellId ? caretOf(cellId) : -1;
-    return api.renderExpression(expression, at);
+    // Caret HAR DOIM beriladi — shu tufayli har bir belgi chegarasida
+    // ko'rinmas `m-at` langar bo'ladi va bosib kursor qo'yish ishlaydi
+    // (nofaol katakda `|` CSS bilan yashiringan).
+    return api.renderExpression(expression, caretOf(cellId));
   }
 
   /** Paneldan kelgan tokenni caret joyiga qo'yadi.
@@ -1051,12 +1053,14 @@
   }
 
   /**
-   * `÷` — SMART KASR: caret CHAPIDAGI qism SURATGA, o'ngidagi qism MAXRAJGA
-   * o'tadi va caret maxraj katagiga tushadi — foydalanuvchi darhol yozadi.
+   * `÷` — SMART KASR: caret CHAPIDAGI OXIRGI atama suratga, O'NGIDAGI
+   * BIRINCHI atama maxrajga o'tadi (butun chap tomon EMAS) va caret maxraj
+   * katagiga tushadi — foydalanuvchi darhol yozadi.
    *
-   * `5` (caret oxirida)  → `(5)/()`   + caret maxraj katagida
-   * `52` (caret 5 dan keyin) → `(5)/(2)` + caret maxraj katagida
-   * bo'sh ifoda           → `()/( )`  + caret surat katagida
+   * `ln8+5` (caret oxirida) → `ln8+(5)/()`  + caret maxraj katagida
+   * `52` (caret 5 dan keyin) → `(5)/(2)`    + caret maxraj katagida
+   * `(ln8+5)` (caret oxirida) → `(ln8+5)/()` (qavs — bitta atama)
+   * bo'sh ifoda             → `()/()`       + caret surat katagida
    *
    * Bo'lish = kasr, ya'ni hisoblangan qiymat o'zgarmaydi.
    */
@@ -1064,20 +1068,24 @@
     if (!activeCell) {
       return;
     }
+    const api = panelApi();
     const expression = expressions[activeCell] || "";
     const at = caretOf(activeCell);
+    if (api && typeof api.smartFraction === "function") {
+      // Faqat caret YONIDAGI atama kasrga o'tadi (butun chap tomon EMAS).
+      const result = api.smartFraction(expression, at);
+      carets[activeCell] = result.caret;
+      applyExpression(activeCell, result.text);
+      return;
+    }
+    // Zaxira (MathPanel yuklanmagan): eski xulq.
     const left = expression.slice(0, at);
     const right = expression.slice(at);
     if (!left) {
-      // Surat hali bo'sh: `()/(...)` — caret SURAT katagiga tushadi.
       carets[activeCell] = 1;
       applyExpression(activeCell, "()/(" + right + ")");
       return;
     }
-    // `(surat)/(maxraj)` — kursor MAXRAJ ichida:
-    //   `(surat)/` dan keyin `(` (1) + maxraj matni; shu sababli
-    //   `len(surat) + 4 + len(maxraj)` = maxraj matnining OXIRI.
-    // Misol: `(5)/()` -> 1 + 4 + 0 = 5 (qavslar ICHIDA) ✅
     carets[activeCell] = left.length + 4 + right.length;
     applyExpression(activeCell, "(" + left + ")/(" + right + ")");
   }
@@ -1257,18 +1265,19 @@
     valueBox.textContent = "Javobni kiriting";
     cell.appendChild(valueBox);
     cell.addEventListener("click", function (event) {
-      // Bo'sh KATAKCHA (`m-slot`) bosildi — caret shu katakchaga o'tadi
-      // (Word'dagi tenglamalar kabi: katakchani bosib raqam yoziladi).
-      const target = event.target;
-      const slot = target && target.closest ? target.closest(".m-slot") : null;
-      if (slot && cell.contains(slot)) {
-        const off = Number(slot.getAttribute("data-off"));
-        setCaret(cellId, isFinite(off) ? off : 0);
-        applyExpression(cellId, expressions[cellId] || "");
-        activateCell(cellId);
-        return;
+      // Bosilgan joy → caret (bo'sh katakcha ham, oddiy belgi ham).
+      const api = panelApi();
+      const index =
+        api && typeof api.caretIndexFromTap === "function"
+          ? api.caretIndexFromTap(cell, event)
+          : -1;
+      if (index >= 0) {
+        setCaret(cellId, index);
       }
       activateCell(cellId);
+      if (index >= 0) {
+        refreshCellView(cellId);
+      }
     });
     return cell;
   }
@@ -1788,6 +1797,23 @@
         onDelete: deleteCell,
         onFraction: openFractionModal,
         onSmartFraction: smartFractionCell,
+        onCaretTo: function (index) {
+          // Jonli ko'rinish bosildi — kursor o'sha joyga tushadi.
+          if (!activeCell) {
+            return;
+          }
+          setCaret(activeCell, index);
+          refreshCellView(activeCell);
+          if (
+            window.MathPanel &&
+            window.MathPanel.currentTarget() === activeCell
+          ) {
+            window.MathPanel.setHint(
+              hintForCell(activeCell),
+              answers[activeCell] ? "ok" : null
+            );
+          }
+        },
         onAngle: function () {
           // Rejim almashdi — aktiv katak qiymati qayta hisoblanadi.
           if (activeCell && cellOf(activeCell)) {

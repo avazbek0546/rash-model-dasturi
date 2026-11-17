@@ -17,6 +17,11 @@ Tekshiriladi
       6. Renderer daraja— `x^2` → `x<sup>2</sup>`.
       7. Renderer ildiz — `sqrt(x)`/`√5`/`cbrt(8)`.
       8. Legacy         — `3/7`, `2sin(pi/2)` o'zgarishsiz; XSS escape.
+      9. Smart kasr     — faqat caret YONIDAGI atama kasrga o'tadi
+                          (`ln8+5` → `ln8+(5)/()`, `(ln8+5)` → `(ln8+5)/()`).
+     10. Tap → caret    — renderer har bir chegaraga `m-at` langar qo'yadi
+                          (caret berilmasa — umuman qo'shilmaydi).
+     11. Bo'sh katakcha — `m-slot` klassi to'g'ri (klassda `undefined` yo'q).
 
     Simlar (statik): panel/lib/HTML/CSS ulanishi.
     Python (regressiya): `sin`/`log_a(b)` hali ishlaydi (parser tegilgan emas).
@@ -117,6 +122,32 @@ CASES = [
     ("render_legacy_frac", 'renderExpression("3/7")'),
     ("render_legacy_sin", 'renderExpression("2sin(pi/2)")'),
     ("render_escape", 'renderExpression("<b>")'),
+    # 9. Smart kasr: caret yonidagi ATAMA (butun chap tomon EMAS)
+    ("smart_plus_text", 'smartFraction("ln8+5", 5).text'),
+    ("smart_plus_caret", 'smartFraction("ln8+5", 5).caret'),
+    ("smart_not_whole", 'smartFraction("ln8+5", 5).text.indexOf("(ln8+5)")'),
+    ("smart_group_text", 'smartFraction("(1+2)", 5).text'),
+    ("smart_group_caret", 'smartFraction("(1+2)", 5).caret'),
+    ("smart_pair_text", 'smartFraction("52", 1).text'),
+    ("smart_pair_caret", 'smartFraction("52", 1).caret'),
+    ("smart_empty_text", 'smartFraction("", 0).text'),
+    ("smart_empty_caret", 'smartFraction("", 0).caret'),
+    ("smart_left_empty_text", 'smartFraction("52", 0).text'),
+    ("smart_left_empty_caret", 'smartFraction("52", 0).caret'),
+    ("smart_tail_text", 'smartFraction("5+2", 1).text'),
+    ("smart_open_text", 'smartFraction("2*(1+2", 6).text'),
+    ("smart_open_caret", 'smartFraction("2*(1+2", 6).caret'),
+    # 10. Tap → caret langarlari (faqat caret berilganda qo'shiladi)
+    ("anchor_on", 'renderExpression("12", 1).indexOf("m-at") >= 0'),
+    ("anchor_off", 'renderExpression("12").indexOf("m-at")'),
+    ("anchor_off_html", 'renderExpression("12")'),
+    # 11. Bo'sh katakcha klassi: `m-slot` (klassda `undefined` bo'lmasin)
+    ("slot_frac_bad", 'renderExpression("()/()", 1).indexOf("m-slotundefined")'),
+    ("slot_frac_ok", 'renderExpression("()/()", 1).indexOf(\'class="m-slot m-slot-on"\') >= 0'),
+    ("slot_root_bad", 'renderExpression("sqrt()", 5).indexOf("m-slotundefined")'),
+    ("slot_idx_ok", 'renderExpression("\\u221A[]()", 5).indexOf(\'class="m-slot m-slot-idx"\') >= 0'),
+    ("slot_log_bad", 'renderExpression("log_()", 5).indexOf("m-slotundefined")'),
+    ("slot_log_ok", 'renderExpression("log_()", 5).indexOf(\'class="m-slot m-slot-log"\') >= 0'),
 ]
 
 
@@ -196,6 +227,32 @@ EXPECTED = {
     "render_legacy_frac": "3/7",
     "render_legacy_sin": "2sin(pi/2)",
     "render_escape": "&lt;b&gt;",
+    # 9. Smart kasr: faqat caret yonidagi atama
+    "smart_plus_text": "ln8+(5)/()",
+    "smart_plus_caret": "9",
+    "smart_not_whole": "-1",
+    "smart_group_text": "(1+2)/()",
+    "smart_group_caret": "7",
+    "smart_pair_text": "(5)/(2)",
+    "smart_pair_caret": "6",
+    "smart_empty_text": "()/()",
+    "smart_empty_caret": "1",
+    "smart_left_empty_text": "()/(52)",
+    "smart_left_empty_caret": "1",
+    "smart_tail_text": "(5)/()+2",
+    "smart_open_text": "2*(1+(2)/())",
+    "smart_open_caret": "10",
+    # 10. Tap langarlari
+    "anchor_on": "true",
+    "anchor_off": "-1",
+    "anchor_off_html": "12",
+    # 11. Bo'sh katakcha klassi
+    "slot_frac_bad": "-1",
+    "slot_frac_ok": "true",
+    "slot_root_bad": "-1",
+    "slot_idx_ok": "true",
+    "slot_log_bad": "-1",
+    "slot_log_ok": "true",
 }
 
 
@@ -228,7 +285,15 @@ def check_wiring() -> None:
         'action: "fraction"',
     ):
         assert token in panel, token
-    for name in ("insertAt", "deleteBefore", "deleteAt", "buildFraction", "renderExpression"):
+    for name in (
+        "insertAt",
+        "deleteBefore",
+        "deleteAt",
+        "buildFraction",
+        "smartFraction",
+        "renderExpression",
+        "caretIndexFromTap",
+    ):
         assert (name + ": " + name) in panel, name
     for token in (
         "carets",
@@ -238,6 +303,7 @@ def check_wiring() -> None:
         "openFractionModal",
         "submitFractionModal",
         "renderCellHtml",
+        "onCaretTo",
     ):
         assert token in queue, token
     for token in ('id="frac-num"', 'id="frac-den"', 'id="frac-add"', 'id="frac-cancel"'):
@@ -263,6 +329,9 @@ def check_wiring() -> None:
     admin = read_text(ADMIN_JS)
     assert "MathPanel.bindInput" in admin, "admin.js maydonni ulamaydi"
     assert "MathPanel.attach" in admin, "admin.js panelni ochmaydi"
+    # Admin: panelni bosganda maydon `blur` bo'ladi — panel yopilib qolmasin.
+    assert "markPanelTouch" in admin, "admin.js panel bosishini kuzatmaydi"
+    assert "panelTouched" in admin, "admin.js blur'da panelni saqlab qolmaydi"
     # CSS: yangi bloklar uslublangan.
     for token in (
         ".math-preview",
@@ -271,6 +340,7 @@ def check_wiring() -> None:
         ".math-grab",
         ".math-mode.active",
         "button.math-key.key-ok",
+        ".m-at",
     ):
         assert token in css, token
     print("[OK] simlar: mathpanel.js / queue.js / admin.js / index.html / style.css ulangan")

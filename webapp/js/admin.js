@@ -691,10 +691,35 @@
     syncKeyText();
   }
 
+  /**
+   * Panel ichida bosish boshlandi — `blur` panelni yopmasligi uchun bayroq.
+   *
+   * Admin maydoni fokusda bo'lganda panel ochiq turadi. Foydalanuvchi jonli
+   * ko'rinishni (yoki panel tugmasini) bossa, maydon `blur` bo'ladi — bu
+   * odatiy holat, panel esa YOPILMASLIGI kerak (kursor bosilgan joyga tushadi).
+   */
+  let panelTouched = false;
+
+  /** Panel ichidagi bosishni belgilaydi (qisqa muddat — keyingi `blur` uchun). */
+  function markPanelTouch() {
+    panelTouched = true;
+    window.setTimeout(function () {
+      panelTouched = false;
+    }, 500);
+  }
+
   /** 36–45 maydonlari uchun MATEMATIK PANEL (foydalanuvchilardagi bilan bir xil). */
   function bindMathPanel(input, label) {
     if (!window.MathPanel || typeof window.MathPanel.bindInput !== "function") {
       return;
+    }
+    // Panel ichidagi bosishlar bir marta kuzatiladi (har maydon uchun emas).
+    const panel = el("math-panel");
+    if (panel && !panel.dataset.tapBound) {
+      panel.dataset.tapBound = "1";
+      panel.addEventListener("pointerdown", markPanelTouch, true);
+      panel.addEventListener("mousedown", markPanelTouch, true);
+      panel.addEventListener("touchstart", markPanelTouch, true);
     }
     input.addEventListener("focus", function () {
       window.MathPanel.bindInput(input);
@@ -712,6 +737,10 @@
       }, 80);
     });
     input.addEventListener("blur", function () {
+      // Panel ichidagi bosish — panel yopilmaydi, maydon ulangan qoladi.
+      if (panelTouched) {
+        return;
+      }
       window.MathPanel.unbindInput(null);
       if (typeof window.MathPanel.detach === "function") {
         window.MathPanel.detach();
