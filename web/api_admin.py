@@ -42,7 +42,7 @@ import config
 from database.models import normalize_part
 from services import exam_admin, exam_service, grading, report_data, report_pdf, test_quality
 from services import calibration
-from services import offline_report, offline_scoring
+from services import offline_import, offline_report, offline_scoring
 from services import solutions as solutions_service
 from web.api import ApiError, ensure_user, get_bot, read_json, repositories
 
@@ -364,6 +364,94 @@ async def calibrate_exam(request: web.Request) -> web.Response:
         payload["b_json"] = await calibration.apply_calibration(repos, exam, result)
         payload["applied"] = True
     return web.json_response(payload)
+
+
+async def delete_exam(request: web.Request) -> web.Response:
+    """Imtihonni butunlay o'chiradi (faqat admin).
+
+    `exams` yozuvi bilan birga javoblar, yechimlar va offline tarix (partiyalar,
+    natijalar, ishtirokchilar, reyting qarorlari) CASCADE bo'yicha o'chadi.
+    Amalni qaytarib bo'lmaydi.
+    """
+    user = await ensure_admin(request)
+    repos = repositories(request)
+    try:
+        exam_id = int(request.match_info["exam_id"])
+    except (KeyError, ValueError) as exc:
+        raise ApiError(400, "Imtihon ID si noto'g'ri.") from exc
+    exam = await repos.exams.get(exam_id)
+    if exam is None:
+        raise ApiError(404, "Imtihon topilmadi.")
+    submissions = await repos.answers.count_for_exam(exam_id)
+    try:
+        await repos.exams.delete(exam_id)
+    except Exception as exc:
+        logger.exception("Imtihonni o'chirib bo'lmadi: exam_id=%s", exam_id)
+        raise ApiError(500, "Imtihonni o'chirishda xatolik yuz berdi.") from exc
+    logger.info(
+        "Imtihon o'chirildi (API): exam_id=%s, kod=%s, javoblar=%d, admin=%s",
+        exam_id,
+        exam.test_code,
+        submissions,
+        user["user_id"],
+    )
+    return web.json_response(
+        {
+            "ok": True,
+            "deleted": True,
+            "exam_id": exam_id,
+            "test_code": str(exam.test_code),
+            "submissions": submissions,
+        }
+    )
+
+
+async def clear_offline_history(request: web.Request) -> web.Response:
+    """Imtihonning **barcha** offline import partiyalarini butunlay o'chiradi.
+
+    `offline_import.delete_batch` orqali: qatorlar, natijalar, bog'lanishi
+    qolmagan ishtirokchilar va reyting qarorlari bazadan o'chadi. Imtihonning
+    o'zi qoladi.
+    """
+    user = await ensure_admin(request)
+    repos = repositories(request)
+    try:
+        exam_id = int(request.match_info["exam_id"])
+    except (KeyError, ValueError) as exc:
+        raise ApiError(400, "Imtihon ID si noto'g'ri.") from exc
+    exam = await repos.exams.get(exam_id)
+    if exam is None:
+        raise ApiError(404, "Imtihon topilmadi.")
+    batches = await repos.offline_batches.list_batches(exam_id, limit=100)
+    rows = attempts = participants = 0
+    for batch in batches:
+        try:
+            stats = await offline_import.delete_batch(
+                repos, int(batch["batch_id"]), int(user["user_id"])
+            )
+        except offline_import.OfflineImportError:
+            continue
+        rows += int(stats.get("rows") or 0)
+        attempts += int(stats.get("attempts") or 0)
+        participants += int(stats.get("participants") or 0)
+    logger.info(
+        "Offline tarix tozalandi (API): exam_id=%s, partiyalar=%d, qatorlar=%d, admin=%s",
+        exam_id,
+        len(batches),
+        rows,
+        user["user_id"],
+    )
+    return web.json_response(
+        {
+            "ok": True,
+            "exam_id": exam_id,
+            "test_code": str(exam.test_code),
+            "batches": len(batches),
+            "rows": rows,
+            "attempts": attempts,
+            "participants": participants,
+        }
+    )
 
 
 async def regrade_exam(request: web.Request) -> web.Response:
@@ -760,6 +848,10 @@ def setup_routes(app: web.Application) -> None:
     router.add_get("/api/v2/admin/exams/{exam_id}/quality", exam_quality)
     router.add_post("/api/v2/admin/exams/{exam_id}/calibrate", calibrate_exam)
     router.add_post("/api/v2/admin/exams/{exam_id}/regrade", regrade_exam)
+    router.add_post("/api/v2/admin/exams/{exam_id}/delete", delete_exam)
+    router.add_post(
+        "/api/v2/admin/exams/{exam_id}/offline/clear", clear_offline_history
+    )
     router.add_post("/api/v2/admin/exams/{exam_id}/report-link", report_link)
     # Mini App «📄 PDF» tugmasi: fayl brauzerga emas, adminga chatga yuboriladi.
     router.add_post("/api/v2/admin/exams/{exam_id}/report-send", report_send)

@@ -542,6 +542,8 @@ qo'shimcha **«⚙️ Test yaratish»** tabi ko'rinadi:
 | `POST` | `/api/v2/admin/exams/{id}/schedule` | Boshlanish/tugash/natija vaqtini o'zgartirish (ikkala jadvalda) |
 | `GET` | `/api/v2/admin/exams/{id}/participants` | Kim qatnashgani: ism, `@username`, ID, vaqt; jami soni |
 | `POST` | `/api/v2/admin/exams/{id}/regrade` | Imtihonni qayta baholash |
+| `POST` | `/api/v2/admin/exams/{id}/delete` | Imtihonni butunlay o'chirish (javoblar, yechimlar, offline tarix — CASCADE) |
+| `POST` | `/api/v2/admin/exams/{id}/offline/clear` | Offline import tarixini butunlay tozalash (imtihonning o'zi qoladi) |
 | `POST` | `/api/v2/admin/exams/{id}/report-link` | PDF hisobot uchun bir martalik havola (`url` + `path`) |
 | `POST` | `/api/v2/admin/exams/{id}/report-send` | PDF hisobotni adminga **Telegram chatda** yuborish |
 | `GET` | `/api/v2/admin/exams/{id}/solutions` | «🎬 Yechimlar» qamrovi: savollar, tur, `missing[]`, `bot_username` |
