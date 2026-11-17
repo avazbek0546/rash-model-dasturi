@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Rasch imtihon platformasi</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=24" />
+    <link rel="stylesheet" href="/static/css/style.css?v=26" />
     <!-- Telegram Web App SDK — Telegram faqat HTTPS sahifalarda beradi. -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
@@ -75,11 +75,22 @@
           <div class="res-skeleton res-skeleton-tile"></div>
         </div>
 
+        <!-- Tahlil: o'sish sur'ati, barqarorlik, rekord va keyingi maqsad -->
+        <div id="results-insights" class="res-insights hidden"
+             aria-label="Natijalar tahlili"></div>
+
         <div class="card res-chart-card" id="results-chart-card">
           <div class="res-card-head">
             <div>
               <h2>Sertifikat bali dinamikasi</h2>
               <p class="res-card-sub" id="chart-sub">0–100 shkala</p>
+            </div>
+            <div class="res-range" id="chart-range" role="group"
+                 aria-label="Grafik oralig'i">
+              <button type="button" data-range="all" class="active"
+                      aria-pressed="true">Barchasi</button>
+              <button type="button" data-range="5"
+                      aria-pressed="false">Oxirgi 5</button>
             </div>
           </div>
           <div class="chart-wrap"><canvas id="results-chart"></canvas></div>
@@ -282,7 +293,7 @@
     <script src="/static/js/api.js?v=6"></script>
     <script src="/static/js/mathpanel.js?v=19"></script>
     <script src="/static/js/queue.js?v=21"></script>
-    <script src="/static/js/results.js?v=6"></script>
+    <script src="/static/js/results.js?v=8"></script>
     <script src="/static/js/profile.js?v=4"></script>
     <script src="/static/js/admin.js?v=14"></script>
     <script src="/static/js/app.js?v=7"></script>

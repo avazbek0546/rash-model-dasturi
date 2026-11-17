@@ -46,6 +46,19 @@
     const value = Number(item.scaled_score);
     return Number.isFinite(value) ? value : null;
   }
+  /** Fan ballari xaritasidan xavfsiz qiymat oladi (0–100 yoki null). */
+  function ballOf(map, code) {
+    if (!map || code === null || code === undefined) {
+      return null;
+    }
+    const value = Number(map[code]);
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    return Math.max(0, Math.min(100, value));
+  }
+
+
 
   // ---------------------------------------------------------------------------
   // Holat (state) va daraja (sertifikat) yordamchilari
@@ -55,6 +68,8 @@
     filter: "all",
     heroToken: 0,
     timer: null,
+    chartRange: "all",
+    chartData: null,
   };
 
   /**
@@ -72,6 +87,54 @@
     { code: "A", min: 65, tone: "res-tone-a" },
     { code: "A+", min: 70, tone: "res-tone-a-plus" },
   ];
+
+  /** Grafik nuqtalari uchun HEX ranglar (CSS `--tone` bilan bir xil). */
+  const LEVEL_HEX = {
+    NC: "#5f6a7a",
+    C: "#c93a63",
+    "C+": "#6242e8",
+    B: "#9a6100",
+    "B+": "#1b74ad",
+    A: "#0f7f4a",
+    "A+": "#0a7052",
+  };
+
+  /**
+   * Chart.js plagini: sertifikat darajalari chegaralarini (46/50/55/60/65/70)
+   * nuqtali chiziq va kichik yorliq bilan chizadi. Hech qanday qo'shimcha
+   * kutubxonasiz — faqat canvas.
+   */
+  const levelBandsPlugin = {
+    id: "resLevelBands",
+    beforeDatasetsDraw: function (chartInstance) {
+      const ctx = chartInstance.ctx;
+      const area = chartInstance.chartArea;
+      const yScale = chartInstance.scales ? chartInstance.scales.y : null;
+      if (!ctx || !area || !yScale) {
+        return;
+      }
+      ctx.save();
+      ctx.font = "600 9px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+      ctx.textBaseline = "middle";
+      LEVELS.slice(1).forEach(function (level) {
+        const py = yScale.getPixelForValue(level.min);
+        if (py < area.top || py > area.bottom) {
+          return;
+        }
+        ctx.beginPath();
+        ctx.setLineDash([3, 4]);
+        ctx.strokeStyle = "rgba(128,128,128,0.35)";
+        ctx.lineWidth = 1;
+        ctx.moveTo(area.left, py);
+        ctx.lineTo(area.right, py);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(128,128,128,0.7)";
+        ctx.fillText(level.code, area.left + 4, py - 5);
+      });
+      ctx.restore();
+    },
+  };
 
   const MONTHS = [
     "yanvar", "fevral", "mart", "aprel", "may", "iyun",
@@ -196,7 +259,247 @@
     return { min: 0, max: 100 };
   }
 
-  /** HEX rangni shaffof rgba ga aylantiradi (gradient uchun). */
+  /**
+   * Joriy daraja va keyingi daraja orasidagi masofa.
+   * `progress` — joriy daraja oralig'idagi foiz (0–100), `remaining` — keyingi
+   * darajagacha qolgan ball (A+ da 0).
+   */
+  function nextLevelInfo(score) {
+    const value = Number(score);
+    const safe = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+    let index = 0;
+    LEVELS.forEach(function (level, position) {
+      if (safe >= level.min) {
+        index = position;
+      }
+    });
+    const current = LEVELS[index];
+    const next = index < LEVELS.length - 1 ? LEVELS[index + 1] : null;
+    const start = current.min === -Infinity ? 0 : current.min;
+    const end = next ? next.min : 100;
+    const progress = next
+      ? Math.max(0, Math.min(100, ((safe - start) / (end - start)) * 100))
+      : 100;
+    return {
+      current: current,
+      next: next,
+      progress: progress,
+      remaining: next ? Math.max(0, next.min - safe) : 0,
+    };
+  }
+
+  /** 7 qadamli daraja zinapoyasi (NC … A+), joriy qadam ajratilgan. */
+  function levelPath(info) {
+    const currentIndex = LEVELS.indexOf(info.current);
+    return (
+      '<div class="res-ladder" aria-hidden="true">' +
+      LEVELS.map(function (level, index) {
+        const stateClass =
+          index === currentIndex
+            ? " is-current"
+            : index < currentIndex
+            ? " is-passed"
+            : "";
+        return '<span class="res-ladder-step' + stateClass + '">' + level.code + "</span>";
+      }).join("") +
+      "</div>"
+    );
+  }
+
+  /**
+   * "Keyingi daraja" bloki: joriy daraja ichidagi progress, qolgan ball va
+   * zinapoya. `info` — `nextLevelInfo()` natijasi. Eng yuqori darajada
+   * (A+) progress 100% va "qoldi" qatori o'rniga tabrik matni chiqadi.
+   */
+  function nextLevelBlock(info) {
+    if (!info) {
+      return "";
+    }
+    const current = info.current;
+    const next = info.next;
+    const percent = Math.max(0, Math.min(100, Number(info.progress) || 0));
+    const head = next
+      ? "Keyingi daraja: <b>" +
+        next.code +
+        "</b> · " +
+        formatScore(info.remaining) +
+        " ball qoldi"
+      : "Eng yuqori daraja — <b>" + current.code + "</b>";
+    return (
+      '<div class="res-goal">' +
+      '<div class="res-goal-head"><span>' +
+      head +
+      "</span><span>" +
+      Math.round(percent) +
+      "%</span></div>" +
+      '<div class="res-goal-track"><span style="width:' +
+      percent.toFixed(1) +
+      '%"></span></div>' +
+      levelPath(info) +
+      "</div>"
+    );
+  }
+
+  /**
+   * Hero'dagi kichik trend chizig'i (sparkline) — oxirgi 8 natija.
+   * 2 tadan kam natija bo'lsa bo'sh satr qaytadi (joy egallamaydi).
+   */
+  function sparklineHtml(scores) {
+    const values = (scores || [])
+      .map(function (value) {
+        return Number(value);
+      })
+      .filter(function (value) {
+        return Number.isFinite(value);
+      })
+      .slice(-8);
+    if (values.length < 2) {
+      return "";
+    }
+    const width = 120;
+    const height = 26;
+    const pad = 3;
+    const min = Math.min.apply(null, values);
+    const max = Math.max.apply(null, values);
+    const span = max - min || 1;
+    const step = (width - pad * 2) / (values.length - 1);
+    const points = values.map(function (value, index) {
+      const x = pad + step * index;
+      const y = height - pad - ((value - min) / span) * (height - pad * 2);
+      return x.toFixed(1) + "," + y.toFixed(1);
+    });
+    return (
+      '<svg class="res-spark" viewBox="0 0 ' + width + " " + height + '" ' +
+      'preserveAspectRatio="none" aria-hidden="true">' +
+      '<polyline class="res-spark-line" points="' + points.join(" ") + '"/>' +
+      "</svg>"
+    );
+  }
+
+
+  /**
+   * SVG halqa (dial) — 0–100 sertifikat bali. Progress `stroke-dashoffset`
+   * orqali chiziladi; `animateHeroDial()` uni jonlantiradi.
+   */
+  function scoreDial(score) {
+    const value = Number(score);
+    const safe = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+    const radius = 50;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference * (1 - safe / 100);
+    const ticks = [46, 50, 55, 60, 65, 70]
+      .map(function (threshold) {
+        return (
+          '<line class="res-dial-tick" x1="60" y1="7" x2="60" y2="13" ' +
+          'transform="rotate(' + (threshold * 3.6).toFixed(1) + ' 60 60)"/>'
+        );
+      })
+      .join("");
+    return (
+      '<div class="res-dial" role="img" aria-label="Sertifikat bali ' +
+      formatScore(safe) + " / 100, daraja " + App.escape(levelCode(safe)) + '">' +
+      '<svg viewBox="0 0 120 120" aria-hidden="true">' +
+      '<circle class="res-dial-track" cx="60" cy="60" r="' + radius + '"/>' +
+      '<circle class="res-dial-progress" cx="60" cy="60" r="' + radius + '" ' +
+      'stroke-dasharray="' + circumference.toFixed(2) + '" ' +
+      'stroke-dashoffset="' + circumference.toFixed(2) + '" ' +
+      'transform="rotate(-90 60 60)" ' +
+      'data-dial-target="' + offset.toFixed(2) + '"/>' +
+      ticks +
+      "</svg>" +
+      '<div class="res-dial-center">' +
+      '<span class="res-dial-score" data-count-to="' + safe.toFixed(1) + '">0.0</span>' +
+      '<span class="res-dial-unit">/ 100 ball</span>' +
+      "</div></div>"
+    );
+  }
+
+  /** Dial animatsiyasi: halqa to'lishi + ball count-up (reduced-motion hurmat). */
+  function animateHeroDial() {
+    const dial = document.querySelector("#tab-results .res-dial-progress");
+    const counter = document.querySelector("#tab-results .res-dial-score");
+    const reduced = window.matchMedia
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+    const targetScore = counter ? Number(counter.getAttribute("data-count-to")) : NaN;
+    if (counter && Number.isFinite(targetScore)) {
+      counter.textContent = reduced ? formatScore(targetScore) : "0.0";
+    }
+    if (!dial) {
+      return;
+    }
+    const target = Number(dial.getAttribute("data-dial-target"));
+    if (!Number.isFinite(target)) {
+      return;
+    }
+    if (reduced) {
+      dial.style.strokeDashoffset = target.toFixed(2);
+      return;
+    }
+    window.requestAnimationFrame(function () {
+      dial.style.strokeDashoffset = target.toFixed(2);
+    });
+    if (!counter || !Number.isFinite(targetScore)) {
+      return;
+    }
+    const duration = 800;
+    const start = performance.now();
+    const step = function (now) {
+      const ratio = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - ratio, 3);
+      counter.textContent = (targetScore * eased).toFixed(1);
+      if (ratio < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        counter.textContent = formatScore(targetScore);
+      }
+    };
+    window.requestAnimationFrame(step);
+  }
+
+  /** O'rtacha o'zgarish (har imtihon uchun) — "O'sish sur'ati". */
+  function trendOf(scores) {
+    const list = scores.filter(function (value) {
+      return Number.isFinite(Number(value));
+    });
+    if (list.length < 2) {
+      return { value: null, direction: "flat" };
+    }
+    let sum = 0;
+    for (let index = 1; index < list.length; index += 1) {
+      sum += Number(list[index]) - Number(list[index - 1]);
+    }
+    const average = sum / (list.length - 1);
+    return {
+      value: average,
+      direction: average > 0.05 ? "up" : average < -0.05 ? "down" : "flat",
+    };
+  }
+
+  /** Standart og'ish — natijalar barqarorligi (2 tadan kam bo'lsa null). */
+  function deviation(scores) {
+    const list = scores
+      .map(function (value) {
+        return Number(value);
+      })
+      .filter(function (value) {
+        return Number.isFinite(value);
+      });
+    if (list.length < 2) {
+      return null;
+    }
+    const mean =
+      list.reduce(function (sum, value) {
+        return sum + value;
+      }, 0) / list.length;
+    const variance =
+      list.reduce(function (sum, value) {
+        return sum + Math.pow(value - mean, 2);
+      }, 0) / list.length;
+    return Math.sqrt(variance);
+  }
+
+  /** HEX rangni shaffof rgba ga aylantiradi (gradient/to'ldirish uchun). */
   function withAlpha(color, alpha) {
     const match = /^#([0-9a-f]{6})$/i.exec(String(color || "").trim());
     if (!match) {
@@ -213,8 +516,38 @@
     const canvas = byId("results-chart");
     const fallback = byId("chart-fallback");
     const wrap = canvas ? canvas.parentElement : null;
-    const labels = (chartData && chartData.labels) || [];
-    const score = (chartData && chartData.score) || [];
+    const sub = byId("chart-sub");
+    const rangeBox = byId("chart-range");
+
+    // Kelgan ma'lumotni saqlaymiz — oraliq tugmasi qayta so'rovsiz ishlaydi.
+    state.chartData = chartData || { labels: [], score: [] };
+    const fullLabels = state.chartData.labels || [];
+    const fullScore = state.chartData.score || [];
+
+    // Oraliq tanlagichi faqat 3+ natija bo'lsa mantiqiy.
+    if (rangeBox) {
+      rangeBox.classList.toggle("hidden", fullLabels.length < 3);
+      rangeBox.querySelectorAll("[data-range]").forEach(function (button) {
+        const key = button.getAttribute("data-range");
+        const isActive = key === state.chartRange;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    }
+
+    const limit = state.chartRange === "5" ? 5 : fullLabels.length;
+    const start = Math.max(0, fullLabels.length - limit);
+    const labels = fullLabels.slice(start);
+    const score = fullScore.slice(start);
+
+    if (sub) {
+      sub.textContent = labels.length
+        ? "0–100 shkala · " +
+          labels.length +
+          " ta natija" +
+          (state.chartRange === "5" ? " (oxirgi 5)" : "")
+        : "0–100 shkala";
+    }
 
     if (!labels.length) {
       if (chart) {
@@ -276,13 +609,21 @@
     const pointRadii = labels.map(function (label, index) {
       return index === labels.length - 1 ? 6 : 4;
     });
+    // Har bir nuqta o'z darajasi rangida — dinamika "daraja zinapoyasi"da
+    // qanday siljiganini bir qarashda ko'rsatadi.
+    const pointColors = score.map(function (value) {
+      return LEVEL_HEX[levelCode(value)] || buttonColor;
+    });
 
     if (chart) {
       chart.destroy();
       chart = null;
     }
+
     chart = new Chart(canvas.getContext("2d"), {
       type: "line",
+      // Sertifikat darajalari chegaralari (46/50/55/60/65/70) chiziladi.
+      plugins: [levelBandsPlugin],
       data: {
         labels: labels,
         datasets: [
@@ -297,9 +638,10 @@
             spanGaps: true,
             pointRadius: pointRadii,
             pointHoverRadius: 7,
-            pointBackgroundColor: "#ffffff",
-            pointBorderColor: buttonColor,
+            pointBackgroundColor: pointColors,
+            pointBorderColor: "#ffffff",
             pointBorderWidth: 2.5,
+            pointHoverBorderColor: "#ffffff",
           },
         ],
       },
@@ -363,6 +705,20 @@
     });
   }
 
+  /**
+   * Timeline oy sarlavhasi: "Sentabr 2026". Sana bo'lmasa bo'sh satr
+   * qaytadi — bunda sarlavha qo'shilmaydi (timeline buzilmaydi).
+   */
+  function monthLabel(item) {
+    const date = parseDbTime(item && item.submitted_at);
+    if (!date) {
+      return "";
+    }
+    const name = MONTHS[date.getMonth()] || "";
+    return name.charAt(0).toUpperCase() + name.slice(1) + " " + date.getFullYear();
+  }
+
+
   function renderList(data) {
     const box = byId("results-list");
     if (!box) {
@@ -402,6 +758,16 @@
     });
 
     const rows = [];
+    let lastMonth = "";
+    const pushRow = function (html, item) {
+      const label = monthLabel(item);
+      if (label && label !== lastMonth) {
+        lastMonth = label;
+        rows.push('<div class="res-month">' + label + "</div>");
+      }
+      rows.push(html);
+    };
+
     if (state.filter !== "published") {
       pending
         .slice()
@@ -409,10 +775,11 @@
           return pendingTime(a) - pendingTime(b);
         })
         .forEach(function (item) {
-          rows.push(pendingItemHtml(item));
+          pushRow(pendingItemHtml(item), item);
         });
     }
     if (state.filter !== "pending") {
+      lastMonth = "";
       asc
         .slice()
         .reverse()
@@ -420,7 +787,7 @@
           const score = scoreOf(item);
           const isBest =
             asc.length > 1 && score !== null && Math.abs(score - bestScore) < 1e-9;
-          rows.push(itemHtml(item, previousByExam[item.exam_id], isBest));
+          pushRow(itemHtml(item, previousByExam[item.exam_id], isBest), item);
         });
     }
 
@@ -503,6 +870,7 @@
       state.data = data;
       renderHero(data);
       renderStats(data);
+      renderInsights(data);
       renderList(data);
       renderChart(data.chart || {});
       renderSectionState(data);
@@ -540,6 +908,7 @@
         '<div class="res-skeleton res-skeleton-tile"></div>';
     }
     byId("results-chart-card").classList.add("hidden");
+    byId("results-insights").classList.add("hidden");
     byId("results-list-head").classList.add("hidden");
     byId("results-filters").classList.add("hidden");
     const list = byId("results-list");
@@ -565,44 +934,40 @@
     }
     byId("results-stats").classList.add("hidden");
     byId("results-chart-card").classList.add("hidden");
+    byId("results-insights").classList.add("hidden");
     byId("results-list-head").classList.add("hidden");
     byId("results-filters").classList.add("hidden");
     byId("results-list").classList.add("hidden");
   }
 
-  /** Hero'dagi asosiy ko'rsatkich — sertifikat bali (0–100). */
-  function scoreBlock(score, level) {
-    return (
-      '<div class="res-theta">' +
-      '<span class="res-theta-value">' + formatScore(score) + "</span>" +
-      '<span class="res-theta-unit">ball · ' + App.escape(level) + "</span>" +
-      "</div>"
-    );
-  }
-
-  /** Hero ichidagi o'sish/kamayish bloki (oldingi imtihonga nisbatan, ball). */
+  /** Hero'dagi o'sish/kamayish chipi (oldingi imtihonga nisbatan, ball). */
   function deltaBlock(delta) {
     if (delta === null || delta === undefined || !Number.isFinite(Number(delta))) {
-      return (
-        '<div class="res-delta flat">— <span>ball</span></div>' +
-        '<div class="res-hero-level">Taqqoslash uchun oldingi natija yo\'q</div>'
-      );
+      return '<div class="res-delta flat">— <span>ball</span></div>';
     }
     const value = Number(delta);
     if (Math.abs(value) < 0.05) {
-      return (
-        '<div class="res-delta flat">+0.0 <span>ball</span></div>' +
-        '<div class="res-hero-level">Oldingi natija bilan bir xil</div>'
-      );
+      return '<div class="res-delta flat">+0.0 <span>ball</span></div>';
     }
     const up = value > 0;
     return (
       '<div class="res-delta ' + (up ? "up" : "down") + '">' +
       icon(up ? "arrowUp" : "arrowDown", 14) +
       signed(value, 1) +
-      ' <span>ball</span></div>' +
-      '<div class="res-hero-level">Oldingi imtihonga nisbatan</div>'
+      ' <span>ball</span></div>'
     );
+  }
+
+  /** Hero'dagi izoh qatori — o'sish izohi (chip yonida). */
+  function deltaCaption(delta) {
+    if (delta === null || delta === undefined || !Number.isFinite(Number(delta))) {
+      return "Taqqoslash uchun oldingi natija yo'q";
+    }
+
+    if (Math.abs(Number(delta)) < 0.05) {
+      return "Oldingi natija bilan bir xil";
+    }
+    return "Oldingi imtihonga nisbatan";
   }
 
   /** Bosh karta: eng so'nggi natija (yoki kutilayotgan natija / bo'sh holat). */
@@ -664,23 +1029,33 @@
     const isRecord =
       asc.length > 1 && score !== null && best !== null && Math.abs(score - best) < 1e-9;
 
+    const info = nextLevelInfo(score);
+    const correctShare = total > 0 ? Math.round((raw / total) * 100) : null;
+
     box.innerHTML =
-      '<div class="res-hero ' + tone + '">' +
-      '<div class="res-hero-top"><div>' +
-      '<div class="res-hero-eyebrow">So\'nggi natija</div>' +
+      '<div class="res-hero res-hero2 ' + tone + '">' +
+      '<div class="res-hero2-top">' +
+      '<div class="res-hero-eyebrow">Sertifikat pasporti</div>' +
+      '<div class="res-hero2-date">' + formatDate(submitted) + "</div>" +
+      "</div>" +
       '<div class="res-hero-title">' + App.escape(latest.title) + "</div>" +
-      '<div class="res-hero-meta">' + formatDate(submitted) + " · " +
-      raw + "/" + total + " to'g'ri javob</div>" +
-      "</div>" +
-      '<span class="res-chip">' + App.escape(level) + "</span>" +
-      "</div>" +
-      '<div class="res-hero-main">' + scoreBlock(score, level) +
-      '<div class="res-hero-side">' + deltaBlock(delta) +
-      '<div class="res-hero-level">Daraja: <b>' + App.escape(level) + "</b></div>" +
+      '<div class="res-hero2-main">' +
+      scoreDial(score) +
+      '<div class="res-hero-side">' +
+      '<div class="res-hero2-badges">' +
+      '<span class="res-chip res-chip-lg">' + App.escape(level) + "</span>" +
+      deltaBlock(delta) +
       (isRecord
         ? '<span class="res-record">' + icon("trophy", 12) + "Shaxsiy rekord</span>"
         : "") +
+      "</div>" +
+      '<div class="res-hero-level">' + raw + "/" + total + " to'g'ri javob" +
+      (correctShare === null ? "" : " · " + correctShare + "%") +
+      "</div>" +
+      sparklineHtml(scores) +
       "</div></div>" +
+      nextLevelBlock(info) +
+      '<div id="hero-subjects-slot"></div>' +
       '<div id="hero-advice-slot"></div>' +
       '<button type="button" class="res-hero-cta" data-exam="' + latest.exam_id + '">' +
       icon("chart", 15) + "Batafsil tahlil" + icon("chevron", 15) +
@@ -692,16 +1067,43 @@
         openDetail(Number(cta.getAttribute("data-exam")));
       });
     }
+    animateHeroDial();
     fillHeroDetail(latest.exam_id);
   }
 
-  /** Hero uchun qo'shimcha: daraja tavsiyasi (95% interval hozircha yashirilgan). */
+  /** Hero uchun qo'shimcha: fanlar kesimi va daraja tavsiyasi. */
   function fillHeroDetail(examId) {
     const token = state.heroToken;
     API.get("/api/results/" + examId)
       .then(function (report) {
         if (token !== state.heroToken) {
           return;
+        }
+        const subjectsSlot = byId("hero-subjects-slot");
+        const subjects = report && Array.isArray(report.subjects) ? report.subjects : [];
+        const balls = (report && report.subject_balls) || {};
+        if (subjectsSlot && subjects.length) {
+          const rows = subjects
+            .map(function (row) {
+              const ball = ballOf(balls, row.code);
+              if (ball === null) {
+                return "";
+              }
+              const percent = Math.max(0, Math.min(100, ball));
+              return (
+                '<div class="res-subject">' +
+                '<div class="res-subject-head"><span>' + App.escape(row.label) +
+                "</span><b>" + formatScore(ball) + " ball</b></div>" +
+                '<span class="res-subject-track"><span style="width:' +
+                percent.toFixed(1) + '%"></span></span></div>'
+              );
+            })
+            .filter(Boolean)
+            .join("");
+          if (rows) {
+            subjectsSlot.innerHTML =
+              '<div class="res-hero-subjects">' + rows + "</div>";
+          }
         }
         const adviceSlot = byId("hero-advice-slot");
         if (adviceSlot && report && report.advice) {
@@ -795,12 +1197,18 @@
           : null
         : Number(summary.average_score);
 
+    const attempts = Number(summary.attempts) || published.length;
+    const publishedCount = published.length;
+    const correctPercent = total > 0 ? (raw / total) * 100 : null;
+
     box.innerHTML =
       statTile(
         "res-tone-b",
         "trophy",
         bestScore === null ? "—" : formatScore(bestScore) + "<small>ball</small>",
-        "Eng yaxshi ball"
+        "Eng yaxshi ball",
+        bestScore,
+        bestScore === null ? "Hali natija yo'q" : "Daraja " + levelCode(bestScore)
       ) +
       statTile(
         "res-tone-c-plus",
@@ -808,21 +1216,151 @@
         averageScore === null
           ? "—"
           : formatScore(averageScore) + "<small>ball</small>",
-        "O'rtacha ball"
+        "O'rtacha ball",
+        averageScore,
+        averageScore === null
+          ? "Hisoblash uchun ma'lumot yo'q"
+          : "Barcha urinishlar bo'yicha"
       ) +
-      statTile("res-tone-b-plus", "list", String(summary.attempts || 0), "Urinishlar") +
-      statTile("res-tone-a", "target", correct, "To'g'ri javoblar");
+      statTile(
+        "res-tone-b-plus",
+        "list",
+        String(attempts),
+        "Urinishlar",
+        attempts ? (publishedCount / attempts) * 100 : 0,
+        publishedCount + " ta e'lon qilingan"
+      ) +
+      statTile(
+        "res-tone-a",
+        "target",
+        correct,
+        "To'g'ri javoblar",
+        correctPercent,
+        correctPercent === null
+          ? "Jami savollar noma'lum"
+          : Math.round(correctPercent) + "% aniqlik"
+      );
   }
 
-  function statTile(tone, iconName, value, label) {
+  function statTile(tone, iconName, value, label, percent, sub) {
+    const safe = Number.isFinite(Number(percent))
+      ? Math.max(0, Math.min(100, Number(percent)))
+      : 0;
     return (
       '<div class="res-stat ' + tone + '">' +
       '<div class="res-stat-top"><span class="res-stat-icon">' +
-      icon(iconName, 16) + "</span></div>" +
+      icon(iconName, 16) + "</span>" +
+      '<span class="res-stat-bar" aria-hidden="true"><span style="width:' +
+      safe.toFixed(1) + '%"></span></span></div>' +
       '<div class="res-stat-value">' + value + "</div>" +
-      '<div class="res-stat-label">' + label + "</div></div>"
+      '<div class="res-stat-label">' + label + "</div>" +
+      (sub ? '<div class="res-stat-sub">' + sub + "</div>" : "") +
+      "</div>"
     );
   }
+
+  /**
+   * «Tahlil» plitkalari: o'sish sur'ati, barqarorlik, eng yaxshi natija va
+   * keyingi maqsad. Ma'lumot yetarli bo'lmasa blok butunlay yashiriladi.
+   */
+  function renderInsights(data) {
+    const box = byId("results-insights");
+    if (!box) {
+      return;
+    }
+    const published = data.published || [];
+    const asc = published.slice().sort(function (a, b) {
+      return timeOf(a) - timeOf(b);
+    });
+    const scores = asc
+      .map(function (item) {
+        return scoreOf(item);
+      })
+      .filter(function (value) {
+        return value !== null;
+      });
+
+    if (!scores.length) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+
+    const trend = trendOf(scores);
+    const spread = deviation(scores);
+    const best = Math.max.apply(null, scores);
+    const info = nextLevelInfo(scores[scores.length - 1]);
+    const cards = [];
+
+    if (trend.value !== null) {
+      cards.push(
+        insightHtml(
+          trend.direction === "up"
+            ? "res-tone-a"
+            : trend.direction === "down"
+            ? "res-tone-c"
+            : "res-tone-b-plus",
+          "trend",
+          "O'sish sur'ati",
+          signed(trend.value, 1) + "<small> ball</small>",
+          "har imtihon uchun o'rtacha"
+        )
+      );
+    }
+
+    if (spread !== null) {
+      cards.push(
+        insightHtml(
+          "res-tone-b-plus",
+          "target",
+          "Barqarorlik",
+          "±" + formatScore(spread) + "<small> ball</small>",
+          spread <= 6 ? "natijalar barqaror" : "natijalar o'zgaruvchan"
+        )
+      );
+    }
+
+    cards.push(
+      insightHtml(
+        "res-tone-b",
+        "trophy",
+        "Eng yaxshi natija",
+        formatScore(best) + "<small> ball</small>",
+        "daraja " + levelCode(best)
+      )
+    );
+
+    cards.push(
+      insightHtml(
+        "res-tone-c-plus",
+        "sparkle",
+        "Keyingi maqsad",
+        info.next
+          ? info.next.code + "<small> · " + formatScore(info.remaining) + " ball</small>"
+          : "A+<small> · eng yuqori</small>",
+        info.next
+          ? "hozirgi daraja " + info.current.code
+          : "barcha darajalar ochilgan"
+      )
+    );
+
+    box.innerHTML = cards.join("");
+    box.classList.remove("hidden");
+  }
+
+  /** Bitta tahlil kartasi (ikonka + yorliq + qiymat + izoh). */
+  function insightHtml(tone, iconName, label, value, hint) {
+    return (
+      '<div class="res-insight ' + tone + '">' +
+      '<div class="res-insight-top"><span class="res-insight-icon">' +
+      icon(iconName, 14) + "</span>" +
+      '<span class="res-insight-label">' + label + "</span></div>" +
+      '<span class="res-insight-value">' + value + "</span>" +
+      (hint ? '<span class="res-insight-hint">' + hint + "</span>" : "") +
+      "</div>"
+    );
+  }
+
 
   /** Bitta e'lon qilingan imtihon kartasi (timeline elementi). */
   function itemHtml(item, previousScore, isBest) {
@@ -895,7 +1433,11 @@
       " · e'lon vaqti: " + App.escape(item.result_time_local || "—") + "</span>" +
       '<span class="res-pending-line"><span>E\'lon qilinishiga</span>' +
       '<span class="res-countdown" data-countdown="' +
-      App.escape(until ? item.result_time : "") + '">—</span></span></div>'
+      App.escape(until ? item.result_time : "") + '">—</span></span>' +
+      '<span class="res-pending-track" aria-hidden="true">' +
+      '<span class="res-pending-fill" data-progress-from="' +
+      App.escape(item.submitted_at || "") + '" data-progress-to="' +
+      App.escape(until ? item.result_time : "") + '"></span></span></div>'
     );
   }
 
@@ -927,6 +1469,24 @@
           node.textContent = formatRemaining(left);
           node.classList.remove("is-ready");
         }
+      }
+
+      // Kutilayotgan natija kartalaridagi "vaqt progressi".
+      const fills = document.querySelectorAll(
+        "#tab-results [data-progress-from]"
+      );
+      for (let index = 0; index < fills.length; index += 1) {
+        const fill = fills[index];
+        const from = parseDbTime(fill.getAttribute("data-progress-from"));
+        const to = parseDbTime(fill.getAttribute("data-progress-to"));
+        if (!from || !to) {
+          fill.style.width = "0%";
+          continue;
+        }
+        const span = to.getTime() - from.getTime();
+        const ratio = span > 0 ? (Date.now() - from.getTime()) / span : 1;
+        const percent = Math.max(0, Math.min(100, ratio * 100));
+        fill.style.width = percent.toFixed(1) + "%";
       }
     };
 
@@ -1031,7 +1591,7 @@
       });
   }
 
-  /** Filtr tugmalari (bir marta bog'lanadi). */
+  /** Filtr va grafik oraliq tugmalari (bir marta bog'lanadi). */
   function bindControls() {
     document.querySelectorAll("#results-filters [data-filter]").forEach(function (button) {
       button.addEventListener("click", function () {
@@ -1042,6 +1602,24 @@
         API.haptic("light");
         if (state.data) {
           renderList(state.data);
+        }
+      });
+    });
+
+    // Grafik oralig'i: "Barchasi" / "Oxirgi 5" — qayta so'rovsiz qayta chiziladi.
+    document.querySelectorAll("#chart-range [data-range]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (button.disabled) {
+          return;
+        }
+        const next = button.getAttribute("data-range");
+        if (next === state.chartRange) {
+          return;
+        }
+        state.chartRange = next;
+        API.haptic("light");
+        if (state.chartData) {
+          renderChart(state.chartData);
         }
       });
     });

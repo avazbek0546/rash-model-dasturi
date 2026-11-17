@@ -2567,3 +2567,455 @@ button.res-item.pending {
 
 
 
+
+/* ===========================================================================
+   NATIJALAR 2.0 — "sertifikat pasporti": SVG dial, daraja zinapoyasi, tahlil
+   kartalari, boyitilgan plitkalar va timeline sayqali. Ranglar mavjud
+   `--res-*` / `--tone` tokenlaridan olinadi (light va dark uchun bir xil).
+   =========================================================================== */
+
+/* --- Hero 2.0: sarlavha qatori ------------------------------------------- */
+.res-hero2-top {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.res-hero2-date {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--hint);
+  white-space: nowrap;
+}
+
+.res-hero2-main {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.res-hero2-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.res-chip-lg {
+  padding: 4px 11px;
+  font-size: 12.5px;
+}
+
+.res-hero2 .res-delta {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.res-hero2 .res-delta.up {
+  background: rgba(30, 158, 98, 0.14);
+}
+
+.res-hero2 .res-delta.down {
+  background: rgba(224, 80, 122, 0.14);
+}
+
+/* --- Dial (SVG halqa): 0–100 sertifikat bali ----------------------------- */
+.res-dial {
+  position: relative;
+  flex: 0 0 auto;
+  width: 112px;
+  height: 112px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.res-dial svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.res-dial-track {
+  fill: none;
+  stroke: rgba(128, 128, 128, 0.18);
+  stroke-width: 9;
+}
+
+.res-dial-progress {
+  fill: none;
+  stroke: var(--tone, var(--res-accent));
+  stroke-width: 9;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  filter: drop-shadow(0 0 6px var(--tone-soft, rgba(79, 107, 255, 0.16)));
+}
+
+.res-dial-tick {
+  stroke: rgba(128, 128, 128, 0.45);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.res-dial-center {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-top: 2px;
+}
+
+.res-dial-score {
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.res-dial-unit {
+  margin-top: 3px;
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--hint);
+}
+
+/* --- Keyingi daraja (goal) ----------------------------------------------- */
+.res-goal {
+  position: relative;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(128, 128, 128, 0.22);
+}
+
+.res-goal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 11.5px;
+  color: var(--hint);
+}
+
+.res-goal-head b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.res-goal-track {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.18);
+  overflow: hidden;
+}
+
+.res-goal-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--tone, var(--res-accent)), var(--res-accent-2));
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.res-ladder {
+  display: flex;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.res-ladder-step {
+  flex: 1 1 0;
+  padding: 3px 0;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--hint);
+  background: transparent;
+}
+
+.res-ladder-step.is-passed {
+  color: var(--text);
+  opacity: 0.66;
+}
+
+.res-ladder-step.is-current {
+  color: var(--tone, var(--res-accent));
+  background: var(--tone-soft, rgba(79, 107, 255, 0.12));
+  box-shadow: inset 0 0 0 1px var(--tone, var(--res-accent));
+}
+
+
+/* --- Hero'dagi fanlar kesimi (detail'dan) -------------------------------- */
+.res-hero-subjects {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(128, 128, 128, 0.22);
+}
+
+.res-subject-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--hint);
+}
+
+.res-subject-head b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.res-subject-track {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.16);
+  overflow: hidden;
+}
+
+.res-subject-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tone, var(--res-accent));
+}
+
+/* --- Tahlil (insights) --------------------------------------------------- */
+.res-insights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 12px;
+}
+
+@media (min-width: 560px) {
+  .res-insights {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.res-insight {
+  min-width: 0;
+  padding: 11px 12px;
+  border-radius: 15px;
+  border: 1px solid var(--res-line);
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.res-insight-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.res-insight-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  color: var(--tone, var(--res-accent));
+  background: var(--tone-soft, rgba(79, 107, 255, 0.12));
+}
+
+.res-insight-label {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--hint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.res-insight-value {
+  display: block;
+  margin-top: 7px;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.res-insight-value small {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--hint);
+}
+
+.res-insight-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--hint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Grafik: oraliq tugmalari -------------------------------------------- */
+.res-range {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.res-range button {
+  width: auto;
+  margin: 0;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--hint);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.res-range button.active {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+}
+
+/* --- Plitkalar: progress bar + sub-label --------------------------------- */
+.res-stat-bar {
+  flex: 0 1 64px;
+  min-width: 36px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.18);
+  overflow: hidden;
+}
+
+.res-stat-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tone, var(--res-accent));
+}
+
+.res-stat-sub {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--hint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* --- Timeline: oy sarlavhalari ------------------------------------------- */
+.res-month {
+  position: relative;
+  margin: 14px 0 9px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--hint);
+}
+
+.res-month::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 1px;
+  background: var(--res-line);
+}
+
+/* --- Kutilayotgan natija: vaqt progressi --------------------------------- */
+.res-pending-track {
+  display: block;
+  height: 5px;
+  margin-top: 9px;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.18);
+  overflow: hidden;
+}
+
+.res-pending-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--res-amber), rgba(245, 165, 36, 0.55));
+  transition: width 0.9s linear;
+}
+
+/* --- Sparkline ----------------------------------------------------------- */
+.res-spark {
+  display: block;
+  width: 100%;
+  height: 26px;
+  margin-top: 6px;
+}
+
+.res-spark-line {
+  fill: none;
+  stroke: var(--tone, var(--res-accent));
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* --- Kichik ekranlar ------------------------------------------------------ */
+@media (max-width: 359px) {
+  .res-hero2-main {
+    gap: 10px;
+  }
+
+  .res-dial {
+    width: 96px;
+    height: 96px;
+  }
+
+  .res-dial-score {
+    font-size: 23px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .res-dial-progress,
+  .res-goal-track > span,
+  .res-pending-fill {
+    transition: none;
+  }
+}
+
