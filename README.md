@@ -306,10 +306,12 @@ Imtihon tuzilishi: **45 pozitsiya**, 36–45 ochiq savollar `a`/`b` ga bo'linadi
    saqlanadi.
 5. Keyin shu imtihon Telegram kanalida online o'tkaziladi.
 6. `/offline_report KOD` — **umumiy** (online + offline) va **faqat offline**
-   PDF reytinglarini yuboradi. Import tasdiqlangach bot darhol **umumiy
-   reyting** PDF ini yuboradi (Excel alohida hisoblanmaydi); `/report KOD` ham
-   offline natijalar bo'lsa umumiy reytingni beradi. Ikkala hisobotda ham θ,
-   SE, 0–100 ball, daraja va to'g'ri javoblar soni bor.
+   PDF reytinglarini yuboradi. Import tasdiqlangach bot **faqat offline**
+   natijalar PDF ini yuboradi (Excel o'z natijasi bilan). **Umumiy**
+   (offline + online) reyting **web panel**dagi «📄 PDF» tugmasidan olinadi
+   (`/api/v2/admin/exams/{id}/report-send`). Botda: `/report KOD` — umumiy,
+   `/report KOD offline` — faqat offline, `/report KOD online` — faqat online.
+   Ikkala hisobotda ham θ, SE, 0–100 ball, daraja va to'g'ri javoblar soni bor.
 
 **Adolat va dublikatlar:**
 

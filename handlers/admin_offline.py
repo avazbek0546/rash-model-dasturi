@@ -771,25 +771,23 @@ async def offline_callback(
                     batch = await repos.offline_batches.get_batch(int(callback_data.batch_id))
                     exam = await repos.exams.get(int(batch["exam_id"])) if batch else None
                 if exam is not None:
-                    # Excel alohida hisoblanmasin: darhol umumiy (offline+online)
-                    # reyting yuboriladi.
-                    report = await offline_report.build_combined_report(repos, exam)
-                    data = report_pdf.build_combined_results_pdf(
+                    # Botdagi import oqimi: faqat shu Excel (offline) natijalari.
+                    # Umumiy (offline+online) reyting — web panel PDF'ida beriladi.
+                    report = await offline_report.build_offline_report(repos, exam)
+                    data = report_pdf.build_offline_results_pdf(
                         meta=report.meta, students=list(report.students)
                     )
                     await message.answer_document(
                         BufferedInputFile(
-                            data, filename=f"umumiy-reyting-{exam.test_code}.pdf"
+                            data, filename=f"offline-reyting-{exam.test_code}.pdf"
                         ),
                         caption=(
-                            f"📄 Umumiy reyting — {report.participants} ta qatnashchi\n"
-                            f"Oflayn: {report.offline_count} · "
-                            f"Onlayn: {report.online_count} · "
-                            f"Chiqarilgan: {report.excluded_count}"
+                            f"📄 «{escape(str(exam.title))}» — faqat offline\n"
+                            f"Qatnashchilar: <b>{report.participants}</b> ta"
                         ),
                     )
             except Exception:
-                logger.exception("Umumiy PDF commitdan keyin yasalmadi")
+                logger.exception("Offline PDF commitdan keyin yasalmadi")
         return
 
     if action == "cancel":

@@ -438,27 +438,48 @@ async def cmd_report(message: Message, repos: Repositories) -> None:
         await message.answer(texts.not_admin())
         return
 
-    parts = (message.text or "").split(maxsplit=1)
+    parts = (message.text or "").split()
     if len(parts) < 2 or not parts[1].strip():
         await message.answer(
-            "Ishlatish: <code>/report TEST_KODI</code>\n"
-            "Masalan: <code>/report MATH2026</code>\n\n"
-            "O'quvchilar natijalari PDF ko'rinishida yuboriladi."
+            "Ishlatish: <code>/report TEST_KODI [offline|online|combined]</code>\n\n"
+            "<code>/report MATH14</code> — umumiy (offline + online)\n"
+            "<code>/report MATH14 offline</code> — faqat offline\n"
+            "<code>/report MATH14 online</code> — faqat online"
         )
         return
 
     code = parts[1].strip()
+    scope = parts[2].strip().lower() if len(parts) > 2 else "combined"
+    if scope not in {"offline", "online", "combined"}:
+        await message.answer(
+            f"Noma'lum manba: <code>{escape(scope)}</code>\n"
+            "Ishlatish: <code>/report TEST_KODI [offline|online|combined]</code>"
+        )
+        return
     exam = await repos.exams.get_by_code(code)
     if exam is None:
         await message.answer(f"«{escape(code)}» test kodi topilmadi.")
         return
 
     try:
-        # Offline natijalar bo'lsa — umumiy (offline + online) reyting beriladi:
-        # Excel natijalari alohida hisoblanmaydi.
+        # `combined` (standart) — offline natijalar bo'lsa ikkalasini birlashtiradi.
         readiness = await offline_scoring.check_readiness(repos, exam)
         offline_attempts = await repos.offline_attempts.list_for_exam(exam.exam_id)
-        if readiness.ready and offline_attempts:
+        has_offline = readiness.ready and bool(offline_attempts)
+        if scope == "offline":
+            if not has_offline:
+                await message.answer("Bu imtihonda offline natijalar yo'q.")
+                return
+            offline = await offline_report.build_offline_report(repos, exam)
+            data = report_pdf.build_offline_results_pdf(
+                meta=offline.meta, students=list(offline.students)
+            )
+            participants = offline.participants
+            caption = (
+                f"📄 «{escape(str(exam.title))}» — faqat offline\n"
+                f"Qatnashchilar: <b>{participants}</b> ta"
+            )
+        elif scope == "combined" and has_offline:
             combined = await offline_report.build_combined_report(repos, exam)
             data = report_pdf.build_combined_results_pdf(
                 meta=combined.meta, students=list(combined.students)

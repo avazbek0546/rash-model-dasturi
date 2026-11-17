@@ -42,6 +42,7 @@ import config
 from database.models import normalize_part
 from services import exam_admin, exam_service, grading, report_data, report_pdf, test_quality
 from services import calibration
+from services import offline_report, offline_scoring
 from services import solutions as solutions_service
 from web.api import ApiError, ensure_user, get_bot, read_json, repositories
 
@@ -488,6 +489,44 @@ async def report_link(request: web.Request) -> web.Response:
     )
 
 
+async def _build_report_pdf(repos: Any, exam: Any) -> tuple[bytes, int, str]:
+    """Web panel uchun PDF yasaydi.
+
+    Qoida: **offline natijalar bo'lsa — umumiy (offline + online) reyting**
+    beriladi, aks holda faqat online natijalar. Botdagi import oqimi esa
+    faqat offline natijalarni ko'rsatadi — ikkalasi ataylab ajratilgan.
+
+    Qaytaradi: `(pdf_bytes, participants, source_label)`.
+    """
+    readiness = await offline_scoring.check_readiness(repos, exam)
+    offline_attempts = await repos.offline_attempts.list_for_exam(exam.exam_id)
+    if readiness.ready and offline_attempts:
+        combined = await offline_report.build_combined_report(repos, exam)
+        return (
+            report_pdf.build_combined_results_pdf(
+                meta=combined.meta, students=list(combined.students)
+            ),
+            combined.participants,
+            (
+                f"Oflayn: <b>{combined.offline_count}</b> · "
+                f"Onlayn: <b>{combined.online_count}</b> · "
+                f"Chiqarilgan: <b>{combined.excluded_count}</b>"
+            ),
+        )
+    report = await report_data.build_exam_report(repos, exam)
+    return (
+        report_pdf.build_results_pdf(
+            title=report.title,
+            test_code=report.test_code,
+            date_text=report.date_text,
+            participants=report.participants,
+            students=report.students,
+        ),
+        report.participants,
+        f"O'quvchilar: <b>{report.participants}</b> ta",
+    )
+
+
 async def report_pdf_view(request: web.Request) -> web.Response:
     """Tokenni tekshirib, o'quvchilar natijalari PDF ini qaytaradi."""
     repos = repositories(request)
@@ -498,14 +537,7 @@ async def report_pdf_view(request: web.Request) -> web.Response:
     if exam is None:
         raise ApiError(404, "Imtihon topilmadi.")
     try:
-        report = await report_data.build_exam_report(repos, exam)
-        data = report_pdf.build_results_pdf(
-            title=report.title,
-            test_code=report.test_code,
-            date_text=report.date_text,
-            participants=report.participants,
-            students=report.students,
-        )
+        data, _, _ = await _build_report_pdf(repos, exam)
     except report_pdf.ReportError as exc:
         raise ApiError(500, str(exc)) from exc
 
@@ -544,14 +576,7 @@ async def report_send(request: web.Request) -> web.Response:
         raise ApiError(404, "Imtihon topilmadi.")
 
     try:
-        report = await report_data.build_exam_report(repos, exam)
-        data = report_pdf.build_results_pdf(
-            title=report.title,
-            test_code=report.test_code,
-            date_text=report.date_text,
-            participants=report.participants,
-            students=report.students,
-        )
+        data, participants, source_text = await _build_report_pdf(repos, exam)
     except report_pdf.ReportError as exc:
         raise ApiError(500, str(exc)) from exc
     except Exception as exc:
@@ -567,7 +592,7 @@ async def report_send(request: web.Request) -> web.Response:
             document=BufferedInputFile(data, filename=filename),
             caption=(
                 f"📄 «{html_escape(str(exam.title))}» — natijalar\n"
-                f"O'quvchilar: <b>{report.participants}</b> ta"
+                f"{source_text}"
             ),
         )
     except Exception as exc:
@@ -586,14 +611,14 @@ async def report_send(request: web.Request) -> web.Response:
         "PDF hisobot chatga yuborildi: exam_id=%s, kod=%s, o'quvchilar=%d, admin=%s",
         exam_id,
         exam.test_code,
-        report.participants,
+        participants,
         user["user_id"],
     )
     return web.json_response(
         {
             "ok": True,
             "sent": True,
-            "participants": report.participants,
+            "participants": participants,
             "filename": filename,
         }
     )
