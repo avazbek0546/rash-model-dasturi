@@ -21,7 +21,7 @@ import re
 from typing import Final
 
 from aiogram import F, Router
-from aiogram.filters import BaseFilter, Command
+from aiogram.filters import BaseFilter, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
@@ -31,7 +31,7 @@ from database.repository import Repositories
 from handlers.access import is_admin, log_denied
 from keyboards.reply import UPLOAD_SOLUTION_BUTTON
 from services import solutions as solution_service
-from states import SolutionUploadStates
+from states import OfflineImportStates, SolutionUploadStates
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,20 @@ UNSUPPORTED_MEDIA_FIELDS: Final[tuple[str, ...]] = (
     "sticker",
 )
 
+#: Excel/CSV hujjatlar — yechim emas, ular offline import uchun (aniqroq javob).
+SPREADSHEET_MIME_PREFIXES: Final[tuple[str, ...]] = (
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml",
+    "text/csv",
+)
+
+#: MIME ko'rsatilmagan bo'lsa — kengaytma bo'yicha tekshiriladi.
+SPREADSHEET_EXTENSIONS: Final[tuple[str, ...]] = (".xlsx", ".xlsm", ".xls", ".csv")
+
+#: Offline import holati — bu vaqtda hujjat yechim emas, import fayli.
+#: Router tartibidan qat'i nazar himoya qiladi (admin_offline o'zi qabul qiladi).
+NOT_OFFLINE_IMPORT_STATE = ~StateFilter(OfflineImportStates.waiting_file)
+
 
 def document_is_media(document: object) -> bool:
     """Hujjat rasm yoki video ekanini aniqlaydi (MIME yoki kengaytma bo'yicha)."""
@@ -90,6 +104,15 @@ def document_is_media(document: object) -> bool:
         return mime.startswith(DOCUMENT_MIME_PREFIXES)
     name = str(getattr(document, "file_name", "") or "").lower()
     return name.endswith(DOCUMENT_EXTENSIONS)
+
+
+def document_is_spreadsheet(document: object) -> bool:
+    """Hujjat Excel/CSV ekanini aniqlaydi (bunday fayl yechim emas — import fayli)."""
+    mime = str(getattr(document, "mime_type", "") or "").lower()
+    if mime:
+        return mime.startswith(SPREADSHEET_MIME_PREFIXES)
+    name = str(getattr(document, "file_name", "") or "").lower()
+    return name.endswith(SPREADSHEET_EXTENSIONS)
 
 
 def media_type_of(message: Message) -> str | None:
@@ -328,7 +351,7 @@ async def cmd_add_solution(message: Message) -> None:
     await message.answer(texts.solution_admin_intro())
 
 
-@router.message(AdminMediaFilter())
+@router.message(AdminMediaFilter(), NOT_OFFLINE_IMPORT_STATE)
 async def upload_media_solution(
     message: Message, repos: Repositories, state: FSMContext
 ) -> None:
@@ -381,13 +404,17 @@ async def upload_media_solution(
     await state.clear()
 
 
-@router.message(AdminUnsupportedMediaFilter())
+@router.message(AdminUnsupportedMediaFilter(), NOT_OFFLINE_IMPORT_STATE)
 async def reject_unsupported_media(message: Message) -> None:
-    """Admin audio/animatsiya/dumaloq video yuborsa — aniq ogohlantirish."""
+    """Admin qo'llanmaydigan fayl/media yuborsa — aniq yo'l ko'rsatiladi."""
     if message.from_user is None:
         return
     if not is_admin(message.from_user.id):  # filter'ga qo'shimcha himoya
         log_denied("add_solution:media", message.from_user.id, message.from_user.full_name)
+        return
+    if message.document is not None and document_is_spreadsheet(message.document):
+        # Excel yechim emas — uni offline import orqali yuklash kerak.
+        await message.answer(texts.solution_spreadsheet_hint())
         return
     await message.answer(texts.solution_media_required())
 

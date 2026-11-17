@@ -278,10 +278,15 @@ def check_handlers(questions: list) -> None:
     # Pastdagi reply klaviatura yo'q — bo'limlar inline menyuga ko'chirilgan.
     admin_markup = webapp_kb(is_admin=True)
     admin_rows = [row[0].text for row in admin_markup.inline_keyboard]
-    assert len(admin_markup.inline_keyboard) == 7, admin_rows
+    admin_sections = ["📋 Imtihonlar ro'yxati", "🎬 Yechim yuklash"]
+    if config.OFFLINE_IMPORT_ENABLED:
+        admin_sections.append("📥 Offline mock")
+    admin_sections.append("ℹ️ Yordam")
+    assert len(admin_markup.inline_keyboard) == 4 + len(admin_sections), admin_rows
     assert admin_rows[0].startswith("📝 Javoblarni belgilash"), admin_rows
     assert admin_rows[1] == "📊 Natijalarim", admin_rows
     assert admin_rows[2:4] == ["🔍 Test tahlili", "🏡 Asosiy menyu"], admin_rows
+    assert admin_rows[4:] == admin_sections, admin_rows
     assert admin_rows[-1] == "ℹ️ Yordam", admin_rows
     assert all("Yangi imtihon" not in label for label in admin_rows), admin_rows
 

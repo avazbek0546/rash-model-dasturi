@@ -8,10 +8,15 @@ Router'lar ro'yxati va ularning tartibi muhim:
     5. admin          — /stats, /exams, /participants (faqat o'qituvchi)
     6. admin_manage   — /admins paneli (adminlarni boshqarish)
     7. admin_chat     — /admin_chat va admin chatga kirishni qo'riqlash
-    8. admin_solution — /add_solution va video/media yechim yuklash (o'qituvchi)
-    9. admin_offline  — /offline_* Excel import, reyting va PDF (faqat admin)
+    8. admin_offline  — /offline_* Excel import, reyting va PDF (faqat admin)
+    9. admin_solution — /add_solution va video/media yechim yuklash (o'qituvchi)
     10. analysis      — «🔍 Test tahlili» bo'limi (o'quvchi)
     11. fallback      — boshqa barcha xabarlar (ENG OXIRGI bo'lishi shart)
+
+Tartib **majburiy**: `admin_offline` `admin_solution` dan oldin turadi. Aks holda
+`admin_solution` dagi «yechim faqat video/rasm» filtri admin yuborgan `.xlsx`
+faylni ushlab qoladi va Excel import handleri
+(`OfflineImportStates.waiting_file`) umuman chaqirilmaydi.
 
 Eski "mashq rejimi" (chatda savol-javob) arxivga o'tkazildi: `handlers/test.py`,
 `handlers/results.py`, `handlers/about.py` va `services/test_session.py` fayllari
@@ -51,8 +56,8 @@ def setup_routers() -> Router:
         admin,
         admin_manage,
         admin_chat,
+        admin_offline,  # `admin_solution` dan OLDIN — Excel import fayli uchun
         admin_solution,
-        admin_offline,
         analysis,
         fallback,
     ):

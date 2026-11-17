@@ -1222,6 +1222,18 @@ def solution_media_required() -> str:
     )
 
 
+def solution_spreadsheet_hint() -> str:
+    """Admin Excel/CSV fayl yuborsa — yechim emas, offline import yo'li ko'rsatiladi."""
+    return (
+        "📥 <b>Bu Excel fayl — yechim sifatida qabul qilinmaydi.</b>\n\n"
+        "Offline natijalarni yuklash uchun:\n"
+        "1) «📥 Offline mock» → imtihon → «📤 Excel yuklash»;\n"
+        "2) yoki <code>/offline_import TEST_KODI</code> buyrug'i.\n\n"
+        "Yechim esa faqat <b>video</b> yoki <b>rasm</b> bo'ladi "
+        "(yo'riqnoma: /add_solution)."
+    )
+
+
 def solution_size_warning(*, size_mb: float, limit_mb: int) -> str:
     """Fayl hajmi tavsiya etilgan chegaradan katta bo'lganda (saqlangan)."""
     return (

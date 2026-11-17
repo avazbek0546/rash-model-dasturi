@@ -2,7 +2,9 @@
 
 Faqat admin. Excel fayl faqat `OfflineImportStates.waiting_file` holatida
 qabul qilinadi — boshqa handlerlar (masalan, video/rasm yechimlar) bilan
-to'qnashmaydi.
+to'qnashmaydi. Himoya ikki qatlamda: `handlers/__init__.py` da bu router
+`admin_solution` dan **oldin** ulanadi va `admin_solution` handlerlari
+`OfflineImportStates.waiting_file` holatini `~StateFilter` bilan chetlab o'tadi.
 """
 
 from __future__ import annotations

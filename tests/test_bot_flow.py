@@ -37,6 +37,8 @@ from aiogram.client.default import DefaultBotProperties  # noqa: E402
 from aiogram.client.session.base import BaseSession  # noqa: E402
 from aiogram.enums import ParseMode  # noqa: E402
 from aiogram.fsm.storage.memory import MemoryStorage  # noqa: E402
+from aiogram.fsm.context import FSMContext  # noqa: E402
+from aiogram.fsm.storage.base import StorageKey  # noqa: E402
 from aiogram.methods import (  # noqa: E402
     AnswerCallbackQuery,
     DeleteMessage,
@@ -62,6 +64,7 @@ from keyboards.reply import ANALYSIS_BUTTON, UPLOAD_SOLUTION_BUTTON  # noqa: E40
 from middlewares import UserSyncMiddleware  # noqa: E402
 from services import exam_service  # noqa: E402
 from services.test_session import TestSessionStore  # noqa: E402
+from states import OfflineImportStates  # noqa: E402
 
 TOKEN = "123456789:TEST_TOKEN_FOR_OFFLINE_CHECKS"
 BOT_ID = 123456789
@@ -647,6 +650,94 @@ async def check_solution_flow(bot, session, dp, repos) -> None:
     print("[OK] «🏡 Asosiy menyu» tugmasi inline menyuni qaytardi (reply klaviatura yo'q)")
 
 
+async def check_offline_import_routing(bot, session, dp, repos) -> None:
+    """Offline import holatidagi `.xlsx` yechim moduliga tushmasligi kerak.
+
+    Regressiya: `admin_solution` routeri `admin_offline` dan oldin ulanganida
+    «Yechim faqat video yoki rasm» filtri admin yuborgan Excel faylni ushlab
+    qolardi — Excel import handleri (`OfflineImportStates.waiting_file`) esa
+    umuman chaqirilmasdi.
+    """
+    now = exam_service.utc_now()
+    exam_id = await repos.exams.create(
+        title="OFFLINE ROUTING EXAM",
+        test_code="OFFROUTE1",
+        start_time=exam_service.to_db_time(now - timedelta(hours=3)),
+        end_time=exam_service.to_db_time(now - timedelta(hours=2)),
+        result_time=exam_service.to_db_time(now - timedelta(hours=1)),
+        total_questions=4,
+        answer_key="1A2B3C4D",
+        difficulty_logits="[]",
+        created_by=USER_ID,
+    )
+
+    # FSM holatini middleware bilan bir xil kalitda o'rnatamiz.
+    state = FSMContext(
+        storage=dp.storage,
+        key=StorageKey(bot_id=bot.id, chat_id=USER_ID, user_id=USER_ID),
+    )
+    await state.set_state(OfflineImportStates.waiting_file)
+    await state.update_data(offline_exam_id=exam_id)
+
+    # 1) `.xlsx` → admin_offline javob beradi (imtihon 55 itemli emas → import bloklanadi)
+    await dp.feed_update(
+        bot,
+        document_update(
+            bot,
+            1200,
+            caption="",
+            file_id="XLSX-OFFLINE-1",
+            mime_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            file_name="rasch_bot_uchun_50_oqquvchi_55_savol.xlsx",
+        ),
+    )
+    text = session.sent_texts()[-1]
+    assert "faqat video yoki rasm" not in text, text
+    assert "Import bloklandi" in text, text
+    assert await state.get_state() is None, "offline import holati tozalanmadi"
+    print("[OK] Offline holatidagi .xlsx → Excel import handleriga yetib bordi")
+
+    # 2) Holatda boshqa hujjat → `.xlsx` talab qilinadi (yechim moduli aralashmaydi)
+    await state.set_state(OfflineImportStates.waiting_file)
+    await state.update_data(offline_exam_id=exam_id)
+    await dp.feed_update(
+        bot,
+        document_update(
+            bot,
+            1201,
+            caption="",
+            file_id="PDF-OFFLINE-2",
+            mime_type="application/pdf",
+            file_name="natijalar.pdf",
+        ),
+    )
+    text = session.sent_texts()[-1]
+    assert "Faqat `.xlsx` fayl qabul qilinadi" in text, text
+    assert "faqat video yoki rasm" not in text, text
+    await state.clear()
+    print("[OK] Offline holatida boshqa hujjat ham yechim moduliga tushmadi")
+
+    # 3) Holatdan tashqarida Excel → yechim emas, offline import yo'li ko'rsatiladi
+    await dp.feed_update(
+        bot,
+        document_update(
+            bot,
+            1202,
+            caption="",
+            file_id="XLSX-NO-STATE-3",
+            mime_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            file_name="natijalar.xlsx",
+        ),
+    )
+    text = session.sent_texts()[-1]
+    assert "Excel fayl" in text and "/offline_import" in text, text
+    print("[OK] Holatsiz Excel uchun offline import yo'riqnomasi ko'rsatildi")
+
+
 def last_edit(session):
     """Oxirgi tahrirlangan xabar (EditMessageText) ni qaytaradi."""
     edits = [call for call in session.calls if isinstance(call, EditMessageText)]
@@ -687,6 +778,7 @@ async def main() -> None:
         await check_commands(bot, session, dp)
         await check_new_exam_wizard(bot, session, dp, repos)
         await check_solution_flow(bot, session, dp, repos)
+        await check_offline_import_routing(bot, session, dp, repos)
         await check_regrade(bot, session, dp, repos)
         await check_report(bot, session, dp, repos)
     finally:
