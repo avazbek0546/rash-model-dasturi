@@ -386,6 +386,76 @@ class OfflineImportRepository:
             raise
         return {"attempts": len(participant_ids), "participants": len(participant_ids)}
 
+    async def delete_batch(self, *, batch_id: int) -> dict[str, int]:
+        """Partiyani bazadan butunlay o'chiradi (tarixda qoldirmaydi).
+
+        `offline_import_rows`, `offline_import_issues`, `offline_attempts` va
+        `offline_responses` CASCADE bilan o'chadi. Boshqa partiyada attempti
+        qolmagan `offline_participants` (va ularning linklari) ham o'chiriladi;
+        reyting qarorlari faolsizlantiriladi — keyin ularni
+        `ensure_ranking_decisions()` qayta hisoblaydi.
+        """
+        conn = self._db.connection
+        batch = await self.get_batch(batch_id)
+        if batch is None:
+            raise ValueError("Import partiyasi topilmadi.")
+        exam_id = int(batch["exam_id"])
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            cursor = await conn.execute(
+                "SELECT DISTINCT participant_id FROM offline_attempts WHERE batch_id = ?",
+                (int(batch_id),),
+            )
+            participant_ids = [int(row[0]) for row in await cursor.fetchall()]
+            cursor = await conn.execute(
+                "SELECT COUNT(*) FROM offline_import_rows WHERE batch_id = ?",
+                (int(batch_id),),
+            )
+            rows_total = int((await cursor.fetchone())[0] or 0)
+            await conn.execute(
+                "DELETE FROM offline_import_batches WHERE batch_id = ?", (int(batch_id),)
+            )
+            removed_participants = 0
+            for participant_id in participant_ids:
+                cursor = await conn.execute(
+                    "SELECT COUNT(*) FROM offline_attempts WHERE participant_id = ?",
+                    (participant_id,),
+                )
+                if int((await cursor.fetchone())[0] or 0):
+                    continue  # boshqa partiyada ham bor — o'chirilmaydi
+                await conn.execute(
+                    "DELETE FROM offline_participants WHERE participant_id = ?",
+                    (participant_id,),
+                )
+                removed_participants += 1
+            # Reyting qarorlari `ensure_ranking_decisions()` da qayta yoziladi.
+            for participant_id in participant_ids:
+                await conn.execute(
+                    """
+                    UPDATE exam_ranking_decisions SET is_active = 0
+                    WHERE exam_id = ? AND subject_type = 'offline_participant'
+                      AND subject_id = ? AND is_active = 1
+                    """,
+                    (exam_id, participant_id),
+                )
+            await conn.execute(
+                """
+                UPDATE exam_ranking_decisions SET is_active = 0
+                WHERE exam_id = ? AND subject_type = 'telegram_user' AND is_active = 1
+                """,
+                (exam_id,),
+            )
+            await conn.commit()
+        except Exception:
+            await conn.rollback()
+            logger.exception("Offline partiya o'chirilmadi: batch_id=%s", batch_id)
+            raise
+        return {
+            "rows": rows_total,
+            "attempts": len(participant_ids),
+            "participants": removed_participants,
+        }
+
 
 class OfflineParticipantRepository:
     """`offline_participants` va `offline_participant_links`."""

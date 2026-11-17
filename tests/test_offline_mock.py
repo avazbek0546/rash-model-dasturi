@@ -332,6 +332,40 @@ async def main() -> None:
         assert int(late["matched_user_id"]) == LATE_ID
         print("[check] late registration auto-link:", late_report.participants)
 
+        # Ism bo'yicha avtomatik bog'lash: offline o'quvchi bilan bir xil ismli
+        # foydalanuvchi shu imtihonda onlayn qatnashsa — bitta qatorga qo'shiladi
+        # (offline + online natija aralashmay, dublikat bo'lmaydi).
+        DILNOZA_ID = 900104
+        await repos.users.upsert(
+            User(user_id=DILNOZA_ID, full_name="Dilnoza Karimova", username=None)
+        )
+        await repos.answers.submit(
+            user_id=DILNOZA_ID, exam_id=exam.exam_id, submitted_answers=ali_canonical
+        )
+        await grading.grade_exam(repos, exam)
+        exam = await repos.exams.get(exam.exam_id)
+        assert exam is not None
+        await offline_import.refresh_suggestions(repos, exam.exam_id)
+        dilnoza = next(
+            p for p in await repos.offline_participants.list_for_exam(exam.exam_id)
+            if p["student_code"] == "7A-02"
+        )
+        assert dilnoza["match_status"] == "confirmed", dilnoza
+        assert dilnoza["match_method"] == "name_auto", dilnoza
+        assert int(dilnoza["matched_user_id"]) == DILNOZA_ID
+        print("[check] unique online name auto-linked (name_auto)")
+
+        # Partiyani butunlay o'chirish: qatorlar, attemptlar va ishtirokchi
+        # bazadan yo'qoladi (void'dan farqi — tarix qolmaydi).
+        late_batch_id = int(late_preview.batch["batch_id"])
+        delete_stats = await offline_import.delete_batch(repos, late_batch_id, ADMIN_ID)
+        print("[check] delete batch:", delete_stats)
+        assert delete_stats["attempts"] == 1 and delete_stats["rows"] == 1
+        assert await repos.offline_batches.get_batch(late_batch_id) is None
+        assert await repos.offline_participants.get(int(late["participant_id"])) is None
+        assert await repos.offline_attempts.count_for_exam(exam.exam_id) == 0
+        print("[check] batch hard-delete removes rows, attempts and participants")
+
         # Imtihon o'chirilsa, offline tarix ham CASCADE bilan tozalanadi.
         await repos.exams.delete(exam.exam_id)
         assert await repos.offline_attempts.count_for_exam(exam.exam_id) == 0

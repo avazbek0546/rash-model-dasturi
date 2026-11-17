@@ -501,19 +501,56 @@ async def void_batch(
     return stats
 
 
+async def delete_batch(
+    repos: Repositories, batch_id: int, admin_id: int
+) -> dict[str, int]:
+    """Partiyani va unga tegishli natijalarni bazadan butunlay o'chiradi.
+
+    `void_batch` dan farqi: yozuvlar tarixda qolmaydi — qatorlar, attemptlar va
+    boshqa partiyada qolmagan ishtirokchilar ham o'chadi. Reyting qarorlari
+    qayta hisoblanadi, ya'ni bog'langan onlayn natijalar reytingga qaytadi.
+    """
+    batch = await repos.offline_batches.get_batch(batch_id)
+    if batch is None:
+        raise OfflineImportError("Import partiyasi topilmadi.")
+    stats = await repos.offline_batches.delete_batch(batch_id=batch_id)
+    await ensure_ranking_decisions(repos, int(batch["exam_id"]))
+    await _audit(
+        repos, admin_id=admin_id, action="offline.batch.delete",
+        entity_type="offline_batch", entity_id=batch_id,
+        before={
+            "status": str(batch.get("status")),
+            "file_name": str(batch.get("file_name") or ""),
+        },
+        after=stats,
+    )
+    return stats
+
+
 async def refresh_suggestions(
     repos: Repositories, exam_id: int, *, admin_id: int = 0
 ) -> int:
-    """Nomzodlarni yangilaydi va faqat aniq username mosligini tasdiqlaydi.
+    """Nomzodlarni yangilaydi va aniq mosliklarni avtomatik tasdiqlaydi.
 
-    Exceldagi `telegram_username` botdagi foydalanuvchi username'iga **aynan**
-    mos kelsa — bu ishonchli identifikator, shu sababli link avtomatik
-    tasdiqlanadi (`username_auto`). Ism-familiya bo'yicha topilgan nomzod esa
-    faqat taklif bo'lib qoladi: bir xil ismli o'quvchilar bo'lishi mumkin,
-    qarorni admin `/offline_links` orqali tasdiqlaydi.
+    Ikki xil ishonchli moslik avtomatik tasdiqlanadi:
+
+    **(1)** Exceldagi `telegram_username` botdagi username'ga **aynan** mos —
+        ishonchli identifikator (`username_auto`);
+    **(2)** ism bo'yicha yagona nomzod **shu imtihonda onlayn qatnashgan** —
+        offline va online natija bitta qatorga qo'shiladi, reytingda dublikat
+        bo'lmaydi (`name_auto`).
+
+    Qolgan hollarda (bir nechta teng nomzod yoki faqat boshqa imtihondagi odam)
+    faqat taklif qoladi: qarorni admin `/offline_links` orqali tasdiqlaydi.
     """
     participants = await repos.offline_participants.list_for_exam(exam_id)
     by_username, by_name = await repos.offline_participants.candidate_index()
+    # Ism bo'yicha avtomatik bog'lash faqat shu imtihonda onlayn qatnashganlar
+    # ichida qidiriladi — begona bir xil ismli odamga ulanib ketmasin.
+    online_user_ids = {
+        int(submission.user_id)
+        for submission in await repos.answers.list_for_exam(exam_id)
+    }
     updated = 0
     for participant in participants:
         # `rejected` — admin qo'lda uzgan; qayta avtomatik bog'lamaymiz.
@@ -521,19 +558,36 @@ async def refresh_suggestions(
             continue
         username = normalize_username(participant.get("telegram_username"))
         candidates = by_username.get(username.casefold(), []) if username else []
+        match_kind = "username"
         if not candidates:
-            candidates = by_name.get(
+            name_candidates = by_name.get(
                 str(participant.get("full_name_norm") or ""), []
             )
+            online_candidates = [
+                candidate
+                for candidate in name_candidates
+                if int(candidate["user_id"]) in online_user_ids
+            ]
+            if len(online_candidates) == 1:
+                # Onlayn qatnashgan yagona ism — aniq moslik, avtomatik bog'lanadi.
+                candidates = online_candidates
+                match_kind = "name"
+            else:
+                candidates = name_candidates
+                match_kind = "name_class"
         if len(candidates) == 1:
             candidate = candidates[0]
-            if str(candidate.get("method")) == "username":
+            if match_kind in {"username", "name"}:
+                link_method = "username_auto" if match_kind == "username" else "name_auto"
+                default_confidence = 0.95 if match_kind == "username" else 0.8
                 await repos.offline_participants.confirm_link(
                     participant_id=int(participant["participant_id"]),
                     user_id=int(candidate["user_id"]),
                     admin_id=admin_id,
-                    method="username_auto",
-                    confidence=float(candidate.get("confidence") or 0.95),
+                    method=link_method,
+                    confidence=float(
+                        candidate.get("confidence") or default_confidence
+                    ),
                 )
                 await _audit(
                     repos, admin_id=admin_id, action="offline.participant.auto_link",
@@ -541,7 +595,7 @@ async def refresh_suggestions(
                     entity_id=int(participant["participant_id"]),
                     after={
                         "user_id": int(candidate["user_id"]),
-                        "method": "username_auto",
+                        "method": link_method,
                     },
                 )
             else:

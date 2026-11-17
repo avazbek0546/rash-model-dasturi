@@ -434,6 +434,46 @@ def offline_cancel_kb(batch_id: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def offline_batches_kb(
+    batches: Sequence[dict[str, Any]], exam_id: int
+) -> InlineKeyboardMarkup:
+    """Import tarixi: har bir partiya uchun «🗑» (butunlay o'chirish) tugmasi."""
+    builder = InlineKeyboardBuilder()
+    for batch in batches[:10]:
+        builder.button(
+            text=f"🗑 #{batch.get('batch_no')} · {batch.get('status')}",
+            callback_data=OfflineAdminCallback(
+                action="batch_delete",
+                exam_id=exam_id,
+                batch_id=int(batch.get("batch_id") or 0),
+            ),
+            style="danger",
+        )
+    builder.button(text="🏡 Asosiy menyu", callback_data=MenuCallback(action="back"))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def offline_batch_delete_confirm_kb(
+    batch_id: int, exam_id: int
+) -> InlineKeyboardMarkup:
+    """Partiyani butunlay o'chirishni tasdiqlash (tasodifiy bosishdan himoya)."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="🗑 Ha, butunlay o'chirish",
+        callback_data=OfflineAdminCallback(
+            action="batch_delete_confirm", exam_id=exam_id, batch_id=batch_id
+        ),
+        style="danger",
+    )
+    builder.button(
+        text="↩️ Bekor qilish",
+        callback_data=OfflineAdminCallback(action="panel", exam_id=exam_id),
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def offline_link_kb(participant_id: int, user_id: int, exam_id: int) -> InlineKeyboardMarkup:
     """Bitta nomzodni tasdiqlash."""
     builder = InlineKeyboardBuilder()

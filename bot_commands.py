@@ -38,4 +38,5 @@ ADMIN_COMMANDS: tuple[BotCommand, ...] = BASE_COMMANDS + (
     BotCommand(command="offline_link_user", description="Oflaynni Telegram bilan bog'lash"),
     BotCommand(command="offline_unlink", description="Bog'lanishni bekor qilish"),
     BotCommand(command="offline_void", description="Offline partiyani bekor qilish"),
+    BotCommand(command="offline_delete", description="Offline partiyani butunlay o'chirish"),
 )

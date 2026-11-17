@@ -277,6 +277,7 @@ Imtihon tuzilishi: **45 pozitsiya**, 36–45 ochiq savollar `a`/`b` ga bo'linadi
 | `/offline_import KOD` | Excel faylni qabul qilish (preview → tasdiqlash) |
 | `/offline_batches KOD` | Import partiyalari tarixi va holati |
 | `/offline_void BATCH_ID` | Partiyani bekor qilish (natijalar tarixda qoladi) |
+| `/offline_delete BATCH_ID` | Partiyani **butunlay o'chirish**: qatorlar, natijalar, bog'lanishlar va reyting qarorlari bazadan o'chadi (tarixda qolmaydi) |
 | `/offline_links KOD` | Offline/online nomzodlar, tasdiqlangan va bog'lanmagan ishtirokchilar |
 | `/offline_link_user PARTICIPANT_ID USER_ID` | Offline natijani Telegram foydalanuvchisiga qo'lda bog'lash |
 | `/offline_unlink PARTICIPANT_ID` | Bog'lanishni bekor qilish |
@@ -305,16 +306,21 @@ Imtihon tuzilishi: **45 pozitsiya**, 36–45 ochiq savollar `a`/`b` ga bo'linadi
    saqlanadi.
 5. Keyin shu imtihon Telegram kanalida online o'tkaziladi.
 6. `/offline_report KOD` — **umumiy** (online + offline) va **faqat offline**
-   PDF reytinglarini yuboradi. Ikkala hisobotda ham θ, SE, 0–100 ball, daraja
-   va to'g'ri javoblar soni bor.
+   PDF reytinglarini yuboradi. Import tasdiqlangach bot darhol **umumiy
+   reyting** PDF ini yuboradi (Excel alohida hisoblanmaydi); `/report KOD` ham
+   offline natijalar bo'lsa umumiy reytingni beradi. Ikkala hisobotda ham θ,
+   SE, 0–100 ball, daraja va to'g'ri javoblar soni bor.
 
 **Adolat va dublikatlar:**
 
 * Online va offline bir xil `rasch.estimate_theta()` funksiyasini ishlatadi;
   kalit yoki `b` o'zgarsa, import/commit bloklanadi.
 * Exceldagi `telegram_username` botdagi username bilan **aynan** mos kelsa,
-  offline natija avtomatik bog'lanadi. Ism-familiya bo'yicha topilgan nomzod
-  faqat taklif bo'ladi (admin tasdiqlaydi).
+  offline natija avtomatik bog'lanadi (`username_auto`).
+* Ism-familiya bo'yicha **yagona** nomzod shu imtihonda **onlayn qatnashgan**
+  bo'lsa — ham avtomatik bog'lanadi (`name_auto`), shuning uchun bir o'quvchi
+  reytingda ikki marta chiqmaydi. Boshqa hollarda nomzod faqat taklif bo'ladi
+  (admin `/offline_links` orqali tasdiqlaydi).
 * Agar o'quvchi ham online, ham offline qatnashgan bo'lsa, **offline rasmiy**
   hisoblanadi; online natija bazada saqlanadi, lekin reytingda ikkinchi marta
   chiqmaydi. Partiya bekor qilinsa, online natija reytingga qaytadi.

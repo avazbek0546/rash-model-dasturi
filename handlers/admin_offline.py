@@ -24,6 +24,8 @@ from handlers.access import is_admin, log_denied
 from keyboards.inline import (
     AppCallback,
     OfflineAdminCallback,
+    offline_batch_delete_confirm_kb,
+    offline_batches_kb,
     offline_cancel_kb,
     offline_exams_kb,
     offline_link_kb,
@@ -343,8 +345,14 @@ async def _send_batches(message: Message, repos: Repositories, exam) -> None:
             f"fayl: {escape(str(batch.get('file_name')))}"
         )
     lines.append("")
-    lines.append("Bekor qilish: <code>/offline_void BATCH_ID</code>")
-    await message.answer("\n".join(lines))
+    lines.append("Bekor qilish (tarix qoladi): <code>/offline_void BATCH_ID</code>")
+    lines.append(
+        "Butunlay o'chirish: pastdagi 🗑 tugmasi yoki "
+        "<code>/offline_delete BATCH_ID</code>"
+    )
+    await message.answer(
+        "\n".join(lines), reply_markup=offline_batches_kb(batches, exam.exam_id)
+    )
 
 
 @router.message(Command("offline_batches"))
@@ -387,6 +395,47 @@ async def cmd_offline_void(message: Message, repos: Repositories) -> None:
         f"✅ Partiya #{batch_id} bekor qilindi. "
         f"Attemptlar: {stats.get('attempts', 0)}. "
         "Online natijalar (agar bog'langan bo'lsa) reytingga qaytdi."
+    )
+
+
+def _delete_confirm_text(batch) -> str:
+    """Partiyani butunlay o'chirishdan oldingi tasdiq matni."""
+    return (
+        f"🗑 <b>Partiya #{batch.get('batch_no')} butunlay o'chirilsinmi?</b>\n\n"
+        f"Fayl: <code>{escape(str(batch.get('file_name') or ''))}</code>\n"
+        f"Holat: <b>{escape(str(batch.get('status')))}</b> · "
+        f"qatorlar: {batch.get('rows_valid')}/{batch.get('rows_total')}\n\n"
+        "Qatorlar, offline natijalar, bog'lanishlar va reyting qarorlari "
+        "bazadan o'chadi; bog'langan online natijalar reytingga qaytadi.\n"
+        "Bu amalni qaytarib bo'lmaydi."
+    )
+
+
+@router.message(Command("offline_delete"))
+async def cmd_offline_delete(message: Message, repos: Repositories) -> None:
+    """`/offline_delete BATCH_ID` — partiyani butunlay o'chirishni tasdiqlatadi."""
+    if not _guard(message):
+        return
+    if not _enabled(message):
+        await message.answer("Offline import hozircha o'chirilgan.")
+        return
+    try:
+        batch_id = int(_arg(message))
+    except ValueError:
+        await message.answer(
+            "Ishlatish: <code>/offline_delete BATCH_ID</code>\n\n"
+            "Partiya ID sini «📚 Import tarixi»dan oling."
+        )
+        return
+    batch = await repos.offline_batches.get_batch(batch_id)
+    if batch is None:
+        await message.answer("Bunday partiya topilmadi.")
+        return
+    await message.answer(
+        _delete_confirm_text(batch),
+        reply_markup=offline_batch_delete_confirm_kb(
+            batch_id, int(batch["exam_id"])
+        ),
     )
 
 
@@ -648,6 +697,53 @@ async def offline_callback(
             await _send_links(message, repos, exam)
         return
 
+    if action == "batch_delete":
+        batch = await repos.offline_batches.get_batch(int(callback_data.batch_id))
+        if batch is None:
+            await call.answer("Partiya topilmadi.", show_alert=True)
+            return
+        await call.answer()
+        if message is not None:
+            await message.answer(
+                _delete_confirm_text(batch),
+                reply_markup=offline_batch_delete_confirm_kb(
+                    int(batch["batch_id"]), int(batch["exam_id"])
+                ),
+            )
+        return
+
+    if action == "batch_delete_confirm":
+        await call.answer("O'chirilmoqda…")
+        try:
+            stats = await offline_import.delete_batch(
+                repos, int(callback_data.batch_id), admin_id
+            )
+        except offline_import.OfflineImportError as exc:
+            await call.answer(str(exc)[:190], show_alert=True)
+            return
+        except Exception:
+            logger.exception(
+                "Offline delete xatosi: batch_id=%s", callback_data.batch_id
+            )
+            await call.answer("Texnik xatolik. Qayta urinib ko'ring.", show_alert=True)
+            return
+        if message is not None:
+            await message.edit_text(
+                "🗑 <b>Partiya butunlay o'chirildi</b>\n"
+                f"Qatorlar: <b>{stats.get('rows', 0)}</b> · "
+                f"offline natijalar: <b>{stats.get('attempts', 0)}</b> · "
+                f"ishtirokchilar: <b>{stats.get('participants', 0)}</b>\n"
+                "Reyting qayta hisoblandi: bog'langan online natijalar qaytdi."
+            )
+        exam = (
+            await repos.exams.get(int(callback_data.exam_id))
+            if callback_data.exam_id
+            else None
+        )
+        if exam is not None and message is not None:
+            await _send_readiness(message, repos, exam)
+        return
+
     if action == "confirm":
         await call.answer("Tasdiqlanmoqda…")
         try:
@@ -675,18 +771,25 @@ async def offline_callback(
                     batch = await repos.offline_batches.get_batch(int(callback_data.batch_id))
                     exam = await repos.exams.get(int(batch["exam_id"])) if batch else None
                 if exam is not None:
-                    report = await offline_report.build_offline_report(repos, exam)
-                    data = report_pdf.build_offline_results_pdf(
+                    # Excel alohida hisoblanmasin: darhol umumiy (offline+online)
+                    # reyting yuboriladi.
+                    report = await offline_report.build_combined_report(repos, exam)
+                    data = report_pdf.build_combined_results_pdf(
                         meta=report.meta, students=list(report.students)
                     )
                     await message.answer_document(
                         BufferedInputFile(
-                            data, filename=f"offline-reyting-{exam.test_code}.pdf"
+                            data, filename=f"umumiy-reyting-{exam.test_code}.pdf"
                         ),
-                        caption=f"📄 Faqat offline — {report.participants} ta qatnashchi",
+                        caption=(
+                            f"📄 Umumiy reyting — {report.participants} ta qatnashchi\n"
+                            f"Oflayn: {report.offline_count} · "
+                            f"Onlayn: {report.online_count} · "
+                            f"Chiqarilgan: {report.excluded_count}"
+                        ),
                     )
             except Exception:
-                logger.exception("Offline PDF commitdan keyin yasalmadi")
+                logger.exception("Umumiy PDF commitdan keyin yasalmadi")
         return
 
     if action == "cancel":

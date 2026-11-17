@@ -22,7 +22,15 @@ from keyboards.inline import (
     exam_admin_kb,
     exam_delete_confirm_kb,
 )
-from services import exam_service, grading, item_statistics, report_data, report_pdf
+from services import (
+    exam_service,
+    grading,
+    item_statistics,
+    offline_report,
+    offline_scoring,
+    report_data,
+    report_pdf,
+)
 from services.test_session import TestSessionStore
 
 logger = logging.getLogger(__name__)
@@ -446,15 +454,37 @@ async def cmd_report(message: Message, repos: Repositories) -> None:
         return
 
     try:
-        report = await report_data.build_exam_report(repos, exam)
-        data = report_pdf.build_results_pdf(
-            title=report.title,
-            test_code=report.test_code,
-            date_text=report.date_text,
-            participants=report.participants,
-            students=report.students,
-        )
-    except report_pdf.ReportError as exc:
+        # Offline natijalar bo'lsa — umumiy (offline + online) reyting beriladi:
+        # Excel natijalari alohida hisoblanmaydi.
+        readiness = await offline_scoring.check_readiness(repos, exam)
+        offline_attempts = await repos.offline_attempts.list_for_exam(exam.exam_id)
+        if readiness.ready and offline_attempts:
+            combined = await offline_report.build_combined_report(repos, exam)
+            data = report_pdf.build_combined_results_pdf(
+                meta=combined.meta, students=list(combined.students)
+            )
+            participants = combined.participants
+            caption = (
+                f"📄 «{escape(str(exam.title))}» — umumiy reyting\n"
+                f"Oflayn: <b>{combined.offline_count}</b> · "
+                f"Onlayn: <b>{combined.online_count}</b> · "
+                f"Chiqarilgan: <b>{combined.excluded_count}</b>"
+            )
+        else:
+            report = await report_data.build_exam_report(repos, exam)
+            data = report_pdf.build_results_pdf(
+                title=report.title,
+                test_code=report.test_code,
+                date_text=report.date_text,
+                participants=report.participants,
+                students=report.students,
+            )
+            participants = report.participants
+            caption = (
+                f"📄 «{escape(str(exam.title))}» — natijalar\n"
+                f"O'quvchilar: <b>{participants}</b> ta"
+            )
+    except (report_pdf.ReportError, offline_report.OfflineReportError) as exc:
         await message.answer(f"⚠️ {escape(str(exc))}")
         return
     except Exception:
@@ -468,13 +498,10 @@ async def cmd_report(message: Message, repos: Repositories) -> None:
         "PDF hisobot yuborildi: exam_id=%s, kod=%s, o'quvchilar=%d, admin=%s",
         exam.exam_id,
         exam.test_code,
-        report.participants,
+        participants,
         message.from_user.id,
     )
     await message.answer_document(
         BufferedInputFile(data, filename=f"natijalar-{exam.test_code}.pdf"),
-        caption=(
-            f"📄 «{escape(str(exam.title))}» — natijalar\n"
-            f"O'quvchilar: <b>{report.participants}</b> ta"
-        ),
+        caption=caption,
     )
