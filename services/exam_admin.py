@@ -20,8 +20,9 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Sequence
 
+import config
 from database.repository import Repositories
-from services import exam_service, form_builder
+from services import default_difficulty, exam_service, form_builder
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,9 @@ def normalize_difficulties(raw: Any, total_questions: int) -> list[float]:
     """
     total = int(total_questions)
     if raw in (None, ""):
+        if config.DEFAULT_DIFFICULTY_ENABLED:
+            # Standart 55 itemli `p → b` xaritasidan pozitsiya logitlari.
+            return default_difficulty.default_position_logits(total)
         return [0.0] * total
 
     if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes)):
@@ -158,6 +162,12 @@ async def create_exam(
         raise ExamAdminError("Javoblar kaliti bo'sh.")
 
     logits = normalize_difficulties(difficulty, total)
+    # Baholash `exams.difficulty_logits` dan o'qiydi. Qiyinchilik berilmagan
+    # bo'lsa — 55 itemli standart `p → b` xaritasi (har bir itemga o'z `b` si).
+    if config.DEFAULT_DIFFICULTY_ENABLED and (difficulty is None or difficulty == ""):
+        difficulty_json = default_difficulty.default_difficulty_json()
+    else:
+        difficulty_json = exam_service.difficulties_to_json(logits)
 
     exam_id = await repos.exams.create(
         title=clean_title,
@@ -167,7 +177,7 @@ async def create_exam(
         result_time=str(result_time),
         total_questions=total,
         answer_key=str(answer_key),
-        difficulty_logits=exam_service.difficulties_to_json(logits),
+        difficulty_logits=difficulty_json,
         created_by=created_by,
     )
 

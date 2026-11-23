@@ -17,6 +17,7 @@ hali baholanmagan bo'lsa, o'sha zahoti baholanadi (`ensure_graded`).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import math
 from dataclasses import dataclass, replace
@@ -25,7 +26,16 @@ from typing import Any, Sequence
 import config
 from database.models import SKIPPED, Exam, ExamSubmission
 from database.repository import Repositories
-from services import answer_key, exam_service, form_layout, item_statistics, rasch, scoring, subjects
+from services import (
+    answer_key,
+    default_difficulty,
+    exam_service,
+    form_layout,
+    item_statistics,
+    rasch,
+    scoring,
+    subjects,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -369,6 +379,87 @@ async def prepare_scoring(repos: Repositories, exam: Exam) -> ScoringSetup:
         session=session,
         form_version_id=form_version_id,
     )
+
+
+def has_per_item_difficulty(exam: Exam) -> bool:
+    """Imtihonda **aniq per-item** `b` bormi?
+
+    Per-item deb hisoblanadi:
+
+    * JSON obyekt va unda kamida bitta belgili kalit (`36a`, `36b`, ...) —
+      production item banki yoki standart `p → b` xaritasi;
+    * 55 qiymatli massiv (`item_labels(total)` tartibida).
+
+    Legacy 45 pozitsiyali massiv, bo'sh yoki buzuq qiymat — per-item emas:
+    bunday imtihonga standart `p → b` xaritasi qo'llanishi mumkin.
+    """
+    raw = str(exam.difficulty_logits or "").strip()
+    if not raw:
+        return False
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return False
+    if isinstance(parsed, dict):
+        return any(not str(key).isdigit() for key in parsed)
+    if isinstance(parsed, list):
+        total = max(int(exam.total_questions or 0), 0)
+        if total <= 0:
+            return False
+        labels = exam_service.item_labels(total)
+        return len(parsed) == len(labels) and len(labels) != total
+    return False
+
+
+async def apply_default_difficulty(repos: Repositories, exam: Exam) -> bool:
+    """Aniq per-item `b` bo'lmasa, standart 55 itemli xaritani yozadi.
+
+    Bu — «Qayta baholash» bosilganda mavjud imtihonlarni ham standart
+    `p → b` xaritasiga o'tkazish uchun xizmat qiladi.
+
+    Qaytaradi:
+        `True` — `exams.difficulty_logits` standart xarita bilan yangilandi;
+        `False` — o'zgartirilmadi (o'chirilgan, yoki allaqachon per-item `b`).
+    """
+    if not config.DEFAULT_DIFFICULTY_ENABLED:
+        return False
+    if has_per_item_difficulty(exam):
+        return False
+    await repos.exams.update_difficulty_logits(
+        exam.exam_id, default_difficulty.default_difficulty_json()
+    )
+    logger.info(
+        "Standart p→b qo'llanildi: exam_id=%s, kod=%s",
+        exam.exam_id,
+        exam.test_code,
+    )
+    return True
+
+
+async def regrade_with_default_difficulty(
+    repos: Repositories, exam: Exam
+) -> tuple[int, bool]:
+    """Standart `p → b` ni qo'llab (kerak bo'lsa), imtihonni qayta baholaydi.
+
+    Oqim:
+
+    1. `has_per_item_difficulty()` — aniq per-item `b` bo'lsa, tegilmaydi;
+    2. aks holda `exams.difficulty_logits` standart 55 itemli xarita bilan
+       yangilanadi (`default_difficulty.default_difficulty_json()`);
+    3. `grade_exam(regrade=True)` — barcha javoblar yangi `b` bilan qayta
+       hisoblanadi.
+
+    Qaytaradi:
+        `(graded, applied_default)` — qayta baholangan javoblar soni va
+        standart xarita qo'llanilganligi.
+    """
+    applied = await apply_default_difficulty(repos, exam)
+    if applied:
+        refreshed = await repos.exams.get(exam.exam_id)
+        if refreshed is not None:
+            exam = refreshed
+    graded = await grade_exam(repos, exam, regrade=True)
+    return graded, applied
 
 
 async def resolve_grading_answers(

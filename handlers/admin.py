@@ -307,34 +307,46 @@ async def delete_exam_confirm(
 # ---------------------------------------------------------------------------
 # Qayta baholash (regrade): kalit yoki `b` tuzatilgach natijalarni yangilash
 # ---------------------------------------------------------------------------
-async def _regrade(admin_id: int, exam: Exam, repos: Repositories) -> int:
-    """Imtihon javoblarini qayta baholaydi va qayta hisoblangan sonni qaytaradi.
+async def _regrade(admin_id: int, exam: Exam, repos: Repositories) -> tuple[int, bool]:
+    """Imtihon javoblarini qayta baholaydi va `(graded, applied_default)` qaytaradi.
+
+    Agar imtihonda aniq per-item `b` bo'lmasa (eski 45 pozitsiyali massiv
+    yoki bo'sh), avval standart 55 itemli `p → b` xaritasi yoziladi — shundan
+    keyin natijalar haqiqatan o'zgaradi.
 
     Eski natijalar o'chirilmaydi — yangi snapshot versiyasi yaratiladi
     (`is_final` almashadi), shu sababli bu amal xavfsiz.
     """
-    graded = await grading.grade_exam(repos, exam, regrade=True)
+    graded, applied_default = await grading.regrade_with_default_difficulty(
+        repos, exam
+    )
     logger.info(
-        "Qayta baholash: exam_id=%s, kod=%s, javoblar=%d, admin=%s",
+        "Qayta baholash: exam_id=%s, kod=%s, javoblar=%d, standart_b=%s, admin=%s",
         exam.exam_id,
         exam.test_code,
         graded,
+        applied_default,
         admin_id,
     )
-    return graded
+    return graded, applied_default
 
 
-def _regrade_message(exam: Exam, graded: int) -> str:
+def _regrade_message(exam: Exam, graded: int, applied_default: bool = False) -> str:
     """Qayta baholash natijasi xabari (html)."""
     title = escape(str(exam.title))
     code = escape(str(exam.test_code))
+    prefix = (
+        "📈 Standart 55 itemli <code>p → b</code> xaritasi qo'llanildi.\n"
+        if applied_default
+        else ""
+    )
     if graded <= 0:
         return (
-            f"🔄 «{title}» ({code}) uchun baholanadigan javob topilmadi.\n"
+            f"{prefix}🔄 «{title}» ({code}) uchun baholanadigan javob topilmadi.\n"
             "Hali hech kim javob yubormagan bo'lishi mumkin."
         )
     return (
-        "🔄 <b>Qayta baholash bajarildi</b>\n"
+        f"{prefix}🔄 <b>Qayta baholash bajarildi</b>\n"
         f"«{title}» ({code})\n"
         f"Qayta hisoblangan javoblar: <b>{graded}</b> ta\n\n"
         "Natijalar yangilandi; eski natijalar tarixda saqlanadi."
@@ -372,7 +384,7 @@ async def cmd_regrade(message: Message, repos: Repositories) -> None:
         return
 
     try:
-        graded = await _regrade(message.from_user.id, exam, repos)
+        graded, applied_default = await _regrade(message.from_user.id, exam, repos)
     except Exception:
         logger.exception("Qayta baholashda xatolik: exam_id=%s", exam.exam_id)
         await message.answer(
@@ -381,7 +393,7 @@ async def cmd_regrade(message: Message, repos: Repositories) -> None:
         )
         return
 
-    await message.answer(_regrade_message(exam, graded))
+    await message.answer(_regrade_message(exam, graded, applied_default))
 
 
 @router.callback_query(ExamAdminCallback.filter(F.action == "regrade"))
@@ -407,7 +419,7 @@ async def regrade_exam(
 
     await call.answer()
     try:
-        graded = await _regrade(call.from_user.id, exam, repos)
+        graded, applied_default = await _regrade(call.from_user.id, exam, repos)
     except Exception:
         logger.exception("Qayta baholashda xatolik: exam_id=%s", exam.exam_id)
         await call.message.answer(
@@ -416,7 +428,7 @@ async def regrade_exam(
         )
         return
 
-    await call.message.answer(_regrade_message(exam, graded))
+    await call.message.answer(_regrade_message(exam, graded, applied_default))
     await _send_exam_list(call.message, repos)
 
 

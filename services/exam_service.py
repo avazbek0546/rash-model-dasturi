@@ -23,7 +23,7 @@ from typing import Final, Sequence
 
 import config
 from database.models import Exam, ExamStatus
-from services import form_layout
+from services import default_difficulty, form_layout
 
 logger = logging.getLogger(__name__)
 
@@ -441,8 +441,12 @@ def b_by_key(exam: Exam) -> dict[str, float]:
     total = max(int(exam.total_questions or 0), 0)
     if total <= 0:
         return {}
+    raw_text = str(exam.difficulty_logits or "").strip()
+    if not raw_text and config.DEFAULT_DIFFICULTY_ENABLED:
+        # `b` umuman berilmagan — standart 55 itemli `p → b` xaritasi.
+        return default_difficulty.default_b_by_key()
     try:
-        parsed = json.loads(exam.difficulty_logits or "[]")
+        parsed = json.loads(raw_text or "[]")
     except (TypeError, ValueError):
         parsed = []
 

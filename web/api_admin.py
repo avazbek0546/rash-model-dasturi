@@ -467,14 +467,18 @@ async def regrade_exam(request: web.Request) -> web.Response:
     if exam is None:
         raise ApiError(404, "Imtihon topilmadi.")
     try:
-        graded = await grading.grade_exam(repos, exam, regrade=True)
+        graded, applied_default = await grading.regrade_with_default_difficulty(
+            repos, exam
+        )
     except Exception as exc:
         logger.exception("Qayta baholashda xatolik: exam_id=%s", exam_id)
         raise ApiError(
             400, "Qayta baholashda xatolik. Kalit va 'b' ni tekshiring."
         ) from exc
 
-    return web.json_response({"ok": True, "graded": graded})
+    return web.json_response(
+        {"ok": True, "graded": graded, "applied_default": applied_default}
+    )
 
 
 # ---------------------------------------------------------------------------

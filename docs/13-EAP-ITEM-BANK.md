@@ -75,9 +75,15 @@ Keyin imtihonni **qayta baholang** (admin panel «🔄 Baholash» yoki
 ## 5. Admin panel va `b`
 
 - Mini App «⚙️ Test yaratish» panelida va `/new_exam` ustasida **qiyinchilik
-  (`b`) so'ralmaydi** — test yaratilganda `0.0` (provisional) yoziladi.
-- Kalibrlangan `b` faqat item bank orqali yuklanadi:
-  `python scripts/load_item_bank.py --file assets/item_banks/m3rash25.json --test-code m3rash25 --apply`.
+  (`b`) so'ralmaydi** — test yaratilganda standart 55 itemli `p → b` xaritasi
+  (`services/default_difficulty.py`) avtomatik yoziladi (batafsil:
+  `docs/15-DEFAULT-P-DIFFICULTY.md`).
+- Kalibrlangan `b` item bank orqali yuklanadi
+  (`python scripts/load_item_bank.py --file assets/item_banks/m3rash25.json --test-code m3rash25 --apply`)
+  yoki admin panelidagi «📐 Kalibrlash» (JMLE) bilan hisoblanadi. Bunday aniq
+  per-item `b` standart xaritadan **ustun** turadi.
+- Mavjud imtihonlarga standart xaritani qo'llash uchun:
+  `python scripts/apply_default_difficulty.py --apply` (kerak bo'lsa `--regrade`).
 - API'dagi `difficulty` maydoni **legacy** (eski mijoz/import) uchun saqlanadi;
   yangi Mini App uni yubormaydi.
 

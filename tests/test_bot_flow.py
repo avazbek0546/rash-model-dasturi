@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import shutil
 import sys
 import tempfile
@@ -62,7 +63,7 @@ from handlers import setup_routers  # noqa: E402
 from keyboards.inline import AnalysisCallback, AppCallback  # noqa: E402
 from keyboards.reply import ANALYSIS_BUTTON, UPLOAD_SOLUTION_BUTTON  # noqa: E402
 from middlewares import UserSyncMiddleware  # noqa: E402
-from services import exam_service  # noqa: E402
+from services import default_difficulty, exam_service  # noqa: E402
 from services.test_session import TestSessionStore  # noqa: E402
 from states import OfflineImportStates  # noqa: E402
 
@@ -289,7 +290,7 @@ async def check_new_exam_wizard(bot, session, dp, repos) -> None:
     await dp.feed_update(bot, message_update(bot, 49, "15.01.2027 12:00"))
     summary = session.sent_texts()[-1]
     assert "Imtihon ma'lumotlari" in summary and "MATH2026" in summary
-    assert "1A2B3C" in summary and "item bank" in summary, summary
+    assert "1A2B3C" in summary and "standart p foizlar" in summary, summary
     assert isinstance(session.last(), SendMessage)
     assert session.last().reply_markup is not None, "tasdiqlash tugmalari yo'q"
     print("[OK] Usta: 7 qadam o'tdi, xulosa va tasdiqlash tugmalari ko'rsatildi")
@@ -302,13 +303,22 @@ async def check_new_exam_wizard(bot, session, dp, repos) -> None:
     exam = await repos.exams.get_by_code("MATH2026")
     assert exam is not None, "imtihon bazaga yozilmadi"
     assert exam.total_questions == 3 and exam.answer_key == "1A2B3C"
-    assert exam.difficulties == [0.0, 0.0, 0.0], exam.difficulties
+    # Standart 55 itemli `p → b` xaritasi yozilgan (qiyinchilik so'ralmaydi).
+    b_map = exam_service.b_by_key(exam)
+    default_b = default_difficulty.default_b_by_key()
+    for position in ("1", "2", "3"):
+        assert math.isclose(b_map[position], default_b[position], abs_tol=1e-6), (
+            position,
+            b_map[position],
+            default_b[position],
+        )
     assert exam.created_by == USER_ID
     expected_start = exam_service.to_db_time(exam_service.parse_local_datetime("15.01.2027 09:00"))
     assert exam.start_time == expected_start, exam.start_time
     print(
         f"[OK] Imtihon bazaga yozildi: id={exam.exam_id}, kod={exam.test_code}, "
-        f"logitlar={exam.difficulties}, boshlanish={exam.start_time}"
+        f"b(1..3)={[round(b_map[str(p)], 3) for p in range(1, 4)]}, "
+        f"boshlanish={exam.start_time}"
     )
 
     # Band kod va to'liq bo'lmagan kalit rad etiladi

@@ -391,7 +391,14 @@
         "/api/v2/admin/exams/" + examId + "/regrade",
         {}
       );
-      App.setNotice("success", "🔄 Qayta baholandi: " + result.graded + " javob", true);
+      const note = result.applied_default
+        ? " (standart p → b qo'llanildi)"
+        : "";
+      App.setNotice(
+        "success",
+        "🔄 Qayta baholandi: " + result.graded + " javob" + note,
+        true
+      );
       loadExams();
     } catch (error) {
       App.setNotice("error", error.message, false);

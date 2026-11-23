@@ -46,6 +46,10 @@ arxitekturasini belgilaydi.
 | 09 | [RESPONSE MODEL v2](09-RESPONSE-MODEL-V2.md) | **Javob saqlash modeli (yakuniy)**: 4 artefakt, uch o'qli status, autosave yo'li, immutability, testlet/LD, psixometrik majburiy maydonlar, qaytarib bo'lmaydigan ma'lumotlar |
 | 10 | [MVP PRIORITET AUDITI](10-MVP-PRIORITET-AUDIT.md) | **MVP / PHASE-2 / FUTURE tasnifi**: 12 element bahosi, 5 natija ro'yxati, murakkablik byudjeti, trigger jadvali |
 | 11 | [FINAL MVP DATABASE MODEL](11-FINAL-MVP-DATABASE-MODEL.md) | **Yakuniy MVP modeli (16 jadval)**: docs/02 tasnifi (M/P2/F/R), README sabablari, maydonlar lug'ati, Rasch uchun majburiy ma'lumotlar |
+| 12 | [RAILWAY JOYLASHTIRISH](12-RAILWAY-JOYLASHTIRISH.md) | Railway'ga joylashtirish, volume, muhit o'zgaruvchilari |
+| 13 | [EAP ITEM BANK](13-EAP-ITEM-BANK.md) | Per-item `b`, EAP, item bankni yuklash va tekshirish |
+| 14 | [AUTO CALIBRATION](14-AUTO-CALIBRATION.md) | Javoblardan JMLE `b` kalibrlash (preview/apply) |
+| 15 | [DEFAULT P→B](15-DEFAULT-P-DIFFICULTY.md) | Standart 55 itemli `p → b` xaritasi va kalibrlash farqi |
 
 ## Hozirgi loyihaga aloqasi
 

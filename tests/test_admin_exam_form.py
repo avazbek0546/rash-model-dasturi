@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import shutil
 import sys
 import tempfile
@@ -55,7 +56,7 @@ from database.repository import Repositories  # noqa: E402
 from database.seed import seed_questions  # noqa: E402
 from handlers import setup_routers  # noqa: E402
 from middlewares import UserSyncMiddleware  # noqa: E402
-from services import exam_admin  # noqa: E402
+from services import default_difficulty, exam_admin  # noqa: E402
 from services.test_session import TestSessionStore  # noqa: E402
 
 TOKEN = "123456789:TEST_TOKEN_FOR_OFFLINE_CHECKS"
@@ -198,7 +199,8 @@ async def run_wizard(
 ) -> int:
     """Ustani 7 qadam bo'ylab o'tkazadi va keyingi `update_id` ni qaytaradi.
 
-    `b` (qiyinchilik) endi so'ralmaydi — test yaratilgach item bank yuklanadi.
+    `b` (qiyinchilik) endi so'ralmaydi — standart 55 itemli `p → b` xaritasi
+    avtomatik qo'llanadi (`services/default_difficulty.py`).
     """
     steps = ["/new_exam", title, code, str(total), key, start, end, result]
     for index, text in enumerate(steps):
@@ -262,19 +264,36 @@ async def check_mvp_key(bot: Bot, session: FakeSession, dp: Dispatcher, db: Data
     items = await db.fetchall("SELECT * FROM items")
     assert len(items) == expected_items, len(items)
 
-    # Operatsion `b` (logit) — `item_parameters` ga yoziladi. O'qituvchi
-    # qiyinchilikni o'tkazib yuborgan ("-"), shu sababli manba 'default'.
+    # Operatsion `b` (logit) — `item_parameters` ga yoziladi. Endi admin
+    # qiyinchilikni kiritmaydi: standart 55 itemli `p → b` xaritasi avtomatik
+    # qo'llanadi (`services/default_difficulty.py`). FormBuilder pozitsiya
+    # logitlarini oladi; 36–45 qismlari pozitsiya o'rtachasini meros qiladi.
     parameters = await db.fetchall(
         "SELECT * FROM item_parameters ORDER BY item_version_id"
     )
     assert len(parameters) == expected_items, f"item_parameters: {len(parameters)}"
-    assert all(float(row["b_value"]) == 0.0 for row in parameters), parameters[:3]
-    assert {str(row["source"]) for row in parameters} == {"default"}, parameters[:3]
+    position_logits = default_difficulty.default_position_logits(total)
+    label_by_version = {
+        int(row["item_version_id"]): str(row["display_label"])
+        for row in form_items
+    }
+    for row in parameters:
+        label = label_by_version.get(int(row["item_version_id"]), "")
+        digits = "".join(char for char in label if char.isdigit())
+        position = int(digits) if digits else 0
+        expected = position_logits[position - 1]
+        assert math.isclose(float(row["b_value"]), float(expected), rel_tol=1e-9), (
+            label,
+            row["b_value"],
+            expected,
+        )
+        expected_source = "default" if float(row["b_value"]) == 0.0 else "legacy_expert"
+        assert str(row["source"]) == expected_source, row
     assert all(str(row["status"]) == "provisional" for row in parameters)
     assert all(row["valid_to"] is None for row in parameters)
     print(
-        "[OK] item_parameters: %d savol uchun operatsion `b` yozildi "
-        "(b=0.0, source=default, status=provisional)" % len(parameters)
+        "[OK] item_parameters: %d savol uchun standart `p → b` yozildi "
+        "(source=legacy_expert/default, status=provisional)" % len(parameters)
     )
 
     session_rows = await db.fetchall("SELECT * FROM exam_sessions")

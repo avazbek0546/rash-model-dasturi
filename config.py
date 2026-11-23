@@ -252,6 +252,16 @@ ANSWER_OPTIONS: tuple[str, ...] = ("A", "B", "C", "D")
 ITEM_LEVEL_GRADING_ENABLED: bool = _get_bool("ITEM_LEVEL_GRADING_ENABLED", False)
 
 # ---------------------------------------------------------------------------
+# Standart `p → b` qiyinchilik xaritasi (services/default_difficulty.py)
+# ---------------------------------------------------------------------------
+# True (standart): yangi imtihon yaratilganda qiyinchilik (`b`) bo'sh bo'lsa,
+# `services/default_difficulty.py` dagi 55 itemli `p` foizlardan
+# `b = ln((1-p)/p)` avtomatik hisoblanadi va `exams.difficulty_logits` ga
+# JSON obyekt sifatida yoziladi. Admin p foizlarni har safar kiritmaydi.
+# False: avvalgi xulq — `b` bo'sh bo'lsa 0.0 yoziladi.
+DEFAULT_DIFFICULTY_ENABLED: bool = _get_bool("DEFAULT_DIFFICULTY_ENABLED", True)
+
+# ---------------------------------------------------------------------------
 # Qiyinchilikni tekislash (shrinkaj / empirik Bayes) — docs/03
 # ---------------------------------------------------------------------------
 # True bo'lsa: baholashda har bir savolning `b` si **o'qituvchi bahosi** va

@@ -32,7 +32,13 @@ import texts
 from database.repository import Repositories
 from handlers.access import is_admin, log_denied
 from keyboards.inline import ExamAdminCallback, cancel_kb, exam_confirm_kb
-from services import answer_key, exam_service, form_builder, form_layout
+from services import (
+    answer_key,
+    default_difficulty,
+    exam_service,
+    form_builder,
+    form_layout,
+)
 from states import ExamCreateStates
 
 logger = logging.getLogger(__name__)
@@ -63,6 +69,41 @@ def _state_logits(data: dict[str, Any]) -> list[float] | None:
         except (TypeError, ValueError):
             return None
     return None
+
+
+def _state_form_logits(data: dict[str, Any], total: int) -> list[float] | None:
+    """FormBuilder uchun pozitsiya logitlari (`1..total`).
+
+    FSM'da aniq ro'yxat bo'lsa — o'sha ishlatiladi. Aks holda standart
+    55 itemli `p → b` xaritasining pozitsiya ko'rinishi qaytariladi
+    (`36`..`45` — qismlar `b` larining o'rtachasi). Bu `form_builder`
+    kutgan 45 pozitsiyali ro'yxat bilan mos keladi.
+    """
+    values = _state_logits(data)
+    if values is not None:
+        return values
+    if config.DEFAULT_DIFFICULTY_ENABLED:
+        return default_difficulty.default_position_logits(total)
+    return None
+
+
+async def _store_default_difficulty(state: FSMContext, total: int) -> None:
+    """Standart `p → b` xaritasini FSM holatiga yozadi.
+
+    Admin p foizlarni kiritmaydi: 55 itemli xarita `exams.difficulty_logits`
+    uchun JSON obyekt sifatida saqlanadi, forma uchun esa pozitsiya
+    logitlari `_state_form_logits()` orqali olinadi.
+    """
+    if config.DEFAULT_DIFFICULTY_ENABLED:
+        await state.update_data(
+            difficulty_logits=default_difficulty.default_difficulty_json(),
+            difficulties_text="standart p foizlar (55 item, avtomatik b)",
+        )
+        return
+    await state.update_data(
+        difficulty_logits=exam_service.difficulties_to_json([0.0] * total),
+        difficulties_text="item bank (qo'lda kiritilmaydi)",
+    )
 
 
 async def _prepare_session(
@@ -247,7 +288,8 @@ async def step_answer_key(message: Message, state: FSMContext) -> None:
         return
 
     await state.update_data(answer_key=stored)
-    # `b` endi qo'lda so'ralmaydi — kalibrlangan item bank ishlatiladi.
+    # `b` qo'lda so'ralmaydi — standart 55 itemli `p → b` xaritasi avtomatik.
+    await _store_default_difficulty(state, total)
     await _ask(message, state, ExamCreateStates.start_time, texts.ask_start_time())
 
 
@@ -261,10 +303,7 @@ async def step_difficulties(message: Message, state: FSMContext) -> None:
     """
     data = await state.get_data()
     total = int(data.get("total_questions", 0))
-    await state.update_data(
-        difficulty_logits=exam_service.difficulties_to_json([0.0] * total),
-        difficulties_text="item bank (qo'lda kiritilmaydi)",
-    )
+    await _store_default_difficulty(state, total)
     await _ask(message, state, ExamCreateStates.start_time, texts.ask_start_time())
 
 
@@ -372,8 +411,12 @@ async def confirm_exam(call: CallbackQuery, state: FSMContext, repos: Repositori
     total = int(data.get("total_questions", 0))
     raw_logits = str(data.get("difficulty_logits") or "").strip()
     if not raw_logits:
-        # `b` qo'lda kiritilmaydi — item bank yuklanmaguncha 0.0.
-        raw_logits = exam_service.difficulties_to_json([0.0] * total)
+        if config.DEFAULT_DIFFICULTY_ENABLED:
+            # Standart 55 itemli `p → b` xaritasi.
+            raw_logits = default_difficulty.default_difficulty_json()
+        else:
+            # `b` qo'lda kiritilmaydi — item bank yuklanmaguncha 0.0.
+            raw_logits = exam_service.difficulties_to_json([0.0] * total)
     try:
         exam_id = await repos.exams.create(
             title=str(data.get("title")),
@@ -406,7 +449,7 @@ async def confirm_exam(call: CallbackQuery, state: FSMContext, repos: Repositori
             test_code=str(data.get("test_code")),
             total_questions=int(data.get("total_questions", 0)),
             answer_key=answer_key_text,
-            difficulty_logits=_state_logits(data),
+            difficulty_logits=_state_form_logits(data, total),
             created_by=call.from_user.id,
         )
     except form_builder.FormBuildError as exc:

@@ -281,6 +281,16 @@ class ScoringContext:
         value = self.b_by_key.get(question_key)
         if value is None and position is not None:
             value = self.b_by_key.get(str(position))
+        if value is None and position is not None:
+            # Per-item xarita (`36a`/`36b`) bo'lib, legacy pozitsiya (`36`)
+            # so'ralganda — qismlar `b` larining o'rtachasi olinadi
+            # (eski 45 pozitsiyali oqim bilan moslik).
+            part_values = [
+                self.b_by_key.get(f"{position}{part}") for part in ("a", "b")
+            ]
+            found = [part for part in part_values if part is not None]
+            if found:
+                value = sum(found) / len(found)
         if value is None:
             raise ScoringContextError(
                 f"`b` topilmadi: question_key={question_key!r}, position={position!r}"
