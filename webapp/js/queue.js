@@ -92,7 +92,7 @@
         // Asosiy natija — sertifikat bali (0–100).
         const score = Number(exam.my_result.scaled_score);
         right.innerHTML = Number.isFinite(score)
-          ? score.toFixed(2) + "<small>ball</small>"
+          ? String(Math.round(score * 100) / 100) + "<small>ball</small>"
           : "—";
       } else {
         right.className = "badge " + (STATUS_CLASS[exam.status] || "published");

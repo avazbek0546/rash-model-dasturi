@@ -1405,11 +1405,17 @@ def result_ready(
     subject_balls = report.get("subject_balls") or {}
 
     def ball(value: object) -> str:
-        """0–100 ballni ikki kasr xona bilan ko'rsatadi (bo'lmasa — `—`)."""
+        """0–100 ballni yuzdan birlar xonasigacha yaxlitlab ko'rsatadi.
+
+        Ortiqcha nol qo'shilmaydi: `67.1` → «67.1 ball», `50.96` → «50.96 ball»,
+        `50.0` → «50 ball».
+        """
         try:
-            return f"{float(value):.2f} ball"
+            number = round(float(value), 2)
         except (TypeError, ValueError):
             return "—"
+        text = f"{number:.2f}".rstrip("0").rstrip(".")
+        return f"{text or '0'} ball"
 
     lines = [
         "🎉 <b>Natijangiz e'lon qilindi!</b>",
