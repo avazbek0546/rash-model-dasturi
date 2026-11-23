@@ -154,14 +154,14 @@ def check_text_builder() -> None:
     )
     assert "Natijangiz e'lon qilindi" in ready, ready
     # Asosiy ko'rsatkich — sertifikat bali; 95% interval hozircha ko'rsatilmaydi.
-    assert "Sertifikat bali:</b> 67.1 ball" in ready, ready
+    assert "Sertifikat bali:</b> 67.10 ball" in ready, ready
     assert "95%" not in ready, ready
     assert "ishonch oralig'i" not in ready, ready
     assert "To'g'ri javoblar:</b> 3 / 5" in ready, ready
     assert "θ (logit):</b> +0.42" in ready, ready
     assert "Sertifikat darajasi:</b> B" in ready, ready
-    assert "Algebra:</b> 50.0 ball" in ready, ready
-    assert "Geometriya:</b> 17.1 ball" in ready, ready
+    assert "Algebra:</b> 50.00 ball" in ready, ready
+    assert "Geometriya:</b> 17.10 ball" in ready, ready
     assert round(
         report["subject_balls"]["algebra"]
         + report["subject_balls"]["geometry"],

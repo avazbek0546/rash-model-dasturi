@@ -17,7 +17,7 @@
   }
 
   /**
-   * Sertifikat bali (0–100) ko'rinishi: bir kasr xona (67.4 · 91.0 · 9.0).
+   * Sertifikat bali (0–100) ko'rinishi: ikki kasr xona (67.42 · 91.00 · 9.00).
    *
    * Foydalanuvchi uchun asosiy o'lchov — sertifikat bali. θ (logit) faqat
    * ichki/texnik ko'rsatkich sifatida qoladi va bu bo'limda ko'rsatilmaydi.
@@ -30,7 +30,7 @@
     if (!Number.isFinite(number)) {
       return "—";
     }
-    return number.toFixed(1);
+    return number.toFixed(2);
   }
 
   /** Imtihon yozuvidan sertifikat balini oladi (bo'lmasa — null). */
@@ -408,7 +408,7 @@
       ticks +
       "</svg>" +
       '<div class="res-dial-center">' +
-      '<span class="res-dial-score" data-count-to="' + safe.toFixed(1) + '">0.0</span>' +
+      '<span class="res-dial-score" data-count-to="' + safe.toFixed(2) + '">0.00</span>' +
       '<span class="res-dial-unit">/ 100 ball</span>' +
       "</div></div>"
     );
@@ -423,7 +423,7 @@
       : false;
     const targetScore = counter ? Number(counter.getAttribute("data-count-to")) : NaN;
     if (counter && Number.isFinite(targetScore)) {
-      counter.textContent = reduced ? formatScore(targetScore) : "0.0";
+      counter.textContent = reduced ? formatScore(targetScore) : "0.00";
     }
     if (!dial) {
       return;
@@ -447,7 +447,7 @@
     const step = function (now) {
       const ratio = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - ratio, 3);
-      counter.textContent = (targetScore * eased).toFixed(1);
+      counter.textContent = (targetScore * eased).toFixed(2);
       if (ratio < 1) {
         window.requestAnimationFrame(step);
       } else {

@@ -1405,9 +1405,9 @@ def result_ready(
     subject_balls = report.get("subject_balls") or {}
 
     def ball(value: object) -> str:
-        """0–100 ballni bir kasr xona bilan ko'rsatadi (bo'lmasa — `—`)."""
+        """0–100 ballni ikki kasr xona bilan ko'rsatadi (bo'lmasa — `—`)."""
         try:
-            return f"{float(value):.1f} ball"
+            return f"{float(value):.2f} ball"
         except (TypeError, ValueError):
             return "—"
 
